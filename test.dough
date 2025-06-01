@@ -1,0 +1,10 @@
+var 🥟 = "Dumpling";
+const pizza = "🍕";
+
+function 🍩() {
+    return "Doughnut";
+}
+
+if(🥟 != 🍩()) {
+    print("A dumpling is not a Doughnut!");
+}
