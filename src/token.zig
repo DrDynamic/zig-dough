@@ -44,6 +44,7 @@ pub const TokenType = enum {
     WHILE,
 
     // Special tokens
+    NONE,
     SYNTHETIC,
     ERROR,
     EOF,
