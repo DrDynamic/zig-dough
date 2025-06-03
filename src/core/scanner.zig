@@ -25,12 +25,15 @@ pub const Scanner = struct {
     _currentChar: [*:0]const u8 = undefined,
     _line: usize = 0,
 
-    pub fn init(self: *Scanner, source: [:0]const u8) void {
-        self._tokenStart = @ptrCast(source);
-        self._currentChar = @ptrCast(source);
-        self._line = 1;
+    pub fn init(source: [:0]const u8) Scanner {
+        var scanner = Scanner{
+            ._tokenStart = @ptrCast(source),
+            ._currentChar = @ptrCast(source),
+            ._line = 1,
+        };
 
-        //        self.scanToken();
+        scanner.scanToken();
+        return scanner;
     }
 
     pub fn debugPrint(self: *Scanner) void {
@@ -215,8 +218,7 @@ pub const Scanner = struct {
 };
 
 test "Scanns all tokens" {
-    var scanner = Scanner{};
-    scanner.init(
+    var scanner = Scanner.init(
         \\ (
         \\ )
         \\ {
@@ -301,7 +303,6 @@ test "Scanns all tokens" {
         TokenType.Eof,
     };
 
-    scanner.scanToken();
     for (tokenTypes, 1..) |tokenType, line| {
         scanner.scanToken();
         //        std.debug.print("Expect {d}:{?s} but got ", .{ line, std.enums.tagName(TokenType, tokenType) });
@@ -312,14 +313,11 @@ test "Scanns all tokens" {
 }
 
 test "supports everything above ascii as identifiers" {
-    var scanner = Scanner{};
-    scanner.init(
+    var scanner = Scanner.init(
         \\ 🥟
         \\ "🍕"
         \\ 🍩
     );
-
-    scanner.scanToken();
 
     scanner.scanToken();
     try std.testing.expectEqual(scanner.current.type, TokenType.Identifier);
