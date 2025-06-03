@@ -1,5 +1,13 @@
 const std = @import("std");
 
-pub const Vm = struct {
-    allocator: std.mem.Allocator = undefined,
+const core = @import("./core.zig");
+
+pub const InterpretError = error{
+    CompileError,
+    RuntimeError,
+};
+
+pub const VirtualMachine = struct {
+    doughAllocator: core.memory.GarbageColletingAllocator,
+    allocator: std.mem.Allocator,
 };

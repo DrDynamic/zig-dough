@@ -25,7 +25,7 @@ pub const Scanner = struct {
     _currentChar: [*:0]const u8 = undefined,
     _line: usize = 0,
 
-    pub fn init(source: [:0]const u8) Scanner {
+    pub fn init(source: []const u8) Scanner {
         var scanner = Scanner{
             ._tokenStart = @ptrCast(source),
             ._currentChar = @ptrCast(source),
@@ -38,7 +38,7 @@ pub const Scanner = struct {
 
     pub fn debugPrint(self: *Scanner) void {
         var i: u32 = 0;
-        while (self.current.type != TokenType.EOF) : (i += 1) {
+        while (self.current.type != TokenType.Eof) : (i += 1) {
             self.scanToken();
             self.current.debugPrint();
             if (i > 50) break;

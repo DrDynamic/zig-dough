@@ -1,25 +1,33 @@
 //! By convention, main.zig is where your main function lives in the case that
 //! you are building an executable. If you are making a library, the convention
 //! is to delete this file and start with root.zig instead.
-const Scanner = @import("./scanner.zig").Scanner;
 
 pub fn main() !void {
+    const config = @import("./config.zig").DoughConfig.init();
+
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    var file = try std.fs.cwd().openFile("test.dough", .{});
+    var file = std.fs.cwd().openFile("test.dough", .{}) catch |err| {
+        std.log.err("Failed to open file: {s}", .{@errorName(err)});
+        return;
+    };
+    defer file.close();
 
-    const source: []const u8 = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
+    //var bufferedReader = std.io.bufferedReader(file.reader);
+    //var InStream = bufferedReader.reader();
 
-    var scanner = Scanner{};
-    scanner.init(@ptrCast(source));
+    const source = file.readToEndAlloc(allocator, config.maxFileSize) catch |err| {
+        std.log.err("Failed to read file: {s}", .{@errorName(err)});
+        return;
+    };
 
-    std.debug.print("{s}\n\n", .{source});
+    var scanner = @import("./core/scanner.zig").Scanner.init(source);
 
     scanner.debugPrint();
 
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("\n\nAll your {s} are belong to us.\n", .{"codebase"});
+    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
 
     // stdout is for the actual output of your application, for example if you
     // are implementing gzip, then only the compressed bytes should be sent to

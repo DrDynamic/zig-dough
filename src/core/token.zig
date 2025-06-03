@@ -55,6 +55,6 @@ pub const Token = struct {
     line: usize,
 
     pub fn debugPrint(self: Token) void {
-        std.debug.print("{d: >4}: {?s} => '{?s}'\n", .{ self.line, std.enums.tagName(TokenType, self.type), self.lexeme orelse "NULL" });
+        std.debug.print("{d: >4}: {?s} => '{?s}'\n", .{ self.line, std.enums.tagName(TokenType, self.type.?), self.lexeme orelse "NULL" });
     }
 };
