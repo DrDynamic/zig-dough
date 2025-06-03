@@ -10,3 +10,7 @@ pub const Obj = struct {
 pub const ObjModule = struct {
     obj: Obj,
 };
+
+pub const ObjFunction = struct {
+    obj: Obj,
+};

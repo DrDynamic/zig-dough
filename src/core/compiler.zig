@@ -2,6 +2,7 @@ const std = @import("std");
 
 const objects = @import("../values/objects.zig");
 const ObjModule = objects.ObjModule;
+const ObjFunction = objects.ObjFunction;
 
 const Vm = @import("./vm.zig").Vm;
 const TokenType = @import("./token.zig").TokenType;
@@ -21,29 +22,15 @@ const Precedence = enum {
     PRIMARY,
 };
 
-const Parser = struct {};
-
-pub fn compile(self: *Compiler, source: []u8) !*ObjModule {
-    self._scanner.init(source);
-}
-
-pub const Compiler = struct {
-    hadError: bool = false,
-    panicMode: bool = false,
-
-    _scanner: Scanner = Scanner{},
-    _module: ObjModule = ObjModule{},
-
-    pub fn init(vm: *Vm) !*Compiler {
-        const compiler = vm.allocator.create(Compiler);
-        compiler.* = Compiler{};
-    }
+pub const FunctionCompiler = struct {
+    enclosing: ?*FunctionCompiler,
+    function: *ObjFunction,
 };
 
 const CompilationContext = struct {};
 
 pub const ModuleCompiler = struct {
-    const ParseFn = fn (*Parser, CompilationContext) void;
+    const ParseFn = fn (self: *ModuleCompiler, context: CompilationContext) void;
     const ParseRule = struct {
         prefix: ?*const ParseFn = null,
         infix: ?*const ParseFn = null,
@@ -53,7 +40,7 @@ pub const ModuleCompiler = struct {
 
     vm: *Vm,
     scanner: Scanner,
-    currentCompiler: *Compiler,
+    currentCompiler: *FunctionCompiler,
     hadError: bool = false,
     panicMode: bool = false,
 };

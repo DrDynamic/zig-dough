@@ -6,17 +6,17 @@ const TokenType = token.TokenType;
 
 pub const Scanner = struct {
     previous: Token = .{
-        .type = TokenType.NONE,
+        .type = null,
         .lexeme = null,
         .line = 0,
     },
     current: Token = .{
-        .type = TokenType.NONE,
+        .type = null,
         .lexeme = null,
         .line = 0,
     },
     next: Token = .{
-        .type = TokenType.NONE,
+        .type = null,
         .lexeme = null,
         .line = 0,
     },
@@ -47,9 +47,9 @@ pub const Scanner = struct {
         self.current = self.next;
 
         self.skipWhitespace();
-        if (self.current.type == TokenType.EOF) return;
+        if (self.current.type == TokenType.Eof) return;
         if (self.isAtEnd()) {
-            self.makeToken(TokenType.EOF);
+            self.makeToken(TokenType.Eof);
             self.next.lexeme = null;
             return;
         }
@@ -58,27 +58,27 @@ pub const Scanner = struct {
         const c = self.advance();
         switch (c) {
             // Single-character tokens.
-            '(' => self.makeToken(TokenType.LEFT_PAREN),
-            ')' => self.makeToken(TokenType.RIGHT_PAREN),
-            '{' => self.makeToken(TokenType.LEFT_BRACE),
-            '}' => self.makeToken(TokenType.RIGHT_BRACE),
-            '[' => self.makeToken(TokenType.LEFT_BRACKET),
-            ']' => self.makeToken(TokenType.RIGHT_BRACKET),
-            ',' => self.makeToken(TokenType.COMMA),
-            '.' => self.makeToken(TokenType.DOT),
-            '-' => self.makeToken(TokenType.MINUS),
-            '+' => self.makeToken(TokenType.PLUS),
-            ';' => self.makeToken(TokenType.SEMICOLON),
-            '/' => self.makeToken(TokenType.SLASH),
-            '*' => self.makeToken(TokenType.STAR),
+            '(' => self.makeToken(TokenType.LeftParen),
+            ')' => self.makeToken(TokenType.RightParen),
+            '{' => self.makeToken(TokenType.LeftBrace),
+            '}' => self.makeToken(TokenType.RightBrace),
+            '[' => self.makeToken(TokenType.LeftBracket),
+            ']' => self.makeToken(TokenType.RightBracket),
+            ',' => self.makeToken(TokenType.Comma),
+            '.' => self.makeToken(TokenType.Dot),
+            '-' => self.makeToken(TokenType.Minus),
+            '+' => self.makeToken(TokenType.Plus),
+            ';' => self.makeToken(TokenType.Semicolon),
+            '/' => self.makeToken(TokenType.Slash),
+            '*' => self.makeToken(TokenType.Star),
 
             // One or two character tokens.
-            '!' => if (self.match('=')) self.makeToken(TokenType.BANG_EQUAL) else self.makeToken(TokenType.BANG),
-            '=' => if (self.match('=')) self.makeToken(TokenType.EQUAL_EQUAL) else self.makeToken(TokenType.EQUAL),
-            '>' => if (self.match('=')) self.makeToken(TokenType.GREATER_EQUAL) else self.makeToken(TokenType.GREATER),
-            '<' => if (self.match('=')) self.makeToken(TokenType.LESS_EQUAL) else self.makeToken(TokenType.LESS),
-            '&' => if (self.match('&')) self.makeToken(TokenType.LOGICAL_AND) else self.makeError("Unexpected character."),
-            '|' => if (self.match('|')) self.makeToken(TokenType.LOGICAL_OR) else self.makeError("Unexpected character."),
+            '!' => if (self.match('=')) self.makeToken(TokenType.BangEqual) else self.makeToken(TokenType.Bang),
+            '=' => if (self.match('=')) self.makeToken(TokenType.EqualEqual) else self.makeToken(TokenType.Equal),
+            '>' => if (self.match('=')) self.makeToken(TokenType.GreaterEqual) else self.makeToken(TokenType.Greater),
+            '<' => if (self.match('=')) self.makeToken(TokenType.LessEqual) else self.makeToken(TokenType.Less),
+            '&' => if (self.match('&')) self.makeToken(TokenType.LogicalAnd) else self.makeError("Unexpected character."),
+            '|' => if (self.match('|')) self.makeToken(TokenType.LogicalOr) else self.makeError("Unexpected character."),
 
             '"' => {
                 self.makeString('"');
@@ -106,7 +106,7 @@ pub const Scanner = struct {
     }
 
     fn makeError(self: *Scanner, message: []const u8) void {
-        self.next.type = TokenType.ERROR;
+        self.next.type = TokenType.Error;
         self.next.lexeme = message;
         self.next.line = self._line;
     }
@@ -155,7 +155,7 @@ pub const Scanner = struct {
             }
             _ = self.advance();
         }
-        self.makeToken(TokenType.STRING);
+        self.makeToken(TokenType.String);
 
         const tokenLen: usize = self._currentChar - self._tokenStart;
         self.next.lexeme = self._tokenStart[1 .. tokenLen - 1];
@@ -169,7 +169,7 @@ pub const Scanner = struct {
                 break;
             }
         }
-        self.makeToken(TokenType.NUMBER);
+        self.makeToken(TokenType.Number);
     }
 
     fn isIdentifierChar(_: Scanner, char: u8) bool {
@@ -182,26 +182,26 @@ pub const Scanner = struct {
         }
 
         const tokenType = switch (self._tokenStart[0]) {
-            'c' => self.matchIdentifier("onst", 1, 4, TokenType.CONST),
-            'e' => self.matchIdentifier("lse", 1, 3, TokenType.ELSE),
+            'c' => self.matchIdentifier("onst", 1, 4, TokenType.Const),
+            'e' => self.matchIdentifier("lse", 1, 3, TokenType.Else),
             'f' => |_| f_case: {
                 if (self._currentChar - self._tokenStart > 1) {
                     break :f_case switch (self._tokenStart[1]) {
-                        'a' => self.matchIdentifier("lse", 2, 3, TokenType.FALSE),
-                        'o' => self.matchIdentifier("r", 2, 1, TokenType.FOR),
-                        'u' => self.matchIdentifier("nction", 2, 6, TokenType.FUNCTION),
-                        else => TokenType.IDENTIFIER,
+                        'a' => self.matchIdentifier("lse", 2, 3, TokenType.False),
+                        'o' => self.matchIdentifier("r", 2, 1, TokenType.For),
+                        'u' => self.matchIdentifier("nction", 2, 6, TokenType.Function),
+                        else => TokenType.Identifier,
                     };
                 }
-                break :f_case TokenType.IDENTIFIER;
+                break :f_case TokenType.Identifier;
             },
-            'i' => self.matchIdentifier("f", 1, 1, TokenType.IF),
-            'n' => self.matchIdentifier("ull", 1, 3, TokenType.NULL),
-            'r' => self.matchIdentifier("eturn", 1, 5, TokenType.RETURN),
-            't' => self.matchIdentifier("rue", 1, 3, TokenType.TRUE),
-            'v' => self.matchIdentifier("ar", 1, 2, TokenType.VAR),
-            'w' => self.matchIdentifier("hile", 1, 4, TokenType.WHILE),
-            else => TokenType.IDENTIFIER,
+            'i' => self.matchIdentifier("f", 1, 1, TokenType.If),
+            'n' => self.matchIdentifier("ull", 1, 3, TokenType.Null),
+            'r' => self.matchIdentifier("eturn", 1, 5, TokenType.Return),
+            't' => self.matchIdentifier("rue", 1, 3, TokenType.True),
+            'v' => self.matchIdentifier("ar", 1, 2, TokenType.Var),
+            'w' => self.matchIdentifier("hile", 1, 4, TokenType.While),
+            else => TokenType.Identifier,
         };
         self.makeToken(tokenType);
     }
@@ -210,7 +210,7 @@ pub const Scanner = struct {
         if (self._currentChar - self._tokenStart == start + length and std.mem.eql(u8, self._tokenStart[start..(start + length)], rest)) {
             return tokenType;
         }
-        return TokenType.IDENTIFIER;
+        return TokenType.Identifier;
     }
 };
 
@@ -258,47 +258,47 @@ test "Scanns all tokens" {
     );
 
     const tokenTypes = [_]TokenType{
-        TokenType.LEFT_PAREN,
-        TokenType.RIGHT_PAREN,
-        TokenType.LEFT_BRACE,
-        TokenType.RIGHT_BRACE,
-        TokenType.LEFT_BRACKET,
-        TokenType.RIGHT_BRACKET,
-        TokenType.COMMA,
-        TokenType.DOT,
-        TokenType.MINUS,
-        TokenType.PLUS,
-        TokenType.SEMICOLON,
-        TokenType.SLASH,
-        TokenType.STAR,
+        TokenType.LeftParen,
+        TokenType.RightParen,
+        TokenType.LeftBrace,
+        TokenType.RightBrace,
+        TokenType.LeftBracket,
+        TokenType.RightBracket,
+        TokenType.Comma,
+        TokenType.Dot,
+        TokenType.Minus,
+        TokenType.Plus,
+        TokenType.Semicolon,
+        TokenType.Slash,
+        TokenType.Star,
         // One or two character tokens.
-        TokenType.BANG,
-        TokenType.BANG_EQUAL,
-        TokenType.EQUAL,
-        TokenType.EQUAL_EQUAL,
-        TokenType.GREATER,
-        TokenType.GREATER_EQUAL,
-        TokenType.LESS,
-        TokenType.LESS_EQUAL,
-        TokenType.LOGICAL_AND,
-        TokenType.LOGICAL_OR,
+        TokenType.Bang,
+        TokenType.BangEqual,
+        TokenType.Equal,
+        TokenType.EqualEqual,
+        TokenType.Greater,
+        TokenType.GreaterEqual,
+        TokenType.Less,
+        TokenType.LessEqual,
+        TokenType.LogicalAnd,
+        TokenType.LogicalOr,
         // Literals.
-        TokenType.IDENTIFIER,
-        TokenType.STRING,
-        TokenType.NUMBER,
+        TokenType.Identifier,
+        TokenType.String,
+        TokenType.Number,
         // Keywords.
-        TokenType.CONST,
-        TokenType.ELSE,
-        TokenType.FALSE,
-        TokenType.FOR,
-        TokenType.FUNCTION,
-        TokenType.IF,
-        TokenType.NULL,
-        TokenType.RETURN,
-        TokenType.TRUE,
-        TokenType.VAR,
-        TokenType.WHILE,
-        TokenType.EOF,
+        TokenType.Const,
+        TokenType.Else,
+        TokenType.False,
+        TokenType.For,
+        TokenType.Function,
+        TokenType.If,
+        TokenType.Null,
+        TokenType.Return,
+        TokenType.True,
+        TokenType.Var,
+        TokenType.While,
+        TokenType.Eof,
     };
 
     scanner.scanToken();
@@ -322,14 +322,14 @@ test "supports everything above ascii as identifiers" {
     scanner.scanToken();
 
     scanner.scanToken();
-    try std.testing.expectEqual(scanner.current.type, TokenType.IDENTIFIER);
+    try std.testing.expectEqual(scanner.current.type, TokenType.Identifier);
     try std.testing.expectEqualStrings("🥟", scanner.current.lexeme.?);
 
     scanner.scanToken();
-    try std.testing.expectEqual(scanner.current.type, TokenType.STRING);
+    try std.testing.expectEqual(scanner.current.type, TokenType.String);
     try std.testing.expectEqualStrings("🍕", scanner.current.lexeme.?);
 
     scanner.scanToken();
-    try std.testing.expect(scanner.current.type == TokenType.IDENTIFIER);
+    try std.testing.expect(scanner.current.type == TokenType.Identifier);
     try std.testing.expectEqualStrings(scanner.current.lexeme.?, &std.unicode.utf8EncodeComptime('🍩'));
 }
