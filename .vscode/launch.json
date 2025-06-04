@@ -15,8 +15,8 @@
             "environment": [],
             "externalConsole": false,
             "internalConsoleOptions": "openOnSessionStart",
-            "MIMode": "gdb"
-//            "preLaunchTask": "build"
+            "MIMode": "gdb",
+            "preLaunchTask": "build"
         }
     ]
 }

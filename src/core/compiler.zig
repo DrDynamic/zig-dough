@@ -28,23 +28,40 @@ const Precedence = enum {
     Primary,
 };
 
-const ErrorReporter = struct {
-    scanner: *Scanner = undefined,
+pub const FunctionCompiler = struct {
+    function: *DoughFunction,
+    scanner: *Scanner,
+    enclosing: ?*FunctionCompiler = null,
     panic_mode: bool = false,
 
-    pub fn init(self: *ErrorReporter, scanner: *Scanner) void {
-        self.scanner = scanner;
+    pub fn init(vm: *VirtualMachine, scanner: *Scanner) !FunctionCompiler {
+        return FunctionCompiler{
+            .function = try objects.DoughFunction.init(vm),
+            .scanner = scanner,
+        };
     }
 
-    pub fn err(self: *ErrorReporter, comptime message: []const u8, args: anytype) void {
+    pub fn emitByte(self: *FunctionCompiler, byte: u8) void {
+        self.function.chunk.writeByte(byte, self.scanner.previous.line) catch {
+            self.err("Could not write to chunk!", .{});
+            return;
+        };
+    }
+
+    pub fn emitReturn(self: *FunctionCompiler) void {
+        self.emitByte(@intFromEnum(OpCode.Null));
+        self.emitByte(@intFromEnum(OpCode.Return));
+    }
+
+    pub fn err(self: *FunctionCompiler, comptime message: []const u8, args: anytype) void {
         self.errAt(&self.scanner.previous, message, args);
     }
 
-    pub fn errAtCurrent(self: *ErrorReporter, comptime message: []const u8, args: anytype) void {
+    pub fn errAtCurrent(self: *FunctionCompiler, comptime message: []const u8, args: anytype) void {
         self.errAt(&self.scanner.current, message, args);
     }
 
-    pub fn errAt(self: *ErrorReporter, token: *Token, comptime message: []const u8, args: anytype) void {
+    pub fn errAt(self: *FunctionCompiler, token: *const Token, comptime message: []const u8, args: anytype) void {
         // Compiler is already in panic. We shouldn't make him anymore nervous than he already is...
         if (self.panic_mode) return;
 
@@ -53,56 +70,29 @@ const ErrorReporter = struct {
 
         // TODO: find a more gracefull handling than 'catch return;' when error printing failes!
 
-        if (token.type == TokenType.Error) {
+        if (token.token_type == TokenType.Error) {
             self._printError(token, "Error", message, args) catch return;
-        } else if (token.type == TokenType.Eof) {
+        } else if (token.token_type == TokenType.Eof) {
             self._printError(token, "Error at end", message, args) catch return;
         } else {
             const config = @import("../config.zig");
             const label = std.fmt.allocPrint(config.allocator, "Error at '{?s}'", .{token.lexeme}) catch |allocErr| @errorName(allocErr);
-
             defer config.allocator.free(label);
 
             self._printError(token, label, message, args) catch return;
         }
     }
 
-    fn _printError(_: ErrorReporter, token: *Token, label: []const u8, comptime message: []const u8, args: anytype) !void {
+    fn _printError(_: FunctionCompiler, token: *const Token, label: []const u8, comptime message: []const u8, args: anytype) !void {
         const stdout_file = std.io.getStdErr().writer();
         var bw = std.io.bufferedWriter(stdout_file);
         const stderr = bw.writer();
 
         try stderr.print("[line {d: >4}] {s}", .{ token.line, label });
         try stderr.print(message, args);
+        try stderr.print("\n", .{});
 
         try bw.flush(); // Don't forget to flush!
-    }
-};
-
-pub const FunctionCompiler = struct {
-    function: *DoughFunction,
-    scanner: *Scanner,
-    enclosing: ?*FunctionCompiler = null,
-    errorReporter: *ErrorReporter,
-
-    pub fn init(vm: *VirtualMachine, scanner: *Scanner, errorReporter: *ErrorReporter) !FunctionCompiler {
-        return FunctionCompiler{
-            .function = try objects.DoughFunction.init(vm),
-            .scanner = scanner,
-            .errorReporter = errorReporter,
-        };
-    }
-
-    pub fn emitByte(self: *FunctionCompiler, byte: u8) void {
-        self.function.chunk.writeByte(byte, self.scanner.previous.line) catch {
-            self.errorReporter.err("Could not write to chunk!", .{});
-            return;
-        };
-    }
-
-    pub fn emitReturn(self: *FunctionCompiler) void {
-        self.emitByte(@intFromEnum(OpCode.Null));
-        self.emitByte(@intFromEnum(OpCode.Return));
     }
 };
 
@@ -123,7 +113,6 @@ pub const ModuleCompiler = struct {
 
     vm: *VirtualMachine,
     scanner: Scanner,
-    errorReporter: ErrorReporter,
     current_compiler: ?*FunctionCompiler = null,
     had_error: bool = false,
 
@@ -180,18 +169,14 @@ pub const ModuleCompiler = struct {
         vm: *VirtualMachine,
         source: []const u8,
     ) ModuleCompiler {
-        var compiler = ModuleCompiler{
+        return ModuleCompiler{
             .vm = vm,
             .scanner = Scanner.init(source),
-            .errorReporter = ErrorReporter{},
         };
-        compiler.errorReporter.init(&compiler.scanner);
-
-        return compiler;
     }
 
     pub fn compile(self: *ModuleCompiler) !*DoughFunction {
-        var compiler = try FunctionCompiler.init(self.vm, &self.scanner, &self.errorReporter);
+        var compiler = try FunctionCompiler.init(self.vm, &self.scanner);
         self.current_compiler = &compiler;
 
         self.advance();
@@ -257,16 +242,16 @@ pub const ModuleCompiler = struct {
         self.current_compiler.?.emitByte(@intFromEnum(OpCode.Pop));
     }
 
-    fn expression(_: *ModuleCompiler) void {
-        //        self.parseP
+    fn expression(self: *ModuleCompiler) void {
+        self.parsePrecedence(Precedence.Assignment);
     }
 
     fn parsePrecedence(self: *ModuleCompiler, precedence: Precedence) void {
         self.advance();
-        const parse_rule: *const ParseRule = self.parse_rules.getPtrConst(self.scanner.previous.token_type);
+        const parse_rule: *const ParseRule = self.parse_rules.getPtrConst(self.scanner.previous.token_type.?);
         const prefix_rule: *const ParseFn = parse_rule.prefix orelse {
             // The last parsed token doesn't have a prefix rule
-            self.errorReporter.err("expect expression.");
+            self.current_compiler.?.err("expect expression.", .{});
             return;
         };
 
@@ -276,10 +261,10 @@ pub const ModuleCompiler = struct {
         prefix_rule(self, context);
 
         // Compile the infix
-        while (@intFromEnum(precedence) <= @intFromEnum(self.parse_rules.getPtrConst(self.scanner.current.type).precedence)) {
+        while (@intFromEnum(precedence) <= @intFromEnum(self.parse_rules.getPtrConst(self.scanner.current.token_type.?).precedence)) {
             self.advance();
-            const infix_rule = self.parse_rules.getPtrConst(self.scanner.previous.type).infix orelse {
-                self.err("Expect expression.");
+            const infix_rule = self.parse_rules.getPtrConst(self.scanner.previous.token_type.?).infix orelse {
+                self.current_compiler.?.err("Expect expression.", .{});
                 return;
             };
             infix_rule(self, context);
@@ -287,14 +272,12 @@ pub const ModuleCompiler = struct {
     }
 
     fn advance(self: *ModuleCompiler) void {
-        var scanner = self.scanner;
+        var scanner = &self.scanner;
         while (true) {
             scanner.scanToken();
-            if (scanner.current.type != TokenType.Error) {
-                break;
-            }
+            if (scanner.current.token_type != TokenType.Error) break;
 
-            self.errorReporter.errAtCurrent("{?s}", .{scanner.current.lexeme});
+            self.current_compiler.?.errAtCurrent("{?s}", .{scanner.current.lexeme});
         }
     }
 
@@ -302,7 +285,7 @@ pub const ModuleCompiler = struct {
         if (self.check(token_type)) {
             self.advance();
         } else {
-            self.errorReporter.errAtCurrent(message, args);
+            self.current_compiler.?.errAtCurrent(message, args);
         }
     }
 
@@ -315,7 +298,7 @@ pub const ModuleCompiler = struct {
     }
 
     fn check(self: ModuleCompiler, token_type: TokenType) bool {
-        return (self.scanner.current.type == token_type);
+        return (self.scanner.current.token_type.? == token_type);
     }
 
     fn getCurrentChunk(self: ModuleCompiler) *Chunk {

@@ -50,11 +50,11 @@ pub const TokenType = enum {
 };
 
 pub const Token = struct {
-    type: ?TokenType,
+    token_type: ?TokenType,
     lexeme: ?[]const u8,
     line: usize,
 
     pub fn debugPrint(self: Token) void {
-        std.debug.print("{d: >4}: {?s} => '{?s}'\n", .{ self.line, std.enums.tagName(TokenType, self.type.?), self.lexeme orelse "NULL" });
+        std.debug.print("{d: >4}: {?s} => '{?s}'\n", .{ self.line, std.enums.tagName(TokenType, self.token_type.?), self.lexeme orelse "NULL" });
     }
 };

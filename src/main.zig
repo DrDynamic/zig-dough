@@ -2,8 +2,7 @@ const std = @import("std");
 pub fn main() !void {
     const config = @import("./config.zig");
 
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
+    const allocator = config.allocator;
 
     var file = try std.fs.cwd().openFile("test.dough", .{});
     defer file.close();

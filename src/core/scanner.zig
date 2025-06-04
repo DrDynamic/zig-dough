@@ -6,17 +6,17 @@ const TokenType = token.TokenType;
 
 pub const Scanner = struct {
     previous: Token = .{
-        .type = null,
+        .token_type = null,
         .lexeme = null,
         .line = 0,
     },
     current: Token = .{
-        .type = null,
+        .token_type = null,
         .lexeme = null,
         .line = 0,
     },
     next: Token = .{
-        .type = null,
+        .token_type = null,
         .lexeme = null,
         .line = 0,
     },
@@ -44,7 +44,7 @@ pub const Scanner = struct {
 
     pub fn debugPrint(self: *Scanner) void {
         var i: u32 = 0;
-        while (self.current.type != TokenType.Eof) : (i += 1) {
+        while (self.current.token_type != TokenType.Eof) : (i += 1) {
             self.scanToken();
             self.current.debugPrint();
             if (i > 50) break;
@@ -56,7 +56,7 @@ pub const Scanner = struct {
         self.current = self.next;
 
         self.skipWhitespace();
-        if (self.current.type == TokenType.Eof) return;
+        if (self.current.token_type == TokenType.Eof) return;
         if (self.isAtEnd()) {
             self.makeToken(TokenType.Eof);
             self.next.lexeme = null;
@@ -109,13 +109,13 @@ pub const Scanner = struct {
     fn makeToken(self: *Scanner, tokenType: TokenType) void {
         const tokenLen: usize = self._currentChar - self._tokenStart;
 
-        self.next.type = tokenType;
+        self.next.token_type = tokenType;
         self.next.lexeme = self._tokenStart[0..tokenLen];
         self.next.line = self._line;
     }
 
     fn makeError(self: *Scanner, message: []const u8) void {
-        self.next.type = TokenType.Error;
+        self.next.token_type = TokenType.Error;
         self.next.lexeme = message;
         self.next.line = self._line;
     }
@@ -313,7 +313,7 @@ test "Scanns all tokens" {
         scanner.scanToken();
         //        std.debug.print("Expect {d}:{?s} but got ", .{ line, std.enums.tagName(TokenType, tokenType) });
         //        scanner.current.debugPrint();
-        try std.testing.expectEqual(tokenType, scanner.current.type);
+        try std.testing.expectEqual(tokenType, scanner.current.token_type);
         try std.testing.expectEqual(line, scanner.current.line);
     }
 }
@@ -326,14 +326,14 @@ test "supports everything above ascii as identifiers" {
     );
 
     scanner.scanToken();
-    try std.testing.expectEqual(scanner.current.type, TokenType.Identifier);
+    try std.testing.expectEqual(scanner.current.token_type, TokenType.Identifier);
     try std.testing.expectEqualStrings("🥟", scanner.current.lexeme.?);
 
     scanner.scanToken();
-    try std.testing.expectEqual(scanner.current.type, TokenType.String);
+    try std.testing.expectEqual(scanner.current.token_type, TokenType.String);
     try std.testing.expectEqualStrings("🍕", scanner.current.lexeme.?);
 
     scanner.scanToken();
-    try std.testing.expect(scanner.current.type == TokenType.Identifier);
+    try std.testing.expect(scanner.current.token_type == TokenType.Identifier);
     try std.testing.expectEqualStrings(scanner.current.lexeme.?, &std.unicode.utf8EncodeComptime('🍩'));
 }
