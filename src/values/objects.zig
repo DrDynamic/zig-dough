@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const config = @import("../config.zig");
+
 const core = @import("../core/core.zig");
 const Chunk = core.chunk.Chunk;
 const VirtualMachine = core.vm.VirtualMachine;
@@ -13,8 +15,8 @@ pub const DoughObject = struct {
     obj_type: ObjType,
     is_marked: bool,
 
-    pub fn init(vm: *VirtualMachine, comptime T: type, obj_type: ObjType) !*DoughObject {
-        const ptr = try vm.dough_allocator.allocator().create(T);
+    pub fn init(comptime T: type, obj_type: ObjType) !*DoughObject {
+        const ptr = try config.dough_allocator.allocator().create(T);
         ptr.obj = DoughObject{
             .obj_type = obj_type,
             .is_marked = false,
@@ -23,10 +25,10 @@ pub const DoughObject = struct {
         return &ptr.obj;
     }
 
-    pub fn deinit(self: *DoughObject, vm: *VirtualMachine) void {
+    pub fn deinit(self: *DoughObject) void {
         switch (self.obj_type) {
-            .Module => self.as(DoughModule).deinit(vm),
-            .Function => self.as(DoughFunction).deinit(vm),
+            .Module => self.as(DoughModule).deinit(),
+            .Function => self.as(DoughFunction).deinit(),
         }
     }
 
@@ -52,28 +54,49 @@ pub const DoughObject = struct {
 
 pub const DoughModule = struct {
     obj: DoughObject,
+
+    pub fn init() !*DoughModule {
+        const obj = try DoughObject.init(DoughModule, ObjType.Module);
+        const module = obj.as(DoughModule);
+        module.* = .{
+            .obj = obj.*,
+        };
+        return module;
+    }
+
+    pub fn deinit(self: DoughModule) void {
+        config.dough_allocator.allocator().free(self);
+    }
+
+    pub fn asObject(self: *DoughModule) *DoughObject {
+        return @ptrCast(self);
+    }
+
+    pub fn print(_: *DoughModule) void {
+        std.debug.print("<DoughModule>");
+    }
 };
 
 pub const DoughFunction = struct {
     obj: DoughObject,
     chunk: Chunk,
 
-    pub fn init(vm: *VirtualMachine) !*DoughFunction {
-        const obj = try DoughObject.init(vm, DoughFunction, .Function);
+    pub fn init() !*DoughFunction {
+        const obj = try DoughObject.init(DoughFunction, .Function);
         const function = obj.as(DoughFunction);
         function.* = .{
             .obj = obj.*,
-            .chunk = Chunk.init(vm.allocator),
+            .chunk = Chunk.init(config.allocator),
         };
         return function;
     }
 
-    pub fn deinit(self: DoughFunction, vm: *VirtualMachine) void {
+    pub fn deinit(self: DoughFunction) void {
         self.chunk.deinit();
-        vm.doughAllocator.allocator().destroy(self);
+        config.doughAllocator.allocator().destroy(self);
     }
 
-    pub fn asObject(self: *DoughFunction) DoughObject {
+    pub fn asObject(self: *DoughFunction) *DoughObject {
         return @ptrCast(self);
     }
 

@@ -34,9 +34,9 @@ pub const FunctionCompiler = struct {
     enclosing: ?*FunctionCompiler = null,
     panic_mode: bool = false,
 
-    pub fn init(vm: *VirtualMachine, scanner: *Scanner) !FunctionCompiler {
+    pub fn init(scanner: *Scanner) !FunctionCompiler {
         return FunctionCompiler{
-            .function = try objects.DoughFunction.init(vm),
+            .function = try objects.DoughFunction.init(),
             .scanner = scanner,
         };
     }
@@ -111,7 +111,7 @@ pub const ModuleCompiler = struct {
     };
     const ParseRules = std.EnumArray(TokenType, ParseRule);
 
-    vm: *VirtualMachine,
+    module: *DoughModule = undefined,
     scanner: Scanner,
     current_compiler: ?*FunctionCompiler = null,
     had_error: bool = false,
@@ -165,18 +165,14 @@ pub const ModuleCompiler = struct {
         .Eof = ParseRule{},
     }),
 
-    pub fn init(
-        vm: *VirtualMachine,
-        source: []const u8,
-    ) ModuleCompiler {
+    pub fn init(source: []const u8) ModuleCompiler {
         return ModuleCompiler{
-            .vm = vm,
             .scanner = Scanner.init(source),
         };
     }
 
     pub fn compile(self: *ModuleCompiler) !*DoughFunction {
-        var compiler = try FunctionCompiler.init(self.vm, &self.scanner);
+        var compiler = try FunctionCompiler.init(&self.scanner);
         self.current_compiler = &compiler;
 
         self.advance();
@@ -212,9 +208,22 @@ pub const ModuleCompiler = struct {
     }
 
     fn declaration(self: *ModuleCompiler) void {
-        if (self.match(TokenType.Var)) {} else {
+        if (self.match(TokenType.Var)) {
+            self.varDeclaration();
+        } else {
             self.statement();
         }
+    }
+
+    fn varDeclaration(self: *ModuleCompiler) void {
+        _ = self.parseVariable("Expect variable name.");
+    }
+
+    // Consumes an Identifier and reserves a slot in the current scope
+    fn parseIdentifier(self: *ModuleCompiler, message: []const u8) u24 {
+        self.consume(TokenType.Identifier, message, .{});
+
+        //onst name = &self.scanner.previous;
     }
 
     fn statement(self: *ModuleCompiler) void {
