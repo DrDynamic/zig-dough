@@ -29,45 +29,50 @@ const Precedence = enum {
 };
 
 const ErrorReporter = struct {
-    scanner: *Scanner,
+    scanner: *Scanner = undefined,
+    panic_mode: bool = false,
 
-    pub fn init(scanner: *Scanner) ErrorReporter {
-        return .{
-            .scanner = scanner,
-        };
+    pub fn init(self: *ErrorReporter, scanner: *Scanner) void {
+        self.scanner = scanner;
     }
 
-    pub fn err(self: ModuleCompiler, message: []const u8, args: anytype) void {
-        self.errAt(self.scanner.previous, message, args);
+    pub fn err(self: *ErrorReporter, comptime message: []const u8, args: anytype) void {
+        self.errAt(&self.scanner.previous, message, args);
     }
 
-    pub fn errAtCurrent(self: ModuleCompiler, message: []const u8, args: anytype) void {
-        self.errAt(self.scanner.current, message, args);
+    pub fn errAtCurrent(self: *ErrorReporter, comptime message: []const u8, args: anytype) void {
+        self.errAt(&self.scanner.current, message, args);
     }
 
-    pub fn errAt(self: ModuleCompiler, token: *Token, message: []const u8, args: anytype) void {
+    pub fn errAt(self: *ErrorReporter, token: *Token, comptime message: []const u8, args: anytype) void {
         // Compiler is already in panic. We shouldn't make him anymore nervous than he already is...
         if (self.panic_mode) return;
 
         // something went wrong! Oh no oh no ... panic!!!
         self.panic_mode = true;
 
+        // TODO: find a more gracefull handling than 'catch return;' when error printing failes!
+
         if (token.type == TokenType.Error) {
-            self._printError(token, "Error", message, args);
+            self._printError(token, "Error", message, args) catch return;
         } else if (token.type == TokenType.Eof) {
-            self._printError(token, "Error at end", message, args);
+            self._printError(token, "Error at end", message, args) catch return;
         } else {
-            const label = std.fmt.allocPrint(self.vm.allocator, "Error at '{s}'", .{token.lexeme});
-            self._printError(token, label, message, args);
+            const config = @import("../config.zig");
+            const label = std.fmt.allocPrint(config.allocator, "Error at '{?s}'", .{token.lexeme}) catch |allocErr| @errorName(allocErr);
+
+            defer config.allocator.free(label);
+
+            self._printError(token, label, message, args) catch return;
         }
     }
 
-    fn _printError(_: ModuleCompiler, token: *Token, label: []const u8, message: []const u8, args: anytype) void {
+    fn _printError(_: ErrorReporter, token: *Token, label: []const u8, comptime message: []const u8, args: anytype) !void {
         const stdout_file = std.io.getStdErr().writer();
         var bw = std.io.bufferedWriter(stdout_file);
         const stderr = bw.writer();
 
-        try stderr.print("[line {d: >d}] {s}", .{ token.line, label });
+        try stderr.print("[line {d: >4}] {s}", .{ token.line, label });
         try stderr.print(message, args);
 
         try bw.flush(); // Don't forget to flush!
@@ -75,26 +80,28 @@ const ErrorReporter = struct {
 };
 
 pub const FunctionCompiler = struct {
-    enclosing: ?*FunctionCompiler,
     function: *DoughFunction,
+    scanner: *Scanner,
+    enclosing: ?*FunctionCompiler = null,
     errorReporter: *ErrorReporter,
 
-    pub fn init(vm: *VirtualMachine, errorReporter: ErrorReporter) FunctionCompiler {
+    pub fn init(vm: *VirtualMachine, scanner: *Scanner, errorReporter: *ErrorReporter) !FunctionCompiler {
         return FunctionCompiler{
+            .function = try objects.DoughFunction.init(vm),
+            .scanner = scanner,
             .errorReporter = errorReporter,
-            .function = objects.DoughFunction.init(vm),
         };
     }
 
     pub fn emitByte(self: *FunctionCompiler, byte: u8) void {
         self.function.chunk.writeByte(byte, self.scanner.previous.line) catch {
-            self.errorReporter.err("Could not write to chunk!");
+            self.errorReporter.err("Could not write to chunk!", .{});
             return;
         };
     }
 
     pub fn emitReturn(self: *FunctionCompiler) void {
-        self.emitByte(@intFromEnum(OpCode.Nil));
+        self.emitByte(@intFromEnum(OpCode.Null));
         self.emitByte(@intFromEnum(OpCode.Return));
     }
 };
@@ -110,7 +117,7 @@ pub const ModuleCompiler = struct {
     const ParseRule = struct {
         prefix: ?*const ParseFn = null,
         infix: ?*const ParseFn = null,
-        precedence: Precedence = .NONE,
+        precedence: Precedence = .None,
     };
     const ParseRules = std.EnumArray(TokenType, ParseRule);
 
@@ -119,7 +126,6 @@ pub const ModuleCompiler = struct {
     errorReporter: ErrorReporter,
     current_compiler: ?*FunctionCompiler = null,
     had_error: bool = false,
-    panic_mode: bool = false,
 
     parse_rules: ParseRules = ParseRules.init(.{
         // Single-character tokens.
@@ -173,18 +179,20 @@ pub const ModuleCompiler = struct {
     pub fn init(
         vm: *VirtualMachine,
         source: []const u8,
-    ) !ModuleCompiler {
-        const scanner = Scanner.init(source);
-        return ModuleCompiler{
+    ) ModuleCompiler {
+        var compiler = ModuleCompiler{
             .vm = vm,
-            .scanner = scanner,
-            .errorReporter = ErrorReporter.init(scanner),
+            .scanner = Scanner.init(source),
+            .errorReporter = ErrorReporter{},
         };
+        compiler.errorReporter.init(&compiler.scanner);
+
+        return compiler;
     }
 
-    pub fn compile(self: ModuleCompiler) InterpretError!DoughModule {
-        const compiler = FunctionCompiler.init(self.vm, self.errorReporter);
-        self.current_compiler = compiler;
+    pub fn compile(self: *ModuleCompiler) !*DoughFunction {
+        var compiler = try FunctionCompiler.init(self.vm, &self.scanner, &self.errorReporter);
+        self.current_compiler = &compiler;
 
         self.advance();
 
@@ -192,7 +200,7 @@ pub const ModuleCompiler = struct {
             self.declaration();
         }
 
-        const function = self.current_compiler.endCompiler();
+        const function = self.endCompiler();
 
         if (self.had_error) {
             return InterpretError.CompileError;
@@ -202,11 +210,16 @@ pub const ModuleCompiler = struct {
     }
 
     fn endCompiler(self: *ModuleCompiler) *DoughFunction {
-        self.current_compiler.emitReturn();
+        self.current_compiler.?.emitReturn();
 
-        const function = self.current_compiler.function;
+        const function = self.current_compiler.?.function;
 
-        if (self.current_compiler.enclosing) |enclosing| {
+        if (@import("../config.zig").debug_print_code) {
+            // TODO: set module name / function name
+            @import("./debug.zig").disassemble_chunk(&function.chunk, "<script>");
+        }
+
+        if (self.current_compiler.?.enclosing) |enclosing| {
             self.current_compiler = enclosing;
         }
 
@@ -233,14 +246,14 @@ pub const ModuleCompiler = struct {
             self.current_compiler.?.emitReturn();
         } else {
             self.expression();
-            self.match(TokenType.Semicolon);
+            _ = self.match(TokenType.Semicolon);
             self.current_compiler.?.emitByte(@intFromEnum(OpCode.Return));
         }
     }
 
     fn expressionStatement(self: *ModuleCompiler) void {
         self.expression();
-        self.match(TokenType.Semicolon);
+        _ = self.match(TokenType.Semicolon);
         self.current_compiler.?.emitByte(@intFromEnum(OpCode.Pop));
     }
 
@@ -273,7 +286,7 @@ pub const ModuleCompiler = struct {
         }
     }
 
-    fn advance(self: ModuleCompiler) void {
+    fn advance(self: *ModuleCompiler) void {
         var scanner = self.scanner;
         while (true) {
             scanner.scanToken();
@@ -281,7 +294,7 @@ pub const ModuleCompiler = struct {
                 break;
             }
 
-            self.errAtCurrent(scanner.current.lexeme);
+            self.errorReporter.errAtCurrent("{?s}", .{scanner.current.lexeme});
         }
     }
 
@@ -289,11 +302,11 @@ pub const ModuleCompiler = struct {
         if (self.check(token_type)) {
             self.advance();
         } else {
-            self.errAtCurrent(message, args);
+            self.errorReporter.errAtCurrent(message, args);
         }
     }
 
-    fn match(self: ModuleCompiler, token_type: TokenType) bool {
+    fn match(self: *ModuleCompiler, token_type: TokenType) bool {
         if (!self.check(token_type)) {
             return false;
         }
@@ -301,11 +314,11 @@ pub const ModuleCompiler = struct {
         return true;
     }
 
-    fn check(self: ModuleCompiler, token_type: TokenType) void {
+    fn check(self: ModuleCompiler, token_type: TokenType) bool {
         return (self.scanner.current.type == token_type);
     }
 
-    fn getCurrentChunk(self: *ModuleCompiler) *Chunk {
+    fn getCurrentChunk(self: ModuleCompiler) *Chunk {
         return &self.current_compiler.function.chunk;
     }
 };

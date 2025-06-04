@@ -10,12 +10,13 @@ pub const GarbageColletingAllocator = struct {
         };
     }
 
-    pub fn allocator(self: GarbageColletingAllocator) std.mem.Allocator {
+    pub fn allocator(self: *GarbageColletingAllocator) std.mem.Allocator {
         return std.mem.Allocator{
             .ptr = self,
             .vtable = &.{
                 .alloc = alloc,
                 .resize = resize,
+                .remap = remap,
                 .free = free,
             },
         };
@@ -28,9 +29,9 @@ pub const GarbageColletingAllocator = struct {
     /// allocation call stack. If the value is `0` it means no return address
     /// has been provided.
     fn alloc(context: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
-        const self: GarbageColletingAllocator = @ptrCast(@alignCast(context));
+        const self: *GarbageColletingAllocator = @ptrCast(@alignCast(context));
 
-        return self.parent_allocator.rawAlloc(self.parent_allocator, len, alignment, ret_addr);
+        return self.parent_allocator.rawAlloc(len, alignment, ret_addr);
     }
 
     /// Attempt to expand or shrink memory in place.
@@ -51,9 +52,9 @@ pub const GarbageColletingAllocator = struct {
     /// allocation call stack. If the value is `0` it means no return address
     /// has been provided.
     fn resize(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, ret_addr: usize) bool {
-        const self: GarbageColletingAllocator = @ptrCast(@alignCast(context));
+        const self: *GarbageColletingAllocator = @ptrCast(@alignCast(context));
 
-        return self.parent_allocator.rawResize(self.parent_allocator, memory, alignment, new_len, ret_addr);
+        return self.parent_allocator.rawResize(memory, alignment, new_len, ret_addr);
     }
 
     /// Attempt to expand or shrink memory, allowing relocation.
@@ -76,9 +77,9 @@ pub const GarbageColletingAllocator = struct {
     /// allocation call stack. If the value is `0` it means no return address
     /// has been provided.
     fn remap(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
-        const self: GarbageColletingAllocator = @ptrCast(@alignCast(context));
+        const self: *GarbageColletingAllocator = @ptrCast(@alignCast(context));
 
-        return self.parent_allocator.rawRemap(self.parent_allocator, memory, alignment, new_len, ret_addr);
+        return self.parent_allocator.rawRemap(memory, alignment, new_len, ret_addr);
     }
 
     /// Free and invalidate a region of memory.
@@ -92,7 +93,7 @@ pub const GarbageColletingAllocator = struct {
     /// allocation call stack. If the value is `0` it means no return address
     /// has been provided.
     fn free(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, ret_addr: usize) void {
-        const self: GarbageColletingAllocator = @ptrCast(@alignCast(context));
-        self.parent_allocator.rawFree(self.parent_allocator, memory, alignment, ret_addr);
+        const self: *GarbageColletingAllocator = @ptrCast(@alignCast(context));
+        self.parent_allocator.rawFree(memory, alignment, ret_addr);
     }
 };

@@ -31,8 +31,14 @@ pub const Scanner = struct {
             ._currentChar = @ptrCast(source),
             ._line = 1,
         };
-
         scanner.scanToken();
+        if (@import("../config.zig").debug_print_tokens) {
+            scanner.debugPrint();
+
+            scanner._tokenStart = @ptrCast(source);
+            scanner._currentChar = @ptrCast(source);
+            scanner._line = 1;
+        }
         return scanner;
     }
 

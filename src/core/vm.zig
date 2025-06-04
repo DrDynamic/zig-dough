@@ -8,6 +8,13 @@ pub const InterpretError = error{
 };
 
 pub const VirtualMachine = struct {
-    doughAllocator: core.memory.GarbageColletingAllocator,
+    dough_allocator: core.memory.GarbageColletingAllocator,
     allocator: std.mem.Allocator,
+
+    pub fn init(allocator: std.mem.Allocator) VirtualMachine {
+        return .{
+            .dough_allocator = core.memory.GarbageColletingAllocator.init(allocator),
+            .allocator = allocator,
+        };
+    }
 };

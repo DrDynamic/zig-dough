@@ -1,7 +1,7 @@
 const std = @import("std");
 
 pub const OpCode = enum(u8) {
-    Nil,
+    Null,
     Pop,
     Return,
 };
@@ -20,6 +20,12 @@ pub const Chunk = struct {
 
     pub fn deinit(self: Chunk) void {
         self.code.deinit();
+    }
+
+    pub fn getLinenumber(self: *Chunk, code_index: usize) ?usize {
+        if (self.lines.items.len <= code_index) return null;
+
+        return self.lines.items[code_index];
     }
 
     pub fn writeByte(self: *Chunk, byte: u8, line: usize) !void {

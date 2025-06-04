@@ -1,69 +1,18 @@
-//! By convention, main.zig is where your main function lives in the case that
-//! you are building an executable. If you are making a library, the convention
-//! is to delete this file and start with root.zig instead.
-
+const std = @import("std");
 pub fn main() !void {
-    const config = @import("./config.zig").DoughConfig.init();
+    const config = @import("./config.zig");
 
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    var file = std.fs.cwd().openFile("test.dough", .{}) catch |err| {
-        std.log.err("Failed to open file: {s}", .{@errorName(err)});
-        return;
-    };
+    var file = try std.fs.cwd().openFile("test.dough", .{});
     defer file.close();
 
-    //var bufferedReader = std.io.bufferedReader(file.reader);
-    //var InStream = bufferedReader.reader();
+    const source = try file.readToEndAlloc(allocator, config.max_file_size);
+    defer allocator.free(source);
 
-    const source = file.readToEndAlloc(allocator, config.maxFileSize) catch |err| {
-        std.log.err("Failed to read file: {s}", .{@errorName(err)});
-        return;
-    };
+    var vm = @import("core/vm.zig").VirtualMachine.init(allocator);
+    var compiler = @import("core/compiler.zig").ModuleCompiler.init(&vm, source);
 
-    var scanner = @import("./core/scanner.zig").Scanner.init(source);
-
-    scanner.debugPrint();
-
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
-
-    // stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
-
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
-
-    try bw.flush(); // Don't forget to flush!
+    _ = try compiler.compile();
 }
-
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // Try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
-}
-
-test "use other module" {
-    try std.testing.expectEqual(@as(i32, 150), lib.add(100, 50));
-}
-
-test "fuzz example" {
-    const Context = struct {
-        fn testOne(context: @This(), input: []const u8) anyerror!void {
-            _ = context;
-            // Try passing `--fuzz` to `zig build test` and see if it manages to fail this test case!
-            try std.testing.expect(!std.mem.eql(u8, "canyoufindme", input));
-        }
-    };
-    try std.testing.fuzz(Context{}, Context.testOne, .{});
-}
-
-const std = @import("std");
-
-/// This imports the separate module containing `root.zig`. Take a look in `build.zig` for details.
-const lib = @import("zig_dough_lib");

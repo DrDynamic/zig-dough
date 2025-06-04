@@ -13,8 +13,8 @@ pub const DoughObject = struct {
     obj_type: ObjType,
     is_marked: bool,
 
-    pub fn init(vm: *VirtualMachine, comptime T: type, obj_type: ObjType) DoughObject {
-        const ptr = try vm.doughAllocator.allocator().create(T);
+    pub fn init(vm: *VirtualMachine, comptime T: type, obj_type: ObjType) !*DoughObject {
+        const ptr = try vm.dough_allocator.allocator().create(T);
         ptr.obj = DoughObject{
             .obj_type = obj_type,
             .is_marked = false,
@@ -42,6 +42,10 @@ pub const DoughObject = struct {
     }
 
     pub inline fn as(self: *DoughObject, comptime T: type) *T {
+        return @alignCast(@fieldParentPtr("obj", self));
+    }
+
+    pub inline fn asFunction(self: *DoughObject) *DoughFunction {
         return @fieldParentPtr("obj", self);
     }
 };
@@ -67,6 +71,10 @@ pub const DoughFunction = struct {
     pub fn deinit(self: DoughFunction, vm: *VirtualMachine) void {
         self.chunk.deinit();
         vm.doughAllocator.allocator().destroy(self);
+    }
+
+    pub fn asObject(self: *DoughFunction) DoughObject {
+        return @ptrCast(self);
     }
 
     pub fn print(_: *DoughFunction) void {
