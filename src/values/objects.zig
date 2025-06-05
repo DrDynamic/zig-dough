@@ -57,6 +57,7 @@ pub const DoughObject = struct {
 
 pub const DoughModule = struct {
     obj: DoughObject,
+    function: ?*DoughFunction = null,
 
     pub fn init() !*DoughModule {
         const obj = try DoughObject.init(DoughModule, ObjType.Module);

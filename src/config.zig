@@ -9,5 +9,7 @@ pub var debug_print_code: bool = false;
 pub var allocator: std.mem.Allocator = undefined;
 pub var dough_allocator: memory.GarbageColletingAllocator = undefined;
 
-// infos for sanity checks
-pub var max_file_size: usize = std.math.maxInt(usize);
+// sizes and infos for sanity checks
+pub var MAX_FILE_SIZE: usize = std.math.maxInt(usize);
+
+pub var MAX_STACK_SIZE: usize = std.math.maxInt(u8);

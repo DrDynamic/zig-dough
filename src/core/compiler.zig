@@ -256,7 +256,7 @@ pub const ModuleCompiler = struct {
             self.declaration();
         }
 
-        _ = self.endCompiler();
+        self.module.function = self.endCompiler();
 
         if (self.had_error) {
             return InterpretError.CompileError;
@@ -266,6 +266,8 @@ pub const ModuleCompiler = struct {
     }
 
     fn endCompiler(self: *ModuleCompiler) *DoughFunction {
+        // TODO: check for not defined identifiers
+
         self.current_compiler.?.emitReturn();
 
         const function = self.current_compiler.?.function;
