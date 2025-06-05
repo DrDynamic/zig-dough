@@ -1,8 +1,20 @@
 const std = @import("std");
 
 pub const OpCode = enum(u8) {
-    Null,
-    Pop,
+    // Slot actions
+    DefineSlot,
+    ReadSlot,
+    WriteSlot,
+
+    // Value interaction
+    Call,
+
+    // Stack Actions
+    //// Values
+    PushNull, // push the value <null>
+    PushUninitialized, // push the value <uninitialized>
+    Pop, // pop a value
+
     Return,
 };
 

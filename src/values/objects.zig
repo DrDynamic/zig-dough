@@ -6,6 +6,9 @@ const core = @import("../core/core.zig");
 const Chunk = core.chunk.Chunk;
 const VirtualMachine = core.vm.VirtualMachine;
 
+const slot_stack = @import("./slot_stack.zig");
+const SlotStack = slot_stack.SlotStack;
+
 pub const ObjType = enum {
     Module,
     Function,
@@ -80,6 +83,7 @@ pub const DoughModule = struct {
 pub const DoughFunction = struct {
     obj: DoughObject,
     chunk: Chunk,
+    slots: SlotStack,
 
     pub fn init() !*DoughFunction {
         const obj = try DoughObject.init(DoughFunction, .Function);
@@ -87,12 +91,14 @@ pub const DoughFunction = struct {
         function.* = .{
             .obj = obj.*,
             .chunk = Chunk.init(config.allocator),
+            .slots = SlotStack.init(),
         };
         return function;
     }
 
     pub fn deinit(self: DoughFunction) void {
         self.chunk.deinit();
+        self.slots.deinit();
         config.doughAllocator.allocator().destroy(self);
     }
 

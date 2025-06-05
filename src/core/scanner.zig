@@ -128,6 +128,10 @@ pub const Scanner = struct {
         return self._currentChar[0];
     }
 
+    fn peekNext(self: *Scanner) u8 {
+        return self._currentChar[1];
+    }
+
     fn match(self: *Scanner, expected: u8) bool {
         if (self.isAtEnd()) return false;
         if (self._currentChar[0] != expected) return false;
@@ -151,7 +155,36 @@ pub const Scanner = struct {
                     }
                     _ = self.advance();
                 },
-                // TODO: add comments
+                '/' => {
+                    const next = self.peekNext();
+                    if (next == '/') {
+                        // single line comment
+
+                        _ = self.advance();
+                        _ = self.advance();
+
+                        while (!self.isAtEnd()) {
+                            if (self.peek() == '\n') break;
+                            _ = self.advance();
+                        }
+                    } else if (next == '*') {
+                        // multiline comment
+
+                        _ = self.advance();
+                        _ = self.advance();
+
+                        while (!self.isAtEnd()) {
+                            if (self.peek() == '*' and self.peekNext() == '/') {
+                                _ = self.advance();
+                                _ = self.advance();
+                                break;
+                            }
+                            _ = self.advance();
+                        }
+                    } else {
+                        return;
+                    }
+                },
                 else => return,
             }
         }

@@ -5,6 +5,9 @@ const objects = @import("./objects.zig");
 pub const Value = UnionValue;
 
 const UnionValue = union(enum) {
+    // for variables, constants, etc. that have been defined but didn't get a real value (yet)
+    Uninitialized,
+
     Null,
     Bool,
     Number: f64,
@@ -13,11 +16,23 @@ const UnionValue = union(enum) {
     pub fn print(self: UnionValue) void {
         // TODO: don't use debug.print!
         switch (self) {
+            .Uninitialized => std.debug.print("uninitialized", {}),
             .Null => std.debug.print("null", .{}),
             .Bool => |val| std.debug.print("{s}", .{if (val) "true" else "false"}),
             .Number => |val| std.debug.print("{d}", .{val}),
             .Object => |val| val.print(),
         }
+    }
+
+    pub inline fn makeUninitialized() Value {
+        return UnionValue{ .Uninitialized = {} };
+    }
+
+    pub inline fn isUninitialized(self: UnionValue) bool {
+        return switch (self) {
+            .Uninitialized => true,
+            else => false,
+        };
     }
 
     pub inline fn makeNull() Value {

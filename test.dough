@@ -1,3 +1,7 @@
+var a
+print(a)
+
+/*
 var 🥟 = "Dumpling";
 const pizza = "🍕";
 
@@ -8,3 +12,4 @@ function 🍩() {
 if(🥟 != 🍩()) {
     print("A dumpling is not a Doughnut!");
 }
+*/

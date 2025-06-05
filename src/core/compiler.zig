@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const types = @import("../types.zig");
+
 const core = @import("./core.zig");
 const Chunk = core.chunk.Chunk;
 const GarbageColletingAllocator = core.memory.GarbageColletingAllocator;
@@ -29,16 +31,72 @@ const Precedence = enum {
 };
 
 pub const FunctionCompiler = struct {
-    function: *DoughFunction,
-    scanner: *Scanner,
     enclosing: ?*FunctionCompiler = null,
+    function: *DoughFunction,
     panic_mode: bool = false,
+    scanner: *Scanner,
+    scopeDepth: u24 = 0,
 
     pub fn init(scanner: *Scanner) !FunctionCompiler {
         return FunctionCompiler{
             .function = try objects.DoughFunction.init(),
             .scanner = scanner,
         };
+    }
+
+    pub fn declareIdentifier(self: *FunctionCompiler, identifier: []const u8) ?types.SlotAddress {
+        const props = self.function.slots.getProperties(identifier);
+
+        if (props != null and props.?.depth == self.scopeDepth) {
+            self.err("Name already in use in this scope", .{});
+            return null;
+        }
+
+        return self.function.slots.getOrPush(
+            identifier,
+            .{
+                .depth = self.scopeDepth,
+                .identifier = identifier,
+            },
+            .Define,
+        ) catch |stackError| {
+            self.err("Creating Identifier failed ({s}).", .{@errorName(stackError)});
+            return null;
+        };
+    }
+
+    pub fn readIdentifier(self: *FunctionCompiler, identifier: []const u8) void {
+        const address = self.function.slots.getOrPush(
+            identifier,
+            .{
+                .depth = self.scopeDepth,
+                .identifier = identifier,
+            },
+            .Read,
+        ) catch |stackError| blk: {
+            self.err("Creating Identifier failed ({s}).", .{@errorName(stackError)});
+            break :blk 0xFFFFFF;
+        };
+
+        self.emitOpCode(.ReadSlot);
+        self.emitAddress(address);
+    }
+
+    pub fn writeIdentifier(self: *FunctionCompiler, identifier: []const u8) void {
+        const address = self.function.slots.getOrPush(
+            identifier,
+            .{
+                .depth = self.scopeDepth,
+                .identifier = identifier,
+            },
+            .Write,
+        ) catch |stackError| blk: {
+            self.err("Creating Identifier failed ({s}).", .{@errorName(stackError)});
+            break :blk 0xFFFFFF;
+        };
+
+        self.emitOpCode(.WriteSlot);
+        self.emitAddress(address);
     }
 
     pub fn emitByte(self: *FunctionCompiler, byte: u8) void {
@@ -48,8 +106,20 @@ pub const FunctionCompiler = struct {
         };
     }
 
+    pub fn emitOpCode(self: *FunctionCompiler, op_code: OpCode) void {
+        self.emitByte(@intFromEnum(op_code));
+    }
+
+    pub fn emitAddress(self: *FunctionCompiler, address: types.SlotAddress) void {
+        const bytes: [3]u8 = @bitCast(address);
+
+        self.emitByte(bytes[0]);
+        self.emitByte(bytes[1]);
+        self.emitByte(bytes[2]);
+    }
+
     pub fn emitReturn(self: *FunctionCompiler) void {
-        self.emitByte(@intFromEnum(OpCode.Null));
+        self.emitByte(@intFromEnum(OpCode.PushNull));
         self.emitByte(@intFromEnum(OpCode.Return));
     }
 
@@ -76,7 +146,7 @@ pub const FunctionCompiler = struct {
             self._printError(token, "Error at end", message, args) catch return;
         } else {
             const config = @import("../config.zig");
-            const label = std.fmt.allocPrint(config.allocator, "Error at '{?s}'", .{token.lexeme}) catch |allocErr| @errorName(allocErr);
+            const label = std.fmt.allocPrint(config.allocator, "Error at '{?s}' ", .{token.lexeme}) catch |allocErr| @errorName(allocErr);
             defer config.allocator.free(label);
 
             self._printError(token, label, message, args) catch return;
@@ -97,8 +167,11 @@ pub const FunctionCompiler = struct {
 };
 
 const CompilationContext = struct {
-    pub fn init() CompilationContext {
-        return .{};
+    can_assign: bool = false,
+    pub fn init(can_assign: bool) CompilationContext {
+        return .{
+            .can_assign = can_assign,
+        };
     }
 };
 
@@ -118,7 +191,7 @@ pub const ModuleCompiler = struct {
 
     parse_rules: ParseRules = ParseRules.init(.{
         // Single-character tokens.
-        .LeftParen = ParseRule{},
+        .LeftParen = ParseRule{ .infix = call, .precedence = Precedence.Call },
         .RightParen = ParseRule{},
         .LeftBrace = ParseRule{},
         .RightBrace = ParseRule{},
@@ -143,7 +216,7 @@ pub const ModuleCompiler = struct {
         .LogicalAnd = ParseRule{},
         .LogicalOr = ParseRule{},
         // Literals.
-        .Identifier = ParseRule{},
+        .Identifier = ParseRule{ .prefix = identifier },
         .String = ParseRule{},
         .Number = ParseRule{},
         // Keywords.
@@ -171,7 +244,9 @@ pub const ModuleCompiler = struct {
         };
     }
 
-    pub fn compile(self: *ModuleCompiler) !*DoughFunction {
+    pub fn compile(self: *ModuleCompiler) !*DoughModule {
+        self.module = try DoughModule.init();
+
         var compiler = try FunctionCompiler.init(&self.scanner);
         self.current_compiler = &compiler;
 
@@ -181,12 +256,12 @@ pub const ModuleCompiler = struct {
             self.declaration();
         }
 
-        const function = self.endCompiler();
+        _ = self.endCompiler();
 
         if (self.had_error) {
             return InterpretError.CompileError;
         } else {
-            return function;
+            return self.module;
         }
     }
 
@@ -197,7 +272,7 @@ pub const ModuleCompiler = struct {
 
         if (@import("../config.zig").debug_print_code) {
             // TODO: set module name / function name
-            @import("./debug.zig").disassemble_chunk(&function.chunk, "<script>");
+            @import("./debug.zig").disassemble_function(function);
         }
 
         if (self.current_compiler.?.enclosing) |enclosing| {
@@ -216,14 +291,27 @@ pub const ModuleCompiler = struct {
     }
 
     fn varDeclaration(self: *ModuleCompiler) void {
-        _ = self.parseVariable("Expect variable name.");
+        const address = self.parseIdentifier("Expect variable name.") orelse 0xFFFFFF;
+
+        if (self.match(TokenType.Equal)) {
+            self.expression();
+        } else {
+            self.current_compiler.?.emitByte(@intFromEnum(OpCode.PushUninitialized));
+        }
+
+        // TODO: or consume newLine
+        _ = self.match(TokenType.Semicolon);
+
+        self.current_compiler.?.emitByte(@intFromEnum(OpCode.DefineSlot));
+        self.current_compiler.?.emitAddress(address);
     }
 
     // Consumes an Identifier and reserves a slot in the current scope
-    fn parseIdentifier(self: *ModuleCompiler, message: []const u8) u24 {
-        self.consume(TokenType.Identifier, message, .{});
+    fn parseIdentifier(self: *ModuleCompiler, message: []const u8) ?u24 {
+        self.consume(TokenType.Identifier, "{s}", .{message});
+        const name = &self.scanner.previous;
 
-        //onst name = &self.scanner.previous;
+        return self.current_compiler.?.declareIdentifier(name.lexeme.?);
     }
 
     fn statement(self: *ModuleCompiler) void {
@@ -255,6 +343,22 @@ pub const ModuleCompiler = struct {
         self.parsePrecedence(Precedence.Assignment);
     }
 
+    fn expressionList(self: *ModuleCompiler, endToken: TokenType, comptime too_many_error: []const u8) u8 {
+        var arg_count: u8 = 0;
+
+        while (!self.check(endToken)) {
+            self.expression();
+            if (arg_count == 255) {
+                self.current_compiler.?.err(too_many_error, .{});
+            }
+            arg_count += 1;
+            if (!self.match(TokenType.Comma)) {
+                break;
+            }
+        }
+        return arg_count;
+    }
+
     fn parsePrecedence(self: *ModuleCompiler, precedence: Precedence) void {
         self.advance();
         const parse_rule: *const ParseRule = self.parse_rules.getPtrConst(self.scanner.previous.token_type.?);
@@ -264,7 +368,8 @@ pub const ModuleCompiler = struct {
             return;
         };
 
-        const context = CompilationContext.init();
+        const can_assign = @intFromEnum(precedence) <= @intFromEnum(Precedence.Assignment);
+        const context = CompilationContext.init(can_assign);
 
         // Compile the prefix
         prefix_rule(self, context);
@@ -280,6 +385,25 @@ pub const ModuleCompiler = struct {
         }
     }
 
+    fn identifier(self: *ModuleCompiler, context: CompilationContext) void {
+        const name = self.scanner.previous;
+
+        if (context.can_assign and self.match(TokenType.Equal)) {
+            // TODO: check access intent (can write ?)
+            self.expression();
+            self.current_compiler.?.writeIdentifier(name.lexeme.?);
+        } else {
+            self.current_compiler.?.readIdentifier(name.lexeme.?);
+        }
+    }
+
+    fn call(self: *ModuleCompiler, _: CompilationContext) void {
+        const arg_count = self.expressionList(TokenType.RightParen, "Can't have more than 255 arguments.");
+        self.consume(TokenType.RightParen, "Expect ')' after arguments.", .{});
+        self.current_compiler.?.emitOpCode(.Call);
+        self.current_compiler.?.emitByte(arg_count);
+    }
+
     fn advance(self: *ModuleCompiler) void {
         var scanner = &self.scanner;
         while (true) {
@@ -290,7 +414,7 @@ pub const ModuleCompiler = struct {
         }
     }
 
-    fn consume(self: ModuleCompiler, token_type: TokenType, message: []const u8, args: anytype) void {
+    fn consume(self: *ModuleCompiler, token_type: TokenType, comptime message: []const u8, args: anytype) void {
         if (self.check(token_type)) {
             self.advance();
         } else {

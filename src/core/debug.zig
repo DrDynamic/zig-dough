@@ -4,16 +4,24 @@ const core = @import("./core.zig");
 const Chunk = core.chunk.Chunk;
 const OpCode = core.chunk.OpCode;
 
-pub fn disassemble_chunk(chunk: *Chunk, name: []const u8) void {
-    std.debug.print("== {s} ==\n", .{name});
+const SlotStack = @import("../values/slot_stack.zig").SlotStack;
+const DoughFunction = @import("../values/objects.zig").DoughFunction;
+
+const OPCODE_NAME_FROMAT = "{s: >20}";
+
+pub fn disassemble_function(function: *DoughFunction) void {
+    std.debug.print("== <script> ==\n", .{}); // TODO: read name from function
+
+    const chunk = &function.chunk;
+    const slots = &function.slots;
 
     var offset: usize = 0;
     while (offset < chunk.code.items.len) {
-        offset = disassemble_instruction(chunk, offset);
+        offset = disassemble_instruction(chunk, slots, offset);
     }
 }
 
-pub fn disassemble_instruction(chunk: *Chunk, offset: usize) usize {
+pub fn disassemble_instruction(chunk: *Chunk, slots: *SlotStack, offset: usize) usize {
     std.debug.print("[{d:0>4}] ", .{offset});
 
     if (offset > 0 and chunk.getLinenumber(offset) == chunk.getLinenumber(offset - 1)) {
@@ -24,13 +32,40 @@ pub fn disassemble_instruction(chunk: *Chunk, offset: usize) usize {
 
     const instruction: OpCode = @enumFromInt(chunk.code.items[offset]);
     return switch (instruction) {
-        .Null => simpleInstruction("NULL", offset),
+        // Slot actions
+        .DefineSlot => slotAddressInstruction("DEFINE_SLOT", chunk, slots, offset),
+        .ReadSlot => slotAddressInstruction("READ_SLOT", chunk, slots, offset),
+        .WriteSlot => slotAddressInstruction("WRITE_SLOT", chunk, slots, offset),
+
+        // Value interaction
+        .Call => byteDecimalInstruction("CALL", chunk, offset),
+
+        // Stack Actions
+        .PushNull => simpleInstruction("PUSH_NULL", offset),
+        .PushUninitialized => simpleInstruction("PUSH_UNINITIALIZED", offset),
         .Pop => simpleInstruction("POP", offset),
+
         .Return => simpleInstruction("RETURN", offset),
     };
 }
 
+fn byteDecimalInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
+    std.debug.print(OPCODE_NAME_FROMAT ++ " {d}\n", .{ name, chunk.code.items[offset + 1] });
+    return offset + 2;
+}
+
+fn slotAddressInstruction(name: []const u8, chunk: *Chunk, slots: *SlotStack, offset: usize) usize {
+    const bytes: [3]u8 = chunk.code.items[offset..][1..4].*;
+    const address: u24 = @bitCast(bytes);
+
+    const props = slots.properties.items[address];
+
+    std.debug.print(OPCODE_NAME_FROMAT ++ " 0x{X:0>6} '{s}'\n", .{ name, address, props.identifier });
+
+    return offset + 4;
+}
+
 fn simpleInstruction(name: []const u8, offset: usize) usize {
-    std.debug.print("{s}\n", .{name});
+    std.debug.print(OPCODE_NAME_FROMAT ++ "\n", .{name});
     return offset + 1;
 }
