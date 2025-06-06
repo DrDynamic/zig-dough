@@ -11,6 +11,7 @@ const SlotStack = slot_stack.SlotStack;
 
 pub const ObjType = enum {
     Module,
+    Closure,
     Function,
 };
 
@@ -31,6 +32,7 @@ pub const DoughObject = struct {
     pub fn deinit(self: *DoughObject) void {
         switch (self.obj_type) {
             .Module => self.as(DoughModule).deinit(),
+            .Closure => self.as(DoughClosure).deinit(),
             .Function => self.as(DoughFunction).deinit(),
         }
     }
@@ -38,6 +40,7 @@ pub const DoughObject = struct {
     pub fn print(self: *DoughObject) void {
         switch (self.obj_type) {
             .Module => self.as(DoughModule).print(),
+            .Closure => self.as(DoughClosure).print(),
             .Function => self.as(DoughFunction).print(),
         }
     }
@@ -69,7 +72,7 @@ pub const DoughModule = struct {
     }
 
     pub fn deinit(self: DoughModule) void {
-        config.dough_allocator.allocator().free(self);
+        config.dough_allocator.allocator().destroy(self);
     }
 
     pub fn asObject(self: *DoughModule) *DoughObject {
@@ -81,8 +84,36 @@ pub const DoughModule = struct {
     }
 };
 
+pub const DoughClosure = struct {
+    obj: DoughObject,
+    function: *DoughFunction,
+
+    pub fn init(function: *DoughFunction) !*DoughClosure {
+        const obj = try DoughObject.init(DoughClosure, ObjType.Closure);
+        const closure = obj.as(DoughClosure);
+        closure.* = .{
+            .obj = obj,
+            .function = function,
+        };
+        return closure;
+    }
+
+    pub fn deinit(self: *DoughClosure) void {
+        config.dough_allocator.allocator().destroy(self);
+    }
+
+    pub fn asObject(self: *DoughClosure) *DoughObject {
+        return @ptrCast(self);
+    }
+
+    pub fn print(self: *DoughClosure) void {
+        self.function.print();
+    }
+};
+
 pub const DoughFunction = struct {
     obj: DoughObject,
+    arity: u8,
     chunk: Chunk,
     slots: SlotStack,
 
@@ -91,6 +122,7 @@ pub const DoughFunction = struct {
         const function = obj.as(DoughFunction);
         function.* = .{
             .obj = obj.*,
+            .arity = 0,
             .chunk = Chunk.init(config.allocator),
             .slots = SlotStack.init(),
         };
@@ -100,7 +132,7 @@ pub const DoughFunction = struct {
     pub fn deinit(self: DoughFunction) void {
         self.chunk.deinit();
         self.slots.deinit();
-        config.doughAllocator.allocator().destroy(self);
+        config.dough_allocator.allocator().destroy(self);
     }
 
     pub fn asObject(self: *DoughFunction) *DoughObject {
@@ -110,4 +142,9 @@ pub const DoughFunction = struct {
     pub fn print(_: *DoughFunction) void {
         std.debug.print("<DoughFunction>");
     }
+};
+
+pub const DoughString = struct {
+    obj: DoughObject,
+    chars: []const u8,
 };

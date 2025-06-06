@@ -1,5 +1,5 @@
 const std = @import("std");
-const objects = @import("./objects.zig");
+pub const objects = @import("./objects.zig");
 
 // TODO: add NAN_BOXING
 pub const Value = UnionValue;

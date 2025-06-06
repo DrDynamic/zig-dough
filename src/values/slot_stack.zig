@@ -18,8 +18,12 @@ pub const Intent = enum {
 };
 
 pub const SlotProperties = struct {
+    // TODO: increment scope only when necessary
+    // a should have depth 0  and b should have depth 1
+    // var a; {{{{{{{var b;}}}}}}}
+
     /// the scope depth of the variable
-    depth: usize = 0,
+    depth: u24 = 0,
 
     /// the identifier used in the sourcecode to access this slot
     identifier: []const u8,
