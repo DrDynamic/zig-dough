@@ -5,9 +5,12 @@ const config = @import("../config.zig");
 const core = @import("../core/core.zig");
 const Chunk = core.chunk.Chunk;
 const VirtualMachine = core.vm.VirtualMachine;
+const InterpretError = core.vm.InterpretError;
 
 const slot_stack = @import("./slot_stack.zig");
 const SlotStack = slot_stack.SlotStack;
+
+const Value = @import("values.zig").Value;
 
 pub const ObjType = enum {
     Module,
@@ -58,12 +61,71 @@ pub const DoughObject = struct {
     }
 };
 
-pub const DoughModule = struct {
+pub const DoughExecutable = struct {
+    pub const CallFrame = struct {
+        closure: *DoughClosure = undefined,
+        ip: [*]u8 = undefined,
+        slots: [*]Value = undefined,
+    };
+
     obj: DoughObject,
+
+    frames: []CallFrame = undefined,
+    frame_count: usize = undefined,
+    frame_capacity: usize = undefined,
+
+    stack: []Value = undefined,
+    stack_top: [*]Value = undefined,
+    stack_capacity: usize = undefined,
+
     function: ?*DoughFunction = null,
 
+    pub fn init(comptime T: type, obj_type: ObjType) !*DoughExecutable {
+        const obj = try DoughObject.init(T, obj_type);
+        const executable = obj.as(DoughExecutable);
+        executable.* = .{};
+        return executable;
+    }
+
+    pub fn initStack(self: *DoughExecutable) void {
+        // TODO: recalc sizes in compiler if possible
+        // TODO: grow / shrink frames and stack
+        self.frames = config.allocator([64]CallFrame);
+        self.frame_count = 0;
+        self.frame_capacity = 64;
+
+        self.stack = config.allocator([64]Value);
+        self.stack_capacity = 64;
+        self.resetStack();
+    }
+
+    fn call(self: *VirtualMachine, closure: *DoughClosure, arg_count: u8) core.vm.InterpretError!void {
+        if (arg_count < closure.function.arity) {
+            self.runtime_error("Expected {d} arguments but got {d}", .{ closure.function.arity, arg_count });
+            return InterpretError.RuntimeError;
+        }
+    }
+
+    pub fn push(self: *VirtualMachine, value: Value) void {
+        self.stack_top[0] = value;
+        self.stack_top += 1;
+    }
+
+    pub fn pop(self: *VirtualMachine) Value {
+        self.stack_top -= 1;
+        return self.stack_top[0];
+    }
+
+    pub fn resetStack(self: *DoughExecutable) void {
+        self.stack_top = self.stack[0..];
+    }
+};
+
+pub const DoughModule = struct {
+    obj: DoughObject,
+
     pub fn init() !*DoughModule {
-        const obj = try DoughObject.init(DoughModule, ObjType.Module);
+        const obj = try DoughExecutable.init(DoughModule, ObjType.Module);
         const module = obj.as(DoughModule);
         module.* = .{
             .obj = obj.*,
