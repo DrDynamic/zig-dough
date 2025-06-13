@@ -83,7 +83,9 @@ pub const DoughExecutable = struct {
     pub fn init(comptime T: type, obj_type: ObjType) !*DoughExecutable {
         const obj = try DoughObject.init(T, obj_type);
         const executable = obj.as(DoughExecutable);
-        executable.* = .{};
+        executable.* = .{
+            .obj = obj.*,
+        };
         return executable;
     }
 
@@ -123,9 +125,10 @@ pub const DoughExecutable = struct {
 
 pub const DoughModule = struct {
     obj: DoughObject,
+    function: *DoughFunction = undefined,
 
     pub fn init() !*DoughModule {
-        const obj = try DoughExecutable.init(DoughModule, ObjType.Module);
+        const obj = try DoughObject.init(DoughModule, ObjType.Module);
         const module = obj.as(DoughModule);
         module.* = .{
             .obj = obj.*,
@@ -141,6 +144,9 @@ pub const DoughModule = struct {
         return @ptrCast(self);
     }
 
+    pub fn asExecutable(self: *DoughModule) *DoughExecutable {
+        return @ptrCast(self);
+    }
     pub fn print(_: *DoughModule) void {
         std.debug.print("<DoughModule>");
     }

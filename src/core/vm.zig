@@ -7,6 +7,7 @@ const values = @import("../values/values.zig");
 const Value = values.Value;
 const DoughClosure = values.objects.DoughClosure;
 const DoughExecutable = values.objects.DoughExecutable;
+const DoughModule = values.objects.DoughModule;
 
 pub const InterpretError = error{
     CompileError,
@@ -14,13 +15,16 @@ pub const InterpretError = error{
 };
 
 pub const VirtualMachine = struct {
-    executable: *DoughExecutable = undefined,
+    executable: *DoughModule = undefined,
+
+    stack: [255]Value = undefined,
+    stack_top: [*]Value = undefined,
 
     pub fn init(_: *VirtualMachine) void {}
 
     pub fn deinit(_: *VirtualMachine) void {}
 
-    pub fn execute(self: *VirtualMachine, executable: *DoughExecutable) void {
+    pub fn execute(self: *VirtualMachine, executable: *DoughModule) void {
         self.executable = executable;
     }
     pub fn interpret(self: *VirtualMachine, source: []const u8) !void {
@@ -28,6 +32,20 @@ pub const VirtualMachine = struct {
         var module = try compiler.compile();
 
         self.push(Value.fromObject(module.function.?.asObject()));
+    }
+
+    pub fn push(self: *VirtualMachine, value: Value) void {
+        self.stack_top[0] = value;
+        self.stack_top += 1;
+    }
+
+    pub fn pop(self: *VirtualMachine) Value {
+        self.stack_top -= 1;
+        return self.stack_top[0];
+    }
+
+    fn resetStack(self: *DoughExecutable) void {
+        self.stack_top = self.stack[0..];
     }
 
     fn run(_: *VirtualMachine) void {}
