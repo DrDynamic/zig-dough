@@ -3,6 +3,8 @@ const std = @import("std");
 const config = @import("../config.zig");
 const core = @import("./core.zig");
 
+const OpCode = core.chunk.OpCode;
+
 const values = @import("../values/values.zig");
 const Value = values.Value;
 const DoughClosure = values.objects.DoughClosure;
@@ -14,18 +16,42 @@ pub const InterpretError = error{
     RuntimeError,
 };
 
+const CallFrame = struct {
+    closure: *Closure = undefined,
+    ip: [*]u8 = undefined,
+    slots: [*]Value = undefined,
+};
+
 pub const VirtualMachine = struct {
     executable: *DoughModule = undefined,
 
-    stack: [255]Value = undefined,
+    frames: []CallFrame = undefined,
+    frame_count: usize = undefined,
+
+    stack: []Value = undefined,
     stack_top: [*]Value = undefined,
 
-    pub fn init(_: *VirtualMachine) void {}
+    pub fn init(self: *VirtualMachine) void {
+        // TODO: make this more dynamic (maybe estimate size while compilation on fiunction level or someting)
+        self.frames = config.allocator.create([255]CallFrame);
+        self.frame_count = 0;
+        self.stack = config.allocator.create([255]Value);
+        self.resetStack();
+    }
 
     pub fn deinit(_: *VirtualMachine) void {}
 
     pub fn execute(self: *VirtualMachine, executable: *DoughModule) void {
         self.executable = executable;
+
+        self.push(Value.fromObject(executable.function.asObject()));
+        const closure = DoughClosure.init(executable.function);
+        _ = self.pop();
+
+        self.push(Value.fromObject(closure.asObject()));
+
+        self.call(closure, 0);
+        self.run();
     }
     pub fn interpret(self: *VirtualMachine, source: []const u8) !void {
         var compiler = core.compiler.ModuleCompiler.init(source);
@@ -44,11 +70,77 @@ pub const VirtualMachine = struct {
         return self.stack_top[0];
     }
 
-    fn resetStack(self: *DoughExecutable) void {
+    fn resetStack(self: *VirtualMachine) void {
         self.stack_top = self.stack[0..];
+        self.frame_count = 0;
     }
 
-    fn run(_: *VirtualMachine) void {}
+    inline fn read_byte(self: *VirtualMachine, frame: *CallFrame) u8 {
+        _ = self;
+
+        // ip is a many-item pointer.
+        // The first element points to start of the slice.
+        const value: u8 = frame.ip[0];
+        // Pointer arithmetic below. We advance the ip to the pointer of the next
+        // element in the slice.
+        frame.ip += 1;
+        return value;
+    }
+
+    fn run(self: *VirtualMachine) void {
+        if (config.debug_trace_execution) {
+            std.debug.print("\n", .{});
+        }
+
+        var frame: *CallFrame = &self.frames[self.frame_count];
+
+        while (true) {
+            if (config.debug_trace_execution) {
+                std.debug.print("          ", .{});
+
+                var val_ptr = self.stack[0..].ptr;
+                while (@intFromPtr(val_ptr) < @intFromPtr(self.stack_top)) : (val_ptr += 1) {
+                    std.debug.print("[ ", .{});
+                    val_ptr[0].print();
+                    std.debug.print(" ]", .{});
+                }
+
+                std.debug.print("\n", .{});
+
+                const offset: usize = @intFromPtr(frame.ip) - @intFromPtr(frame.closure.function.chunk.code.items.ptr);
+                _ = @import("debug.zig").disassemble_instruction(&frame.closure.function.chunk, &frame.closure.function.slots, offset);
+            }
+
+            const instruction: OpCode = @enumFromInt(self.read_byte());
+            
+            switch (instruction) {
+                // Slot actions
+                // is this even needed? DefineSlot,
+                GetSlot => {
+
+
+},
+                
+                SetSlot => {
+    // TODO: read an Address (u24)
+    const slot:usize = @intCast(self.readByte(frame));
+    frame.slots[slot] = self.peek(0);
+},
+            
+                // Value interaction
+                Call,
+            
+                // Stack Actions
+                //// Values
+                PushNull, // push the value <null>
+                PushUninitialized, // push the value <uninitialized>
+                Pop, // pop a value
+            
+                Return,
+
+            }
+        }
+    }
 
     fn call(self: *VirtualMachine, closure: *DoughClosure, arg_count: u8) InterpretError!void {
         if (arg_count < closure.function.arity) {
