@@ -13,9 +13,38 @@ const SlotStack = slot_stack.SlotStack;
 const Value = @import("values.zig").Value;
 
 pub const ObjType = enum {
-    Module,
     Closure,
     Function,
+    Module,
+    NativeFunction,
+};
+
+pub const NativeFn = fn (usize, [*]Value) Value;
+pub const DoughNativeFunction = struct {
+    obj: DoughObject,
+    function: *const NativeFn,
+
+    pub fn init(function: NativeFn) !*DoughNativeFunction {
+        const obj = try DoughObject.init(DoughNativeFunction, ObjType.NativeFunction);
+        const native = obj.as(DoughNativeFunction);
+        native.* = .{
+            .obj = obj.*,
+            .function = function,
+        };
+        return native;
+    }
+
+    pub fn deinit(self: *DoughNativeFunction) void {
+        config.dough_allocator.allocator().destroy(self);
+    }
+
+    pub inline fn asObject(self: *DoughNativeFunction) *DoughObject {
+        return @ptrCast(self);
+    }
+
+    pub fn print(_: *DoughNativeFunction) void {
+        std.debug.print("<NativeFunction>", .{});
+    }
 };
 
 pub const DoughObject = struct {
@@ -35,6 +64,7 @@ pub const DoughObject = struct {
     pub fn deinit(self: *DoughObject) void {
         switch (self.obj_type) {
             .Module => self.as(DoughModule).deinit(),
+            .NativeFunction => self.as(DoughNativeFunction).deinit(),
             .Closure => self.as(DoughClosure).deinit(),
             .Function => self.as(DoughFunction).deinit(),
         }
@@ -43,6 +73,7 @@ pub const DoughObject = struct {
     pub fn print(self: *DoughObject) void {
         switch (self.obj_type) {
             .Module => self.as(DoughModule).print(),
+            .NativeFunction => self.as(DoughNativeFunction).print(),
             .Closure => self.as(DoughClosure).print(),
             .Function => self.as(DoughFunction).print(),
         }

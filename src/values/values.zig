@@ -7,6 +7,7 @@ pub const Value = UnionValue;
 const UnionValue = union(enum) {
     // for variables, constants, etc. that have been defined but didn't get a real value (yet)
     Uninitialized,
+    Void,
 
     Null,
     Bool: bool,
@@ -17,6 +18,7 @@ const UnionValue = union(enum) {
         // TODO: don't use debug.print!
         switch (self) {
             .Uninitialized => std.debug.print("uninitialized", .{}),
+            .Void => std.debug.print("void", .{}),
             .Null => std.debug.print("null", .{}),
             .Bool => |val| std.debug.print("{s}", .{if (val) "true" else "false"}),
             .Number => |val| std.debug.print("{d}", .{val}),
@@ -31,6 +33,17 @@ const UnionValue = union(enum) {
     pub inline fn isUninitialized(self: UnionValue) bool {
         return switch (self) {
             .Uninitialized => true,
+            else => false,
+        };
+    }
+
+    pub inline fn makeVoid() Value {
+        return UnionValue{ .Void = {} };
+    }
+
+    pub inline fn isVoid(self: UnionValue) Value {
+        return switch (self) {
+            .Void => true,
             else => false,
         };
     }

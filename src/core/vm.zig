@@ -9,9 +9,11 @@ const OpCode = core.chunk.OpCode;
 
 const values = @import("../values/values.zig");
 const Value = values.Value;
-const DoughClosure = values.objects.DoughClosure;
-const DoughExecutable = values.objects.DoughExecutable;
-const DoughModule = values.objects.DoughModule;
+
+const objects = values.objects;
+const DoughClosure = objects.DoughClosure;
+const DoughExecutable = objects.DoughExecutable;
+const DoughModule = objects.DoughModule;
 
 const FRAMES_MAX = 255;
 
@@ -50,6 +52,12 @@ pub const VirtualMachine = struct {
     pub fn deinit(self: *VirtualMachine) void {
         config.allocator.free(self.frames);
         config.allocator.free(self.stack);
+    }
+
+    pub fn registerNative(self: *VirtualMachine, native: values.objects.NativeFn) !void {
+        const doughNative = try values.objects.DoughNativeFunction.init(native);
+
+        self.push(Value.fromObject(doughNative.asObject()));
     }
 
     pub fn execute(self: *VirtualMachine, executable: *DoughModule) !void {
@@ -193,6 +201,13 @@ pub const VirtualMachine = struct {
             switch (object.obj_type) {
                 .Closure => {
                     try self.call(object.as(DoughClosure), argCount);
+                },
+                .NativeFunction => {
+                    const native = object.as(objects.DoughNativeFunction);
+                    const args = self.stack_top[@intFromPtr(self.stack_top) - 1 - argCount .. @intFromPtr(self.stack_top) - 1].ptr;
+                    const result: Value = native.function(argCount, args);
+                    self.stack_top -= argCount + 1;
+                    self.push(result);
                 },
                 else => {
                     self.runtimeError("Can not call {?s}", .{std.enums.tagName(values.objects.ObjType, callee.toObject().obj_type)});

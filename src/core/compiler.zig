@@ -251,6 +251,10 @@ pub const ModuleCompiler = struct {
         };
     }
 
+    pub fn registerNative(self: *ModuleCompiler, name: []const u8) void {
+        _ = self.current_compiler.?.declareIdentifier(name, true);
+    }
+
     pub fn compile(self: *ModuleCompiler) !*DoughModule {
         self.module = try DoughModule.init();
 
