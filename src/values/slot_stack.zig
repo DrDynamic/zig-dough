@@ -9,6 +9,7 @@ const Value = @import("./values.zig").Value;
 pub const StackError = error{
     Overflow,
     Underflow,
+    SlotUndefined,
 };
 
 pub const Intent = enum {
@@ -68,7 +69,7 @@ pub const SlotStack = struct {
         self.addresses.deinit();
     }
 
-    fn push(self: *SlotStack, identifier: []const u8, properties: SlotProperties) !SlotAddress {
+    pub fn push(self: *SlotStack, identifier: []const u8, properties: SlotProperties) !SlotAddress {
         if (self.slots.items.len >= types.max_slot_address) {
             return StackError.Overflow;
         }

@@ -22,6 +22,6 @@ pub fn main() !void {
 
     var vm = @import("core/vm.zig").VirtualMachine{};
     try vm.init();
-
+    std.debug.print("----------- Start Execution -------------", .{});
     try vm.execute(module);
 }

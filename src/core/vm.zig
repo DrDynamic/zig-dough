@@ -35,11 +35,15 @@ pub const VirtualMachine = struct {
     stack: []Value = undefined,
     stack_top: [*]Value = undefined,
 
+    slots: std.ArrayList(Value) = undefined,
+
     pub fn init(self: *VirtualMachine) !void {
         // TODO: make this more dynamic (maybe estimate size while compilation on fiunction level or someting)
         self.frames = try config.allocator.alloc(CallFrame, FRAMES_MAX);
         self.frame_count = 0;
         self.stack = try config.allocator.alloc(Value, 255);
+        self.slots = std.ArrayList(Value).init(config.allocator);
+
         self.resetStack();
     }
 
@@ -48,7 +52,7 @@ pub const VirtualMachine = struct {
         config.allocator.free(self.stack);
     }
 
-    pub fn execute(self: *VirtualMachine, executable: *DoughModule) InterpretError!void {
+    pub fn execute(self: *VirtualMachine, executable: *DoughModule) !void {
         self.executable = executable;
 
         self.push(Value.fromObject(executable.function.asObject()));
@@ -87,6 +91,7 @@ pub const VirtualMachine = struct {
     fn resetStack(self: *VirtualMachine) void {
         self.stack_top = self.stack[0..].ptr;
         self.frame_count = 0;
+        self.slots.clearAndFree();
     }
 
     inline fn readByte(_: *VirtualMachine, frame: *CallFrame) u8 {
@@ -96,8 +101,10 @@ pub const VirtualMachine = struct {
     }
 
     inline fn readSlotAddress(_: *VirtualMachine, frame: *CallFrame) SlotAddress {
-        const bytes: [3]u8 = frame.ip[1..4].*;
+        std.debug.print("\n######  ip: {d} readSlotAddress\n", .{@intFromPtr(frame.ip)});
+        const bytes: [3]u8 = frame.ip[0..3].*;
         frame.ip += 3;
+        std.debug.print("######  ip: {d} readSlotAddress {d}\n", .{ @intFromPtr(frame.ip), @as(SlotAddress, @bitCast(bytes)) });
         return @bitCast(bytes);
     }
 
@@ -106,7 +113,7 @@ pub const VirtualMachine = struct {
             std.debug.print("\n", .{});
         }
 
-        var frame: *CallFrame = &self.frames[self.frame_count];
+        var frame: *CallFrame = &self.frames[self.frame_count - 1];
 
         while (true) {
             if (config.debug_trace_execution) {
@@ -132,6 +139,14 @@ pub const VirtualMachine = struct {
 
             switch (instruction) {
                 // Slot actions
+                .DefineSlot => {
+                    const address = self.readSlotAddress(frame);
+                    while (address >= self.slots.items.len) {
+                        try self.slots.append(Value.makeUninitialized());
+                    }
+                    self.slots.items[address] = self.peek(0);
+                    _ = self.pop();
+                },
                 // is this even needed? DefineSlot,
                 .GetSlot => {
                     const address = self.readSlotAddress(frame);
@@ -148,16 +163,26 @@ pub const VirtualMachine = struct {
                     const argCount = self.readByte(frame);
                     try self.callValue(self.peek(argCount), argCount);
                 },
-                else => {},
 
                 // Stack Actions
                 //// Values
-                //              PushNull, // push the value <null>
-                //              PushUninitialized, // push the value <uninitialized>
-                //               Pop, // pop a value
+                .PushNull => {
+                    self.push(Value.makeNull());
+                },
+                .PushUninitialized => {
+                    self.push(Value.makeUninitialized());
+                },
+                .Pop => {
+                    _ = self.pop();
+                },
 
-                //                Return
-
+                .Return => {
+                    if (self.frame_count == 0) {
+                        _ = self.pop();
+                        return;
+                    }
+                    return InterpretError.RuntimeError;
+                },
             }
         }
     }

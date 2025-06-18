@@ -35,6 +35,7 @@ pub const FunctionCompiler = struct {
     enclosing: ?*FunctionCompiler = null,
     function: *DoughFunction,
     panic_mode: bool = false,
+    had_error: bool = false,
     scanner: *Scanner,
     scopeDepth: u24 = 0,
 
@@ -53,13 +54,12 @@ pub const FunctionCompiler = struct {
             return null;
         }
 
-        return self.function.slots.getOrPush(
+        return self.function.slots.push(
             identifier,
             .{
                 .depth = self.scopeDepth,
                 .identifier = identifier,
             },
-            .Define,
         ) catch |stackError| {
             self.err("Creating Identifier failed ({s}).", .{@errorName(stackError)});
             return null;
@@ -67,37 +67,25 @@ pub const FunctionCompiler = struct {
     }
 
     pub fn readIdentifier(self: *FunctionCompiler, identifier: []const u8) void {
-        const address = self.function.slots.getOrPush(
-            identifier,
-            .{
-                .depth = self.scopeDepth,
-                .identifier = identifier,
-            },
-            .Read,
-        ) catch |stackError| blk: {
-            self.err("Creating Identifier failed ({s}).", .{@errorName(stackError)});
-            break :blk 0xFFFFFF;
-        };
+        const maybeAddress = self.function.slots.addresses.get(identifier);
 
-        self.emitOpCode(.GetSlot);
-        self.emitSlotAddress(address);
+        if (maybeAddress) |address| {
+            self.emitOpCode(.GetSlot);
+            self.emitSlotAddress(address);
+        }
+
+        self.err("Can not access identifier '{s}' (not defined).", .{identifier});
     }
 
     pub fn writeIdentifier(self: *FunctionCompiler, identifier: []const u8) void {
-        const address = self.function.slots.getOrPush(
-            identifier,
-            .{
-                .depth = self.scopeDepth,
-                .identifier = identifier,
-            },
-            .Write,
-        ) catch |stackError| blk: {
-            self.err("Creating Identifier failed ({s}).", .{@errorName(stackError)});
-            break :blk 0xFFFFFF;
-        };
+        const maybeAddress = self.function.slots.addresses.get(identifier);
 
-        self.emitOpCode(.SetSlot);
-        self.emitSlotAddress(address);
+        if (maybeAddress) |address| {
+            self.emitOpCode(.SetSlot);
+            self.emitSlotAddress(address);
+        }
+
+        self.err("Can not access identifier '{s}' (not defined).", .{identifier});
     }
 
     pub fn emitByte(self: *FunctionCompiler, byte: u8) void {
@@ -154,6 +142,7 @@ pub const FunctionCompiler = struct {
 
         // something went wrong! Oh no oh no ... panic!!!
         self.panic_mode = true;
+        self.had_error = true;
 
         // TODO: find a more gracefull handling than 'catch return;' when error printing failes!
 
@@ -275,7 +264,7 @@ pub const ModuleCompiler = struct {
 
         self.module.function = self.endCompiler();
 
-        if (self.had_error) {
+        if (compiler.had_error) {
             return InterpretError.CompileError;
         } else {
             return self.module;
@@ -310,19 +299,16 @@ pub const ModuleCompiler = struct {
     }
 
     fn varDeclaration(self: *ModuleCompiler) void {
-        const address = self.parseIdentifier("Expect variable name.") orelse 0xFFFFFF;
+        _ = self.parseIdentifier("Expect variable name.") orelse 0xFFFFFF;
 
         if (self.match(TokenType.Equal)) {
             self.expression();
         } else {
-            self.current_compiler.?.emitByte(@intFromEnum(OpCode.PushUninitialized));
+            self.current_compiler.?.emitOpCode(OpCode.PushUninitialized);
         }
 
         // TODO: or consume newLine
         _ = self.match(TokenType.Semicolon);
-
-        self.current_compiler.?.emitByte(@intFromEnum(OpCode.DefineSlot));
-        self.current_compiler.?.emitSlotAddress(address);
     }
 
     // Consumes an Identifier and reserve a slot in the current scope
