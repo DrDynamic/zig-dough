@@ -34,8 +34,8 @@ pub fn disassemble_instruction(chunk: *Chunk, slots: *SlotStack, offset: usize) 
     return switch (instruction) {
         // Slot actions
         .DefineSlot => slotAddressInstruction("DEFINE_SLOT", chunk, slots, offset),
-        .ReadSlot => slotAddressInstruction("READ_SLOT", chunk, slots, offset),
-        .WriteSlot => slotAddressInstruction("WRITE_SLOT", chunk, slots, offset),
+        .GetSlot => slotAddressInstruction("GET_SLOT", chunk, slots, offset),
+        .SetSlot => slotAddressInstruction("SET_SLOT", chunk, slots, offset),
 
         // Value interaction
         .Call => byteDecimalInstruction("CALL", chunk, offset),

@@ -148,7 +148,7 @@ pub const DoughModule = struct {
         return @ptrCast(self);
     }
     pub fn print(_: *DoughModule) void {
-        std.debug.print("<DoughModule>");
+        std.debug.print("<DoughModule>", .{});
     }
 };
 
@@ -160,7 +160,7 @@ pub const DoughClosure = struct {
         const obj = try DoughObject.init(DoughClosure, ObjType.Closure);
         const closure = obj.as(DoughClosure);
         closure.* = .{
-            .obj = obj,
+            .obj = obj.*,
             .function = function,
         };
         return closure;
@@ -208,7 +208,7 @@ pub const DoughFunction = struct {
     }
 
     pub fn print(_: *DoughFunction) void {
-        std.debug.print("<DoughFunction>");
+        std.debug.print("<DoughFunction>", .{});
     }
 };
 

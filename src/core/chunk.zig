@@ -1,10 +1,12 @@
 const std = @import("std");
+const types = @import("../types.zig");
+const values = @import("../values/values.zig");
 
 pub const OpCode = enum(u8) {
     // Slot actions
     DefineSlot,
-    ReadSlot,
-    WriteSlot,
+    GetSlot,
+    SetSlot,
 
     // Value interaction
     Call,
@@ -21,11 +23,13 @@ pub const OpCode = enum(u8) {
 // TODO: optimize debug info
 pub const Chunk = struct {
     code: std.ArrayList(u8),
+    constants: std.ArrayList(values.Value),
     lines: std.ArrayList(usize),
 
     pub fn init(allocator: std.mem.Allocator) Chunk {
         return Chunk{
             .code = std.ArrayList(u8).init(allocator),
+            .constants = std.ArrayList(values.Value).init(allocator),
             .lines = std.ArrayList(usize).init(allocator),
         };
     }
@@ -43,5 +47,10 @@ pub const Chunk = struct {
     pub fn writeByte(self: *Chunk, byte: u8, line: usize) !void {
         try self.code.append(byte);
         try self.lines.append(line);
+    }
+
+    pub fn writeConstant(self: Chunk, value: values.Value) !types.ConstantAddress {
+        try self.constants.append(value);
+        return self.constants.items.len - 1;
     }
 };

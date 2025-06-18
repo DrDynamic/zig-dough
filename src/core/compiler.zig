@@ -12,7 +12,8 @@ const Token = core.token.Token;
 const TokenType = core.token.TokenType;
 const VirtualMachine = core.vm.VirtualMachine;
 
-const objects = @import("../values/objects.zig");
+const values = @import("../values/values.zig");
+const objects = values.objects;
 const DoughModule = objects.DoughModule;
 const DoughFunction = objects.DoughFunction;
 
@@ -78,8 +79,8 @@ pub const FunctionCompiler = struct {
             break :blk 0xFFFFFF;
         };
 
-        self.emitOpCode(.ReadSlot);
-        self.emitAddress(address);
+        self.emitOpCode(.GetSlot);
+        self.emitSlotAddress(address);
     }
 
     pub fn writeIdentifier(self: *FunctionCompiler, identifier: []const u8) void {
@@ -95,13 +96,13 @@ pub const FunctionCompiler = struct {
             break :blk 0xFFFFFF;
         };
 
-        self.emitOpCode(.WriteSlot);
-        self.emitAddress(address);
+        self.emitOpCode(.SetSlot);
+        self.emitSlotAddress(address);
     }
 
     pub fn emitByte(self: *FunctionCompiler, byte: u8) void {
-        self.function.chunk.writeByte(byte, self.scanner.previous.line) catch {
-            self.err("Could not write to chunk!", .{});
+        self.function.chunk.writeByte(byte, self.scanner.previous.line) catch |write_error| {
+            self.err("Could not write to chunk: {s}", .{@errorName(write_error)});
             return;
         };
     }
@@ -110,7 +111,15 @@ pub const FunctionCompiler = struct {
         self.emitByte(@intFromEnum(op_code));
     }
 
-    pub fn emitAddress(self: *FunctionCompiler, address: types.SlotAddress) void {
+    pub fn emitSlotAddress(self: *FunctionCompiler, address: types.SlotAddress) void {
+        const bytes: [3]u8 = @bitCast(address);
+
+        self.emitByte(bytes[0]);
+        self.emitByte(bytes[1]);
+        self.emitByte(bytes[2]);
+    }
+
+    pub fn emitConstantAddress(self: *FunctionCompiler, address: types.ConstantAddress) void {
         const bytes: [3]u8 = @bitCast(address);
 
         self.emitByte(bytes[0]);
@@ -121,6 +130,14 @@ pub const FunctionCompiler = struct {
     pub fn emitReturn(self: *FunctionCompiler) void {
         self.emitByte(@intFromEnum(OpCode.PushNull));
         self.emitByte(@intFromEnum(OpCode.Return));
+    }
+
+    pub fn addConstant(self: *FunctionCompiler, value: values.Value) types.ConstantAddress {
+        self.function.chunk.writeConstant(value) catch |write_error| {
+            self.err("Could nor write constant: {s}", .{@errorName(write_error)});
+            return;
+        };
+        return self.function.chunk.constants.count - 1;
     }
 
     pub fn err(self: *FunctionCompiler, comptime message: []const u8, args: anytype) void {
@@ -305,10 +322,10 @@ pub const ModuleCompiler = struct {
         _ = self.match(TokenType.Semicolon);
 
         self.current_compiler.?.emitByte(@intFromEnum(OpCode.DefineSlot));
-        self.current_compiler.?.emitAddress(address);
+        self.current_compiler.?.emitSlotAddress(address);
     }
 
-    // Consumes an Identifier and reserves a slot in the current scope
+    // Consumes an Identifier and reserve a slot in the current scope
     fn parseIdentifier(self: *ModuleCompiler, message: []const u8) ?u24 {
         self.consume(TokenType.Identifier, "{s}", .{message});
         const name = &self.scanner.previous;

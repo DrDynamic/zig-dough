@@ -9,14 +9,14 @@ const UnionValue = union(enum) {
     Uninitialized,
 
     Null,
-    Bool,
+    Bool: bool,
     Number: f64,
     Object: *objects.DoughObject,
 
     pub fn print(self: UnionValue) void {
         // TODO: don't use debug.print!
         switch (self) {
-            .Uninitialized => std.debug.print("uninitialized", {}),
+            .Uninitialized => std.debug.print("uninitialized", .{}),
             .Null => std.debug.print("null", .{}),
             .Bool => |val| std.debug.print("{s}", .{if (val) "true" else "false"}),
             .Number => |val| std.debug.print("{d}", .{val}),

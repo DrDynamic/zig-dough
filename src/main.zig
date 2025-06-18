@@ -21,7 +21,7 @@ pub fn main() !void {
     defer allocator.free(source);
 
     var vm = @import("core/vm.zig").VirtualMachine{};
-    vm.init();
+    try vm.init();
 
-    vm.execute(module);
+    try vm.execute(module);
 }
