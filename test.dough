@@ -1,3 +1,6 @@
+//const print = require("std").io.print;
+const print = "";
+
 var a
 print(a)
 

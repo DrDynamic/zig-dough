@@ -29,6 +29,8 @@ pub const SlotProperties = struct {
     /// the identifier used in the sourcecode to access this slot
     identifier: []const u8,
 
+    readonly: bool,
+
     /// the address of a slot, that is shadowed by this one
     shadowsAddress: ?SlotAddress = null,
 

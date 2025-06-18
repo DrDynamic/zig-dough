@@ -46,7 +46,7 @@ pub const FunctionCompiler = struct {
         };
     }
 
-    pub fn declareIdentifier(self: *FunctionCompiler, identifier: []const u8) ?types.SlotAddress {
+    pub fn declareIdentifier(self: *FunctionCompiler, identifier: []const u8, readonly: bool) ?types.SlotAddress {
         const props = self.function.slots.getProperties(identifier);
 
         if (props != null and props.?.depth == self.scopeDepth) {
@@ -59,6 +59,7 @@ pub const FunctionCompiler = struct {
             .{
                 .depth = self.scopeDepth,
                 .identifier = identifier,
+                .readonly = readonly,
             },
         ) catch |stackError| {
             self.err("Creating Identifier failed ({s}).", .{@errorName(stackError)});
@@ -291,7 +292,11 @@ pub const ModuleCompiler = struct {
     }
 
     fn declaration(self: *ModuleCompiler) void {
-        if (self.match(TokenType.Var)) {
+        if (self.match(.Var)) {
+            _ = self.parseIdentifier("Expect variable name.", false);
+            self.varDeclaration();
+        } else if (self.match(.Const)) {
+            _ = self.parseIdentifier("Expect constant name.", true);
             self.varDeclaration();
         } else {
             self.statement();
@@ -299,8 +304,6 @@ pub const ModuleCompiler = struct {
     }
 
     fn varDeclaration(self: *ModuleCompiler) void {
-        _ = self.parseIdentifier("Expect variable name.") orelse 0xFFFFFF;
-
         if (self.match(TokenType.Equal)) {
             self.expression();
         } else {
@@ -312,11 +315,11 @@ pub const ModuleCompiler = struct {
     }
 
     // Consumes an Identifier and reserve a slot in the current scope
-    fn parseIdentifier(self: *ModuleCompiler, message: []const u8) ?u24 {
+    fn parseIdentifier(self: *ModuleCompiler, message: []const u8, readonly: bool) ?u24 {
         self.consume(TokenType.Identifier, "{s}", .{message});
         const name = &self.scanner.previous;
 
-        return self.current_compiler.?.declareIdentifier(name.lexeme.?);
+        return self.current_compiler.?.declareIdentifier(name.lexeme.?, readonly);
     }
 
     fn statement(self: *ModuleCompiler) void {
