@@ -16,9 +16,9 @@ pub fn main() !void {
 
     //    var vm = @import("core/vm.zig").VirtualMachine.init(allocator);
     var compiler = @import("core/compiler.zig").ModuleCompiler.init(source);
-    compiler.registerNative("print");
 
-    const module = try compiler.compile();
+    const natives = [_][]const u8{"print"};
+    const module = try compiler.compile(natives);
 
     defer allocator.free(source);
 

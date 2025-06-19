@@ -251,14 +251,15 @@ pub const ModuleCompiler = struct {
         };
     }
 
-    pub fn registerNative(self: *ModuleCompiler, name: []const u8) void {
-        _ = self.current_compiler.?.declareIdentifier(name, true);
-    }
-
-    pub fn compile(self: *ModuleCompiler) !*DoughModule {
+    pub fn compile(self: *ModuleCompiler, comptime predefined: [*][]const u8) !*DoughModule {
         self.module = try DoughModule.init();
 
         var compiler = try FunctionCompiler.init(&self.scanner);
+
+        for (predefined) |name| {
+            _ = compiler.declareIdentifier(name, true);
+        }
+
         self.current_compiler = &compiler;
 
         self.advance();
