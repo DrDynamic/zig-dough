@@ -5,6 +5,7 @@ const config = @import("../config.zig");
 const core = @import("./core.zig");
 
 const SlotAddress = types.SlotAddress;
+const ConstantAddress = types.ConstantAddress;
 const OpCode = core.chunk.OpCode;
 
 const values = @import("../values/values.zig");
@@ -40,7 +41,7 @@ pub const VirtualMachine = struct {
     slots: std.ArrayList(Value) = undefined,
 
     pub fn init(self: *VirtualMachine) !void {
-        // TODO: make this more dynamic (maybe estimate size while compilation on fiunction level or someting)
+        // TODO: make this more dynamic (maybe estimate size while compilation on function level or someting)
         self.frames = try config.allocator.alloc(CallFrame, FRAMES_MAX);
         self.frame_count = 0;
         self.stack = try config.allocator.alloc(Value, 255);
@@ -52,12 +53,6 @@ pub const VirtualMachine = struct {
     pub fn deinit(self: *VirtualMachine) void {
         config.allocator.free(self.frames);
         config.allocator.free(self.stack);
-    }
-
-    pub fn registerNative(self: *VirtualMachine, native: values.objects.NativeFn) !void {
-        const doughNative = try values.objects.DoughNativeFunction.init(native);
-
-        self.push(Value.fromObject(doughNative.asObject()));
     }
 
     pub fn execute(self: *VirtualMachine, executable: *DoughModule) !void {
@@ -107,12 +102,14 @@ pub const VirtualMachine = struct {
         frame.ip += 1;
         return value;
     }
-
-    inline fn readSlotAddress(_: *VirtualMachine, frame: *CallFrame) SlotAddress {
-        std.debug.print("\n######  ip: {d} readSlotAddress\n", .{@intFromPtr(frame.ip)});
+    inline fn readConstantAddress(_: *VirtualMachine, frame: *CallFrame) ConstantAddress {
         const bytes: [3]u8 = frame.ip[0..3].*;
         frame.ip += 3;
-        std.debug.print("######  ip: {d} readSlotAddress {d}\n", .{ @intFromPtr(frame.ip), @as(SlotAddress, @bitCast(bytes)) });
+        return @bitCast(bytes);
+    }
+    inline fn readSlotAddress(_: *VirtualMachine, frame: *CallFrame) SlotAddress {
+        const bytes: [3]u8 = frame.ip[0..3].*;
+        frame.ip += 3;
         return @bitCast(bytes);
     }
 
@@ -132,6 +129,9 @@ pub const VirtualMachine = struct {
                     std.debug.print("[]", .{});
                 }
                 while (@intFromPtr(val_ptr) < @intFromPtr(self.stack_top)) : (val_ptr += 1) {
+                    if (val_ptr == frame.slots) {
+                        std.debug.print("|", .{});
+                    }
                     std.debug.print("[ ", .{});
                     val_ptr[0].print();
                     std.debug.print(" ]", .{});
@@ -155,17 +155,19 @@ pub const VirtualMachine = struct {
                     self.slots.items[address] = self.peek(0);
                     _ = self.pop();
                 },
-                // is this even needed? DefineSlot,
                 .GetSlot => {
                     const address = self.readSlotAddress(frame);
                     self.push(frame.slots[address]);
                 },
                 .SetSlot => {
-                    // TODO: read an Address (u24)
-                    const slot: usize = self.readSlotAddress(frame);
+                    const slot = self.readSlotAddress(frame);
                     frame.slots[slot] = self.peek(0);
                 },
-
+                .GetConstant => {
+                    const address = self.readConstantAddress(frame);
+                    const val = frame.closure.function.chunk.constants.items[address];
+                    self.push(val);
+                },
                 // Value interaction
                 .Call => {
                     const argCount = self.readByte(frame);
@@ -178,6 +180,7 @@ pub const VirtualMachine = struct {
                     self.push(Value.makeNull());
                 },
                 .PushUninitialized => {
+                    //self.push(Value.fromNumber(13.37));
                     self.push(Value.makeUninitialized());
                 },
                 .Pop => {
@@ -185,7 +188,7 @@ pub const VirtualMachine = struct {
                 },
 
                 .Return => {
-                    if (self.frame_count == 0) {
+                    if (self.frame_count == 1) {
                         _ = self.pop();
                         return;
                     }
@@ -204,8 +207,9 @@ pub const VirtualMachine = struct {
                 },
                 .NativeFunction => {
                     const native = object.as(objects.DoughNativeFunction);
-                    const args = self.stack_top[@intFromPtr(self.stack_top) - 1 - argCount .. @intFromPtr(self.stack_top) - 1].ptr;
-                    const result: Value = native.function(argCount, args);
+
+                    const args_start = self.stack_top - argCount;
+                    const result: Value = native.function(argCount, args_start[0..argCount]);
                     self.stack_top -= argCount + 1;
                     self.push(result);
                 },

@@ -17,14 +17,18 @@ pub fn main() !void {
     //    var vm = @import("core/vm.zig").VirtualMachine.init(allocator);
     var compiler = @import("core/compiler.zig").ModuleCompiler.init(source);
 
-    const natives = [_][]const u8{"print"};
-    const module = try compiler.compile(natives);
+    var n = [_]*DoughNativeFunction{undefined};
+    n[0] = try DoughNativeFunction.init("print", natives.print);
+
+    const module = try compiler.compile(&n);
 
     defer allocator.free(source);
 
     var vm = @import("core/vm.zig").VirtualMachine{};
     try vm.init();
-    try vm.registerNative(@import("values/natives.zig").print);
     std.debug.print("----------- Start Execution -------------", .{});
     try vm.execute(module);
 }
+
+const DoughNativeFunction = @import("values/objects.zig").DoughNativeFunction;
+const natives = @import("values/natives.zig");

@@ -27,7 +27,7 @@ pub const SlotProperties = struct {
     depth: u24 = 0,
 
     /// the identifier used in the sourcecode to access this slot
-    identifier: []const u8,
+    identifier: ?[]const u8,
 
     readonly: bool,
 
@@ -44,6 +44,20 @@ pub const SlotProperties = struct {
         } else if (properties.intent == null or @intFromEnum(intent) > @intFromEnum(properties.intent.?)) {
             properties.intent = intent;
         }
+    }
+
+    pub fn debugPrint(self: SlotProperties) void {
+        std.debug.print("[identifier: '{s}', depth: {d}, {s}", .{
+            self.identifier orelse "null",
+            self.depth,
+            if (self.readonly) "readonly" else "writable",
+        });
+
+        if (self.shadowsAddress) |shadows| {
+            std.debug.print(", shadows: 0x{X}", .{shadows});
+        }
+
+        std.debug.print("]", .{});
     }
 };
 
@@ -71,25 +85,36 @@ pub const SlotStack = struct {
         self.addresses.deinit();
     }
 
-    pub fn push(self: *SlotStack, identifier: []const u8, properties: SlotProperties) !SlotAddress {
+    pub fn debugPrint(self: *SlotStack) void {
+        std.debug.print("=== SlotStack - Properties ===\n", .{});
+
+        for (self.properties.items) |props| {
+            props.debugPrint();
+            std.debug.print("\n", .{});
+        }
+    }
+
+    pub fn push(self: *SlotStack, properties: SlotProperties) !SlotAddress {
         if (self.slots.items.len >= types.max_slot_address) {
             return StackError.Overflow;
         }
 
-        const id: SlotAddress = @intCast(self.slots.items.len);
+        const id: SlotAddress = @intCast(self.properties.items.len);
         self.slots.append(Value.makeUninitialized()) catch {
             return StackError.Overflow;
         };
 
         var props = properties;
-        if (self.addresses.contains(identifier)) {
-            props.shadowsAddress = self.addresses.get(identifier).?;
+        if (props.identifier) |identifier| {
+            if (self.addresses.contains(identifier)) {
+                props.shadowsAddress = self.addresses.get(identifier).?;
+            }
+
+            self.addresses.put(identifier, id) catch {
+                return StackError.Overflow;
+            };
         }
         self.properties.append(props) catch {
-            return StackError.Overflow;
-        };
-
-        self.addresses.put(identifier, id) catch {
             return StackError.Overflow;
         };
 

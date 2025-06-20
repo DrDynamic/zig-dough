@@ -8,6 +8,9 @@ pub const OpCode = enum(u8) {
     GetSlot,
     SetSlot,
 
+    // Constants
+    GetConstant,
+
     // Value interaction
     Call,
 
@@ -49,8 +52,8 @@ pub const Chunk = struct {
         try self.lines.append(line);
     }
 
-    pub fn writeConstant(self: Chunk, value: values.Value) !types.ConstantAddress {
+    pub fn writeConstant(self: *Chunk, value: values.Value) !types.ConstantAddress {
         try self.constants.append(value);
-        return self.constants.items.len - 1;
+        return @intCast(self.constants.items.len - 1);
     }
 };

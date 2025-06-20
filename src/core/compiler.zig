@@ -46,16 +46,17 @@ pub const FunctionCompiler = struct {
         };
     }
 
-    pub fn declareIdentifier(self: *FunctionCompiler, identifier: []const u8, readonly: bool) ?types.SlotAddress {
-        const props = self.function.slots.getProperties(identifier);
+    pub fn declareIdentifier(self: *FunctionCompiler, identifier: ?[]const u8, readonly: bool) ?types.SlotAddress {
+        if (identifier) |safeAnIdentifierAndNotNull| {
+            const props = self.function.slots.getProperties(safeAnIdentifierAndNotNull);
 
-        if (props != null and props.?.depth == self.scopeDepth) {
-            self.err("Name already in use in this scope", .{});
-            return null;
+            if (props != null and props.?.depth == self.scopeDepth) {
+                self.err("Name already in use in this scope", .{});
+                return null;
+            }
         }
 
         return self.function.slots.push(
-            identifier,
             .{
                 .depth = self.scopeDepth,
                 .identifier = identifier,
@@ -73,7 +74,10 @@ pub const FunctionCompiler = struct {
         if (maybeAddress) |address| {
             self.emitOpCode(.GetSlot);
             self.emitSlotAddress(address);
+            return;
         }
+
+        self.function.slots.debugPrint();
 
         self.err("Can not access identifier '{s}' (not defined).", .{identifier});
     }
@@ -122,11 +126,10 @@ pub const FunctionCompiler = struct {
     }
 
     pub fn addConstant(self: *FunctionCompiler, value: values.Value) types.ConstantAddress {
-        self.function.chunk.writeConstant(value) catch |write_error| {
+        return self.function.chunk.writeConstant(value) catch |write_error| {
             self.err("Could nor write constant: {s}", .{@errorName(write_error)});
-            return;
+            return types.CONSTANT_ADDRESS_INVALID;
         };
-        return self.function.chunk.constants.count - 1;
     }
 
     pub fn err(self: *FunctionCompiler, comptime message: []const u8, args: anytype) void {
@@ -251,16 +254,21 @@ pub const ModuleCompiler = struct {
         };
     }
 
-    pub fn compile(self: *ModuleCompiler, comptime predefined: [*][]const u8) !*DoughModule {
+    pub fn compile(self: *ModuleCompiler, natives: []*objects.DoughNativeFunction) !*DoughModule {
         self.module = try DoughModule.init();
 
         var compiler = try FunctionCompiler.init(&self.scanner);
-
-        for (predefined) |name| {
-            _ = compiler.declareIdentifier(name, true);
-        }
-
         self.current_compiler = &compiler;
+
+        _ = compiler.declareIdentifier(null, true);
+
+        // declare natives (workaround till we have a better solution)
+        for (natives) |native| {
+            const address = compiler.addConstant(values.Value.fromObject(native.asObject()));
+            compiler.emitOpCode(.GetConstant);
+            compiler.emitConstantAddress(address);
+            _ = compiler.declareIdentifier(native.name, true);
+        }
 
         self.advance();
 

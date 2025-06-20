@@ -37,6 +37,9 @@ pub fn disassemble_instruction(chunk: *Chunk, slots: *SlotStack, offset: usize) 
         .GetSlot => slotAddressInstruction("GET_SLOT", chunk, slots, offset),
         .SetSlot => slotAddressInstruction("SET_SLOT", chunk, slots, offset),
 
+        // Constants
+        .GetConstant => constantAddressInstruction("GET_CONSTANT", chunk, offset),
+
         // Value interaction
         .Call => byteDecimalInstruction("CALL", chunk, offset),
 
@@ -60,8 +63,15 @@ fn slotAddressInstruction(name: []const u8, chunk: *Chunk, slots: *SlotStack, of
 
     const props = slots.properties.items[address];
 
-    std.debug.print(OPCODE_NAME_FROMAT ++ " 0x{X:0>6} '{s}'\n", .{ name, address, props.identifier });
+    std.debug.print(OPCODE_NAME_FROMAT ++ " 0x{X:0>6} '{s}'\n", .{ name, address, props.identifier orelse "null" });
+    return offset + 4;
+}
 
+fn constantAddressInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
+    const bytes: [3]u8 = chunk.code.items[offset..][1..4].*;
+    const address: u24 = @bitCast(bytes);
+
+    std.debug.print(OPCODE_NAME_FROMAT ++ " 0x{X:0>6}\n", .{ name, address });
     return offset + 4;
 }
 
