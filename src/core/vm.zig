@@ -157,6 +157,12 @@ pub const VirtualMachine = struct {
                 },
                 .GetSlot => {
                     const address = self.readSlotAddress(frame);
+
+                    if (Value.isUninitialized(frame.slots[address])) {
+                        self.runtimeError("cannot access uninitialized variable", .{});
+                        return InterpretError.RuntimeError;
+                    }
+
                     self.push(frame.slots[address]);
                 },
                 .SetSlot => {

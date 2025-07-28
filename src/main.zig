@@ -1,5 +1,3 @@
-const config = @import("./config.zig");
-
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     config.allocator = gpa.allocator();
@@ -13,7 +11,15 @@ pub fn main() !void {
 
     // Handle cases accordingly
     if (argsIterator.next()) |path| {
-        try runFile(path);
+        runFile(path) catch |err| {
+            if (err == core.vm.InterpretError.CompileError) {
+                std.process.exit(65);
+            }
+            if (err == core.vm.InterpretError.RuntimeError) {
+                std.process.exit(70);
+            }
+            return err;
+        };
     } else {
         std.debug.print("REPL not implemented yet!\n", .{});
     }
@@ -44,3 +50,5 @@ fn runFile(path: []const u8) !void {
 const std = @import("std");
 const DoughNativeFunction = @import("values/objects.zig").DoughNativeFunction;
 const natives = @import("values/natives.zig");
+const config = @import("./config.zig");
+const core = @import("core/core.zig");
