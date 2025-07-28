@@ -23,7 +23,7 @@ pub const InterpretError = error{
     RuntimeError,
 };
 
-const CallFrame = struct {
+pub const CallFrame = struct {
     closure: *DoughClosure = undefined,
     ip: [*]u8 = undefined,
     slots: [*]Value = undefined,
@@ -250,18 +250,7 @@ pub const VirtualMachine = struct {
     }
 
     fn runtimeError(self: *VirtualMachine, comptime format: []const u8, args: anytype) void {
-        // TODO: put error printin (logging in general) else where and use it from here and from FunctionCompiler._print
-        const stdout_file = std.io.getStdErr().writer();
-        var bw = std.io.bufferedWriter(stdout_file);
-        const stderr = bw.writer();
-
-        stderr.print(format, args) catch unreachable;
-        stderr.print("\n", .{}) catch unreachable;
-
-        // TODO: Print stack trace
-
-        bw.flush() catch unreachable;
-
+        core.errorReporter.runtimeError(format, args, self.frames, self.frame_count);
         self.resetStack();
     }
 };
