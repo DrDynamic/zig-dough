@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:args/args.dart';
 
@@ -7,6 +8,12 @@ import 'package:tools/term.dart' as term;
 
 
 bool verbose = false;
+
+void logVerbose(Object message) {
+  if(verbose) {
+    print(term.gray(message));
+  }
+}
 
 ArgParser buildParser() {
   return ArgParser()
@@ -30,18 +37,19 @@ void printUsage(ArgParser argParser) {
 }
 
 
-void main(List<String> arguments) {
+void main(List<String> arguments) async {
   final ArgParser argParser = buildParser();
   try {
     final ArgResults results = argParser.parse(arguments);
     verbose = results.flag('verbose');
-
+    
     if (results.flag('help')) {
       printUsage(argParser);
       return;
     }
-
-    new TestRunner().runTests(Directory('./tests'));
+    
+    var interpreter = InterpreterOptions('./zig-out/bin/zig_dough',[]);
+    await TestRunner(interpreter).runTests(Directory('./tests'));
 
   } on FormatException catch (e) {
     print(e.message);
@@ -58,23 +66,60 @@ class InterpreterOptions {
 }
 
 class TestRunner {
-  void runTests(Directory testDir) {
-    testDir.list(recursive: true).listen(
-      (entry) {
-        if(entry is File) {
+  InterpreterOptions interpreterOption;
 
-          if(entry.path.endsWith('.dough')) {
-            if(verbose) {
-              print(term.gray("Dough file found: "+entry.path));
-            }
-          }
-        }
-      }
-    );
+  int passed = 0;
+  int failed = 0;
+  int expectations = 0;
 
-    
+
+  TestRunner(this.interpreterOption);
+
+  Future<void> runTests(Directory testDir) async {
+    logVerbose("run tests in $testDir");
+
+    List<Future> tests  = <Future>[];
+
+
+    await for  (final entry in testDir.list(recursive: true)) {
+      if(entry is! File) continue;
+      if(!entry.path.endsWith('.dough')) continue;
+
+      logVerbose("Dough file found: ${entry.path}");
+
+      tests.add(executeTest(Test(entry.path)));
+    }
+
+    await Future.wait(tests);
+
+    if(failed == 0) {
+      print("All ${term.green(passed)} tests passed "
+        "($expectations expectations).");
+    } else {
+      print("${term.green(passed)} tests passed. "
+        "${term.red(failed)} tests failed.");
+    }
   }
 
+  Future<void> executeTest(Test test) async {
+    var isTest = await test.parse();
+    if(!isTest) return;
+
+    expectations += test.expectations;
+    await test.run(interpreterOption);
+
+    if(test.failures.isEmpty) {
+      passed += 1;
+    }else {
+      failed += 1;
+      var message = "${term.red("FAIL ${test._path}")} ";
+
+      for (var failure in test.failures) {
+        message += "\n     ${term.pink(failure)}";
+      }
+      print("\n$message");
+    }
+  }
 }
 
 class ExpectedOutput {
@@ -103,27 +148,26 @@ class Test{
   int expectations = 0;
 
   /// The list of failure message lines.
-  final _failures = <String>[];
+  final failures = <String>[];
 
   Test(this._path);
 
   Future<bool> parse() async {
+    logVerbose("Parsing test: $_path");
     var lines = await File(_path).readAsLines();
 
-
-    for(var lineNum = 1; lineNum <= lines.length; lineNum) {
+    for(var lineNum = 1; lineNum <= lines.length; lineNum++) {
       var line = lines[lineNum-1];
 
       var match = _nonTestPattern.firstMatch(line);
       if(match != null) {
-        if(verbose) {
-          print(term.gray("This is not a test. (Nontest pattern found)"));
-        }
+        logVerbose("  This is not a test. (Nontest pattern found)");
         return false;
       }
 
       match = _expectedOutputPattern.firstMatch(line);
       if(match != null) {
+        logVerbose("  output expectation: '${match[1]}' on line $lineNum");
         _expectedOutput.add(ExpectedOutput(lineNum, match[1]!));
         expectations += 1;
         continue;
@@ -131,6 +175,7 @@ class Test{
 
       match = _expectedCompileErrorPattern.firstMatch(line);
       if(match != null) {
+        logVerbose("  compile error expectation: '${match[1]}' on line $lineNum");
         _expectedCompileErrors.add("[$lineNum] ${match[1]}");
         _expectedExitCode = 65; // Compile errors should exit with EX_DATAERR
         expectations += 1;
@@ -139,6 +184,8 @@ class Test{
 
       match = _expectedRuntimeErrorPattern.firstMatch(line);
       if(match != null) {
+        logVerbose("  compile runtime expectation: '${match[1]}' on line $lineNum");
+
         _runtimeErrorLine = lineNum;
         _expectedRuntimeError = match[1]!;
         _expectedExitCode = 70; // Runtime errors should exit with EX_SOFTWARE
@@ -154,16 +201,25 @@ class Test{
       return false;
     }
 
+    logVerbose("  parsing complete with $expectations expectation(s)");
+
     return true;
   }
 
-  Future<List<String>> run(InterpreterOptions options) async {
+  Future<List<String>> run(InterpreterOptions interpreterOptions) async {
 
-    var result = await Process.run(options.interpreter, options.options);
+    var result = await Process.run(interpreterOptions.interpreter, [
+      ...interpreterOptions.options,
+      _path
+      ]);
 
     // Normalize Windows line endings.
     var outputLines = const LineSplitter().convert(result.stdout as String);
     var errorLines = const LineSplitter().convert(result.stderr as String);
+
+    logVerbose("Running test: $_path");
+    logVerbose("  stdio: $outputLines");
+    logVerbose("  stderr: $errorLines");
 
     // Validate that an expected runtime error occurred.
     if (_expectedRuntimeError != null) {
@@ -174,7 +230,7 @@ class Test{
 
     _validateExitCode(result.exitCode, errorLines);
     _validateOutput(outputLines);
-    return _failures;
+    return failures;
   }
 
   void _validateOutput(List<String> outputLines) {
@@ -243,7 +299,7 @@ class Test{
   }
 
   void _validateRuntimeError(List<String> errorLines) {
-    if (errorLines.length < 2) {
+    if (errorLines.isEmpty) {
       fail("Expected runtime error '$_expectedRuntimeError' and got none.");
       return;
     }
@@ -285,7 +341,7 @@ class Test{
   }
 
   void fail(String message, [List<String>? lines]) {
-    _failures.add(message);
-    if (lines != null) _failures.addAll(lines);
+    failures.add(message);
+    if (lines != null) failures.addAll(lines);
   }
 }
