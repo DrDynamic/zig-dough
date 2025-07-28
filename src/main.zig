@@ -1,18 +1,29 @@
-const std = @import("std");
-pub fn main() !void {
-    const config = @import("./config.zig");
-    config.debug_print_code = true;
+const config = @import("./config.zig");
 
+pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     config.allocator = gpa.allocator();
     config.dough_allocator = @import("core/memory.zig").GarbageColletingAllocator.init(config.allocator);
 
-    const allocator = config.allocator;
+    var argsIterator = try std.process.ArgIterator.initWithAllocator(config.allocator);
+    defer argsIterator.deinit();
 
-    var file = try std.fs.cwd().openFile("test.dough", .{});
+    // Skip executable
+    _ = argsIterator.next();
+
+    // Handle cases accordingly
+    if (argsIterator.next()) |path| {
+        try runFile(path);
+    } else {
+        std.debug.print("REPL not implemented yet!\n", .{});
+    }
+}
+
+fn runFile(path: []const u8) !void {
+    var file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
-    const source = try file.readToEndAlloc(allocator, config.MAX_FILE_SIZE);
+    const source = try file.readToEndAlloc(config.allocator, config.MAX_FILE_SIZE);
 
     //    var vm = @import("core/vm.zig").VirtualMachine.init(allocator);
     var compiler = @import("core/compiler.zig").ModuleCompiler.init(source);
@@ -22,13 +33,14 @@ pub fn main() !void {
 
     const module = try compiler.compile(&n);
 
-    defer allocator.free(source);
+    defer config.allocator.free(source);
 
     var vm = @import("core/vm.zig").VirtualMachine{};
     try vm.init();
-    std.debug.print("----------- Start Execution -------------", .{});
+
     try vm.execute(module);
 }
 
+const std = @import("std");
 const DoughNativeFunction = @import("values/objects.zig").DoughNativeFunction;
 const natives = @import("values/natives.zig");
