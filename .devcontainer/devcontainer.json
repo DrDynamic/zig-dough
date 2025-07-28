@@ -3,7 +3,8 @@
 	"build": {
 		"dockerfile": "Dockerfile",
 		"args": {
-			"ZIG_VERSION": "0.14.0",
+			"ZIG_VERSION": "0.14.1",
+			"ZLS_VERSION": "0.14.0",
 			"MINISIGN_VERSION": "0.12"
 		}
 	},
@@ -21,9 +22,10 @@
 				"ziglang.vscode-zig",
 				"ianic.zig-language-extras",
 				"lorenzopirro.zig-snippets",
-				"vadimcn.vscode-lldb"
+				"vadimcn.vscode-lldb",
+				"Dart-Code.dart-code"
 			]
 		}
 	},
-	"remoteUser": "vscode"
+	"remoteUser": "developer"
 }
