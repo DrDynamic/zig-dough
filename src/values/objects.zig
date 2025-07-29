@@ -17,6 +17,7 @@ pub const ObjType = enum {
     Function,
     Module,
     NativeFunction,
+    String,
 };
 
 pub const NativeFn = fn (usize, []Value) Value;
@@ -69,6 +70,7 @@ pub const DoughObject = struct {
             .NativeFunction => self.as(DoughNativeFunction).deinit(),
             .Closure => self.as(DoughClosure).deinit(),
             .Function => self.as(DoughFunction).deinit(),
+            .String => self.as(DoughString).deinit(),
         }
     }
 
@@ -78,6 +80,7 @@ pub const DoughObject = struct {
             .NativeFunction => self.as(DoughNativeFunction).print(),
             .Closure => self.as(DoughClosure).print(),
             .Function => self.as(DoughFunction).print(),
+            .String => self.as(DoughString).print(),
         }
     }
 
@@ -87,10 +90,6 @@ pub const DoughObject = struct {
 
     pub inline fn as(self: *DoughObject, comptime T: type) *T {
         return @alignCast(@fieldParentPtr("obj", self));
-    }
-
-    pub inline fn asFunction(self: *DoughObject) *DoughFunction {
-        return @fieldParentPtr("obj", self);
     }
 };
 
@@ -139,7 +138,7 @@ pub const DoughClosure = struct {
     }
 
     pub fn asObject(self: *DoughClosure) *DoughObject {
-        return @ptrCast(self);
+        return &self.obj;
     }
 
     pub fn print(self: *DoughClosure) void {
@@ -172,8 +171,8 @@ pub const DoughFunction = struct {
         config.dough_allocator.allocator().destroy(self);
     }
 
-    pub fn asObject(self: *DoughFunction) *DoughObject {
-        return @ptrCast(self);
+    pub inline fn asObject(self: *DoughFunction) *DoughObject {
+        return &self.obj;
     }
 
     pub fn print(_: *DoughFunction) void {
@@ -184,5 +183,45 @@ pub const DoughFunction = struct {
 
 pub const DoughString = struct {
     obj: DoughObject,
-    chars: []const u8,
+    bytes: []const u8,
+
+    pub fn init(bytes: []const u8, vm: *VirtualMachine) !*DoughString {
+        if (vm.strings.get(bytes)) |interned| {
+            config.allocator.free(bytes);
+            return interned;
+        } else {
+            const obj = try DoughObject.init(DoughString, .String);
+            const string = obj.as(DoughString);
+
+            string.* = .{
+                .obj = obj.*,
+                .bytes = bytes,
+            };
+
+            vm.push(Value.fromObject(string.asObject()));
+            try vm.strings.put(bytes, string);
+            _ = vm.pop();
+
+            return string;
+        }
+    }
+
+    pub fn copy(bytes: []const u8, vm: *VirtualMachine) !*DoughString {
+        const buffer = try config.allocator.alloc(u8, bytes.len);
+        @memcpy(buffer, bytes);
+        return DoughString.init(buffer, vm);
+    }
+
+    pub fn deinit(self: *DoughString) void {
+        config.allocator.free(self.bytes);
+        config.allocator.destroy(self);
+    }
+
+    pub inline fn asObject(self: *DoughString) *DoughObject {
+        return &self.obj;
+    }
+
+    pub fn print(self: *DoughString) void {
+        std.debug.print("{s}", .{self.bytes});
+    }
 };

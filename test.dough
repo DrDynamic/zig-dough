@@ -1,6 +1,9 @@
 //const print = require("std").io.print;
 
-var a
+var 🥟 = "Dumpling";
+print(🥟)
+
+var a = "🥟";
 print(a)
 
 /*

@@ -61,9 +61,13 @@ fn slotAddressInstruction(name: []const u8, chunk: *Chunk, slots: *SlotStack, of
     const bytes: [3]u8 = chunk.code.items[offset..][1..4].*;
     const address: u24 = @bitCast(bytes);
 
-    const props = slots.properties.items[address];
+    if (address > slots.properties.items.len - 1) {
+        std.debug.print(OPCODE_NAME_FROMAT ++ " 0x{X:0>6} !INVALID ADDRESS!\n", .{ name, address });
+    } else {
+        const identifier = slots.properties.items[address].identifier orelse "null";
+        std.debug.print(OPCODE_NAME_FROMAT ++ " 0x{X:0>6} '{s}'\n", .{ name, address, identifier });
+    }
 
-    std.debug.print(OPCODE_NAME_FROMAT ++ " 0x{X:0>6} '{s}'\n", .{ name, address, props.identifier orelse "null" });
     return offset + 4;
 }
 
@@ -71,7 +75,12 @@ fn constantAddressInstruction(name: []const u8, chunk: *Chunk, offset: usize) us
     const bytes: [3]u8 = chunk.code.items[offset..][1..4].*;
     const address: u24 = @bitCast(bytes);
 
-    std.debug.print(OPCODE_NAME_FROMAT ++ " 0x{X:0>6}\n", .{ name, address });
+    const value = chunk.constants.items[address];
+
+    std.debug.print(OPCODE_NAME_FROMAT ++ " 0x{X:0>6} '", .{ name, address });
+    value.print();
+    std.debug.print("'\n", .{});
+
     return offset + 4;
 }
 

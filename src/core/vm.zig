@@ -30,6 +30,8 @@ pub const CallFrame = struct {
 };
 
 pub const VirtualMachine = struct {
+    strings: std.StringHashMap(*objects.DoughString) = undefined,
+
     executable: *DoughModule = undefined,
 
     frames: []CallFrame = undefined,
@@ -41,6 +43,8 @@ pub const VirtualMachine = struct {
     slots: std.ArrayList(Value) = undefined,
 
     pub fn init(self: *VirtualMachine) !void {
+        self.strings = std.StringHashMap(*objects.DoughString).init(config.allocator);
+
         // TODO: make this more dynamic (maybe estimate size while compilation on function level or someting)
         self.frames = try config.allocator.alloc(CallFrame, FRAMES_MAX);
         self.frame_count = 0;
@@ -51,6 +55,8 @@ pub const VirtualMachine = struct {
     }
 
     pub fn deinit(self: *VirtualMachine) void {
+        self.strings.deinit();
+
         config.allocator.free(self.frames);
         config.allocator.free(self.stack);
     }

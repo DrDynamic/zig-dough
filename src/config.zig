@@ -3,8 +3,8 @@ const memory = @import("core/memory.zig");
 
 // debugging flags
 pub var debug_print_tokens: bool = false;
-pub var debug_print_code: bool = false;
-pub var debug_trace_execution: bool = false;
+pub var debug_print_code: bool = true;
+pub var debug_trace_execution: bool = true;
 
 // allocators
 pub var allocator: std.mem.Allocator = undefined;

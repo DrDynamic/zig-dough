@@ -105,14 +105,14 @@ pub const FunctionCompiler = struct {
     }
 
     pub fn emitSlotAddress(self: *FunctionCompiler, address: types.SlotAddress) void {
-        const bytes: [3]u8 = @bitCast(address);
-
-        self.emitByte(bytes[0]);
-        self.emitByte(bytes[1]);
-        self.emitByte(bytes[2]);
+        self.emitU24(address);
     }
 
     pub fn emitConstantAddress(self: *FunctionCompiler, address: types.ConstantAddress) void {
+        self.emitU24(address);
+    }
+
+    pub fn emitU24(self: *FunctionCompiler, address: u24) void {
         const bytes: [3]u8 = @bitCast(address);
 
         self.emitByte(bytes[0]);
@@ -170,6 +170,7 @@ pub const ModuleCompiler = struct {
     };
     const ParseRules = std.EnumArray(TokenType, ParseRule);
 
+    vm: *VirtualMachine = undefined,
     module: *DoughModule = undefined,
     scanner: Scanner,
     current_compiler: ?*FunctionCompiler = null,
@@ -203,7 +204,7 @@ pub const ModuleCompiler = struct {
         .LogicalOr = ParseRule{},
         // Literals.
         .Identifier = ParseRule{ .prefix = identifier },
-        .String = ParseRule{},
+        .String = ParseRule{ .prefix = string },
         .Number = ParseRule{},
         // Keywords.
         .Const = ParseRule{},
@@ -224,8 +225,9 @@ pub const ModuleCompiler = struct {
         .Eof = ParseRule{},
     }),
 
-    pub fn init(source: []const u8) ModuleCompiler {
+    pub fn init(vm: *VirtualMachine, source: []const u8) ModuleCompiler {
         return ModuleCompiler{
+            .vm = vm,
             .scanner = Scanner.init(source),
         };
     }
@@ -392,6 +394,22 @@ pub const ModuleCompiler = struct {
         } else {
             self.current_compiler.?.readIdentifier(name.lexeme.?);
         }
+    }
+
+    fn stringValue(self: *ModuleCompiler, source: []const u8) !values.Value {
+        const dstring = try objects.DoughString.copy(source, self.vm);
+        return values.Value.fromObject(dstring.asObject());
+    }
+
+    fn string(self: *ModuleCompiler, _: CompilationContext) void {
+        const chars = self.scanner.previous.lexeme.?[0..self.scanner.previous.lexeme.?.len];
+        const dstring = self.stringValue(chars) catch |err| {
+            self.current_compiler.?.errAtCurrent("Failed to create string value ({s})", .{@errorName(err)});
+            return;
+        };
+        const address = self.current_compiler.?.addConstant(dstring);
+        self.current_compiler.?.emitOpCode(OpCode.GetConstant);
+        self.current_compiler.?.emitConstantAddress(address);
     }
 
     fn call(self: *ModuleCompiler, _: CompilationContext) void {

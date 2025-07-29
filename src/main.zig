@@ -31,8 +31,10 @@ fn runFile(path: []const u8) !void {
 
     const source = try file.readToEndAlloc(config.allocator, config.MAX_FILE_SIZE);
 
-    //    var vm = @import("core/vm.zig").VirtualMachine.init(allocator);
-    var compiler = @import("core/compiler.zig").ModuleCompiler.init(source);
+    var vm = @import("core/vm.zig").VirtualMachine{};
+    try vm.init();
+
+    var compiler = @import("core/compiler.zig").ModuleCompiler.init(&vm, source);
 
     var n = [_]*DoughNativeFunction{undefined};
     n[0] = try DoughNativeFunction.init("print", natives.print);
@@ -40,9 +42,6 @@ fn runFile(path: []const u8) !void {
     const module = try compiler.compile(&n);
 
     defer config.allocator.free(source);
-
-    var vm = @import("core/vm.zig").VirtualMachine{};
-    try vm.init();
 
     try vm.execute(module);
 }
