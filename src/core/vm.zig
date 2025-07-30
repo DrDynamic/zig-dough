@@ -67,10 +67,7 @@ pub const VirtualMachine = struct {
         self.executable = executable;
 
         self.push(Value.fromObject(executable.function.asObject()));
-        const closure = DoughClosure.init(executable.function) catch |err| {
-            self.runtimeError("{s}", .{@errorName(err)});
-            return InterpretError.RuntimeError;
-        };
+        const closure = DoughClosure.init(executable.function);
         _ = self.pop();
 
         self.push(Value.fromObject(closure.asObject()));
@@ -185,6 +182,38 @@ pub const VirtualMachine = struct {
                 .Call => {
                     const argCount = self.readByte(frame);
                     try self.callValue(self.peek(argCount), argCount);
+                },
+
+                // Math
+                .Add => {
+                    if (self.peek(0).isString() and self.peek(1).isString()) {
+                        // don't let the garbage collector grab this stings!
+                        const str2 = self.peek(0).toObject().as(objects.DoughString).bytes;
+                        const str1 = self.peek(1).toObject().as(objects.DoughString).bytes;
+
+                        var result = globals.allocator.alloc(u8, str1.len + str2.len) catch {
+                            @panic("failed to concatinate strings!");
+                        };
+
+                        @memcpy(result[0..str1.len], str1);
+                        @memcpy(result[str1.len..], str2);
+
+                        // now the gabage collect can have them...
+                        _ = self.pop();
+                        _ = self.pop();
+
+                        const dstring = objects.DoughString.init(result);
+                        self.push(Value.fromObject(dstring.asObject()));
+                    } else if (self.peek(0).isNumber() and self.peek(1).isNumber()) {
+                        const num2 = self.pop().toNumber();
+                        const num1 = self.pop().toNumber();
+
+                        self.push(Value.fromNumber(num1 + num2));
+                    } else {
+                        // TODO: show types instead of values (e.g. 13 + "37" leads to iretating error)
+                        self.runtimeError("Unsupported operand types: {s} + {s}", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        return InterpretError.RuntimeError;
+                    }
                 },
 
                 // Stack Actions

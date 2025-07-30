@@ -14,6 +14,9 @@ pub const OpCode = enum(u8) {
     // Value interaction
     Call,
 
+    // Math
+    Add,
+
     // Stack Actions
     //// Values
     PushNull, // push the value <null>

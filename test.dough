@@ -1,10 +1,8 @@
 //const print = require("std").io.print;
 
-var le = 13.37
-var et = 37
+print(13 + 37)
 
-print(le)
-print(et)
+print("13"+"37")
 
 var 🥟 = "Dumpling";
 print(🥟)

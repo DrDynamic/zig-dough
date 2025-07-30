@@ -43,7 +43,7 @@ pub const FunctionCompiler = struct {
 
     pub fn init(scanner: *Scanner) !FunctionCompiler {
         return FunctionCompiler{
-            .function = try objects.DoughFunction.init(),
+            .function = objects.DoughFunction.init(),
             .scanner = scanner,
         };
     }
@@ -197,7 +197,7 @@ pub const ModuleCompiler = struct {
 
     parse_rules: ParseRules = ParseRules.init(.{
         // Single-character tokens.
-        .LeftParen = ParseRule{ .infix = call, .precedence = Precedence.Call },
+        .LeftParen = ParseRule{ .prefix = null, .infix = call, .precedence = .Call },
         .RightParen = ParseRule{},
         .LeftBrace = ParseRule{},
         .RightBrace = ParseRule{},
@@ -206,7 +206,7 @@ pub const ModuleCompiler = struct {
         .Comma = ParseRule{},
         .Dot = ParseRule{},
         .Minus = ParseRule{},
-        .Plus = ParseRule{},
+        .Plus = ParseRule{ .prefix = null, .infix = binary, .precedence = .Term },
         .Semicolon = ParseRule{},
         .Slash = ParseRule{},
         .Star = ParseRule{},
@@ -252,7 +252,7 @@ pub const ModuleCompiler = struct {
     }
 
     pub fn compile(self: *ModuleCompiler, natives: []*objects.DoughNativeFunction) !*DoughModule {
-        self.module = try DoughModule.init();
+        self.module = DoughModule.init();
 
         var compiler = try FunctionCompiler.init(&self.scanner);
         self.current_compiler = &compiler;
@@ -362,7 +362,7 @@ pub const ModuleCompiler = struct {
     }
 
     fn expression(self: *ModuleCompiler) void {
-        self.parsePrecedence(Precedence.Assignment);
+        self.parsePrecedence(.Assignment);
     }
 
     fn expressionList(self: *ModuleCompiler, endToken: TokenType, comptime too_many_error: []const u8) u8 {
@@ -391,6 +391,18 @@ pub const ModuleCompiler = struct {
                 self.current_compiler.?.err("fsailed to parse number", .{});
                 return;
             },
+        }
+    }
+
+    fn binary(self: *ModuleCompiler, _: CompilationContext) void {
+        const operator_type = self.scanner.previous.token_type.?;
+        const rule = self.parse_rules.getPtrConst(operator_type);
+
+        self.parsePrecedence(@enumFromInt(@intFromEnum(rule.precedence) + 1));
+
+        switch (operator_type) {
+            .Plus => self.current_compiler.?.emitOpCode(.Add),
+            else => return,
         }
     }
 
@@ -440,17 +452,14 @@ pub const ModuleCompiler = struct {
         }
     }
 
-    fn stringValue(_: *ModuleCompiler, source: []const u8) !values.Value {
-        const dstring = try objects.DoughString.copy(source);
+    fn stringValue(_: *ModuleCompiler, source: []const u8) values.Value {
+        const dstring = objects.DoughString.copy(source);
         return values.Value.fromObject(dstring.asObject());
     }
 
     fn string(self: *ModuleCompiler, _: CompilationContext) void {
         const chars = self.scanner.previous.lexeme.?[0..self.scanner.previous.lexeme.?.len];
-        const dstring = self.stringValue(chars) catch |err| {
-            self.current_compiler.?.errAtCurrent("Failed to create string value ({s})", .{@errorName(err)});
-            return;
-        };
+        const dstring = self.stringValue(chars);
         const address = self.current_compiler.?.addConstant(dstring);
         self.current_compiler.?.emitOpCode(OpCode.GetConstant);
         self.current_compiler.?.emitConstantAddress(address);

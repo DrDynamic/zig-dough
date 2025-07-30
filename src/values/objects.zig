@@ -52,7 +52,7 @@ pub const DoughNativeFunction = struct {
 
     pub fn toString(self: DoughNativeFunction) *DoughString {
         const bytes = std.fmt.allocPrint(globals.allocator, "<native fn '{s}'>", .{self.name}) catch @panic("failed to create string!");
-        return DoughString.init(bytes) catch @panic("failed to create string!");
+        return DoughString.init(bytes);
     }
 };
 
@@ -113,8 +113,10 @@ pub const DoughModule = struct {
     obj: DoughObject,
     function: *DoughFunction = undefined,
 
-    pub fn init() !*DoughModule {
-        const obj = try DoughObject.init(DoughModule, ObjType.Module);
+    pub fn init() *DoughModule {
+        const obj = DoughObject.init(DoughModule, ObjType.Module) catch {
+            @panic("failed to create DoughModule!");
+        };
         const module = obj.as(DoughModule);
         module.* = .{
             .obj = obj.*,
@@ -135,7 +137,7 @@ pub const DoughModule = struct {
     }
 
     pub fn toString(_: *DoughModule) *DoughString {
-        return DoughString.init("<DoughModule>") catch @panic("failed to create string!");
+        return DoughString.init("<DoughModule>");
     }
 };
 
@@ -143,8 +145,10 @@ pub const DoughClosure = struct {
     obj: DoughObject,
     function: *DoughFunction,
 
-    pub fn init(function: *DoughFunction) !*DoughClosure {
-        const obj = try DoughObject.init(DoughClosure, ObjType.Closure);
+    pub fn init(function: *DoughFunction) *DoughClosure {
+        const obj = DoughObject.init(DoughClosure, ObjType.Closure) catch {
+            @panic("failed to create DoughClosure");
+        };
         const closure = obj.as(DoughClosure);
         closure.* = .{
             .obj = obj.*,
@@ -177,8 +181,10 @@ pub const DoughFunction = struct {
     slots: SlotStack,
     name: ?[]const u8 = null,
 
-    pub fn init() !*DoughFunction {
-        const obj = try DoughObject.init(DoughFunction, .Function);
+    pub fn init() *DoughFunction {
+        const obj = DoughObject.init(DoughFunction, .Function) catch {
+            @panic("failed to create DoughFunction");
+        };
         const function = obj.as(DoughFunction);
         function.* = .{
             .obj = obj.*,
@@ -208,7 +214,7 @@ pub const DoughFunction = struct {
         const name = self.name orelse "anonymous";
         const bytes = std.fmt.allocPrint(globals.allocator, "<fn '{s}'>", .{name}) catch @panic("failed to create string!");
 
-        return DoughString.init(bytes) catch @panic("failed to create string!");
+        return DoughString.init(bytes);
     }
 };
 
@@ -216,12 +222,14 @@ pub const DoughString = struct {
     obj: DoughObject,
     bytes: []const u8,
 
-    pub fn init(bytes: []const u8) !*DoughString {
+    pub fn init(bytes: []const u8) *DoughString {
         if (globals.internedStrings.get(bytes)) |interned| {
             globals.allocator.free(bytes);
             return interned;
         } else {
-            const obj = try DoughObject.init(DoughString, .String);
+            const obj = DoughObject.init(DoughString, .String) catch {
+                @panic("failed to create DoughString!");
+            };
             const string = obj.as(DoughString);
 
             string.* = .{
@@ -229,16 +237,24 @@ pub const DoughString = struct {
                 .bytes = bytes,
             };
 
-            try globals.tmpValues.append(Value.fromObject(string.asObject()));
-            try globals.internedStrings.put(bytes, string);
+            globals.tmpValues.append(Value.fromObject(string.asObject())) catch {
+                @panic("failed to create DoughString!");
+            };
+
+            globals.internedStrings.put(bytes, string) catch {
+                @panic("failed to create DoughString!");
+            };
+
             _ = globals.tmpValues.pop();
 
             return string;
         }
     }
 
-    pub fn copy(bytes: []const u8) !*DoughString {
-        const buffer = try globals.allocator.alloc(u8, bytes.len);
+    pub fn copy(bytes: []const u8) *DoughString {
+        const buffer = globals.allocator.alloc(u8, bytes.len) catch {
+            @panic("failed to create DoughString!");
+        };
         @memcpy(buffer, bytes);
         return DoughString.init(buffer);
     }

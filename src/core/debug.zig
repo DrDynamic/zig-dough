@@ -1,4 +1,5 @@
 const std = @import("std");
+const activeTag = std.meta.activeTag;
 
 const core = @import("./core.zig");
 const Chunk = core.chunk.Chunk;
@@ -42,6 +43,9 @@ pub fn disassemble_instruction(chunk: *Chunk, slots: *SlotStack, offset: usize) 
 
         // Value interaction
         .Call => byteDecimalInstruction("CALL", chunk, offset),
+
+        // Math
+        .Add => simpleInstruction("ADD", offset),
 
         // Stack Actions
         .PushNull => simpleInstruction("PUSH_NULL", offset),

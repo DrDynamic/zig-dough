@@ -2,10 +2,19 @@ const std = @import("std");
 const globals = @import("../globals.zig");
 pub const objects = @import("./objects.zig");
 
+pub const ValueType = enum {
+    Uninitialized,
+    Void,
+    Null,
+    Bool,
+    Number,
+    Object,
+};
+
 // TODO: add NAN_BOXING
 pub const Value = UnionValue;
 
-const UnionValue = union(enum) {
+const UnionValue = union(ValueType) {
     // for variables, constants, etc. that have been defined but didn't get a real value (yet)
     Uninitialized,
     Void,
@@ -27,15 +36,23 @@ const UnionValue = union(enum) {
         }
     }
 
+    pub fn getType(self: UnionValue) ValueType {
+        std.meta.activeTag(self);
+    }
+
     pub fn toString(self: UnionValue) *objects.DoughString {
         return switch (self) {
-            .Uninitialized => objects.DoughString.copy("uninitialized") catch @panic("failed to create string!"),
-            .Void => objects.DoughString.copy("void") catch @panic("failed to create string!"),
-            .Null => objects.DoughString.copy("null") catch @panic("failed to create string!"),
-            .Bool => |val| objects.DoughString.copy(if (val) "true" else "false") catch @panic("failed to create string!"),
-            .Number => |val| objects.DoughString.init(std.fmt.allocPrint(globals.allocator, "{d}", .{val}) catch @panic("failed to allocate memory!")) catch @panic("failed to create string!"),
+            .Uninitialized => objects.DoughString.copy("uninitialized"),
+            .Void => objects.DoughString.copy("void"),
+            .Null => objects.DoughString.copy("null"),
+            .Bool => |val| objects.DoughString.copy(if (val) "true" else "false"),
+            .Number => |val| objects.DoughString.init(std.fmt.allocPrint(globals.allocator, "{d}", .{val}) catch @panic("failed to allocate memory!")),
             .Object => |val| val.toString(),
         };
+    }
+
+    pub inline fn isString(self: UnionValue) bool {
+        return self.isObject() and self.toObject().obj_type == .String;
     }
 
     pub inline fn makeUninitialized() Value {
