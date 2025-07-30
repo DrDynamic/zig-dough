@@ -1,0 +1,3 @@
+{
+  print notDefined;  // expect compile error: Error at 'notDefined': Can not access identifier (not found).
+}

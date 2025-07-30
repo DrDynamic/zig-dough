@@ -1,9 +1,8 @@
 pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    config.allocator = gpa.allocator();
-    config.dough_allocator = @import("core/memory.zig").GarbageColletingAllocator.init(config.allocator);
+    globals.init();
+    defer globals.deinit();
 
-    var argsIterator = try std.process.ArgIterator.initWithAllocator(config.allocator);
+    var argsIterator = try std.process.ArgIterator.initWithAllocator(globals.allocator);
     defer argsIterator.deinit();
 
     // Skip executable
@@ -29,7 +28,7 @@ fn runFile(path: []const u8) !void {
     var file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
-    const source = try file.readToEndAlloc(config.allocator, config.MAX_FILE_SIZE);
+    const source = try file.readToEndAlloc(globals.allocator, config.MAX_FILE_SIZE);
 
     var vm = @import("core/vm.zig").VirtualMachine{};
     try vm.init();
@@ -41,13 +40,16 @@ fn runFile(path: []const u8) !void {
 
     const module = try compiler.compile(&n);
 
-    defer config.allocator.free(source);
+    defer globals.allocator.free(source);
 
     try vm.execute(module);
 }
 
 const std = @import("std");
-const DoughNativeFunction = @import("values/objects.zig").DoughNativeFunction;
-const natives = @import("values/natives.zig");
+
+const globals = @import("globals.zig");
 const config = @import("./config.zig");
 const core = @import("core/core.zig");
+
+const DoughNativeFunction = @import("values/objects.zig").DoughNativeFunction;
+const natives = @import("values/natives.zig");

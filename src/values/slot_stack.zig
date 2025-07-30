@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const types = @import("../types.zig");
+const globals = @import("../globals.zig");
 const SlotAddress = types.SlotAddress;
 
 const config = @import("../config.zig");
@@ -73,9 +74,9 @@ pub const SlotStack = struct {
 
     pub fn init() SlotStack {
         return .{
-            .slots = std.ArrayList(Value).init(config.dough_allocator.allocator()),
-            .properties = std.ArrayList(SlotProperties).init(config.dough_allocator.allocator()),
-            .addresses = std.StringHashMap(u24).init(config.allocator),
+            .slots = std.ArrayList(Value).init(globals.dough_allocator.allocator()),
+            .properties = std.ArrayList(SlotProperties).init(globals.dough_allocator.allocator()),
+            .addresses = std.StringHashMap(u24).init(globals.allocator),
         };
     }
 
@@ -127,10 +128,14 @@ pub const SlotStack = struct {
             return StackError.Underflow;
         };
 
-        if (props.shadowsAddress == null) {
-            self.addresses.remove(props.identifier);
+        if (props.shadowsAddress) |shadowsAddress| {
+            if (props.identifier) |identifier| {
+                try self.addresses.put(identifier, shadowsAddress);
+            }
         } else {
-            self.addresses.put(props.identifier, props.shadowsAddress);
+            if (props.identifier) |identifier| {
+                _ = self.addresses.remove(identifier);
+            }
         }
     }
 

@@ -2,6 +2,8 @@ const std = @import("std");
 
 const types = @import("../types.zig");
 
+const util = @import("../util/util.zig");
+
 const core = @import("./core.zig");
 const Chunk = core.chunk.Chunk;
 const GarbageColletingAllocator = core.memory.GarbageColletingAllocator;
@@ -46,6 +48,25 @@ pub const FunctionCompiler = struct {
         };
     }
 
+    fn beginScope(self: *FunctionCompiler) void {
+        self.scopeDepth += 1;
+    }
+
+    fn endScope(self: *FunctionCompiler) void {
+        self.scopeDepth -= 1;
+
+        var slots = &self.function.slots;
+
+        if (slots.properties.items.len == 0) return;
+
+        while (slots.properties.getLast().depth > self.scopeDepth) {
+            slots.pop() catch |e| {
+                self.err("Unexpectd error occured: {s}\n", .{@errorName(e)});
+            };
+            self.emitOpCode(.Pop);
+        }
+    }
+
     pub fn declareIdentifier(self: *FunctionCompiler, identifier: ?[]const u8, readonly: bool) ?types.SlotAddress {
         if (identifier) |safeAnIdentifierAndNotNull| {
             const props = self.function.slots.getProperties(safeAnIdentifierAndNotNull);
@@ -77,9 +98,7 @@ pub const FunctionCompiler = struct {
             return;
         }
 
-        self.function.slots.debugPrint();
-
-        self.err("Can not access identifier '{s}' (not defined).", .{identifier});
+        self.err("Can not access identifier (not found).", .{});
     }
 
     pub fn writeIdentifier(self: *FunctionCompiler, identifier: []const u8) void {
@@ -90,7 +109,7 @@ pub const FunctionCompiler = struct {
             self.emitSlotAddress(address);
         }
 
-        self.err("Can not access identifier '{s}' (not defined).", .{identifier});
+        self.err("Can not access identifier (not found).", .{});
     }
 
     pub fn emitByte(self: *FunctionCompiler, byte: u8) void {
@@ -148,7 +167,7 @@ pub const FunctionCompiler = struct {
         self.panic_mode = true;
         self.had_error = true;
 
-        core.errorReporter.compileError(token, message, args);
+        util.errorReporter.compileError(token, message, args);
     }
 };
 
@@ -314,8 +333,12 @@ pub const ModuleCompiler = struct {
     }
 
     fn statement(self: *ModuleCompiler) void {
-        if (self.match(TokenType.Return)) {
+        if (self.match(.Return)) {
             self.returnStatement();
+        } else if (self.match(.LeftBrace)) {
+            self.current_compiler.?.beginScope();
+            self.block();
+            self.current_compiler.?.endScope();
         } else {
             self.expressionStatement();
         }
@@ -358,6 +381,14 @@ pub const ModuleCompiler = struct {
         return arg_count;
     }
 
+    fn block(self: *ModuleCompiler) void {
+        while (!self.check(.RightBrace) and !self.check(.Eof)) {
+            self.declaration();
+        }
+
+        self.consume(.RightBrace, "Expect '}}' after block.", .{});
+    }
+
     fn parsePrecedence(self: *ModuleCompiler, precedence: Precedence) void {
         self.advance();
         const parse_rule: *const ParseRule = self.parse_rules.getPtrConst(self.scanner.previous.token_type.?);
@@ -396,8 +427,8 @@ pub const ModuleCompiler = struct {
         }
     }
 
-    fn stringValue(self: *ModuleCompiler, source: []const u8) !values.Value {
-        const dstring = try objects.DoughString.copy(source, self.vm);
+    fn stringValue(_: *ModuleCompiler, source: []const u8) !values.Value {
+        const dstring = try objects.DoughString.copy(source);
         return values.Value.fromObject(dstring.asObject());
     }
 

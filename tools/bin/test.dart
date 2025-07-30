@@ -5,11 +5,10 @@ import 'package:args/args.dart';
 
 import 'package:tools/term.dart' as term;
 
-
 bool verbose = false;
 
 void logVerbose(Object message) {
-  if(verbose) {
+  if (verbose) {
     print(term.gray(message));
   }
 }
@@ -35,21 +34,24 @@ void printUsage(ArgParser argParser) {
   print(argParser.usage);
 }
 
-
 void main(List<String> arguments) async {
   final ArgParser argParser = buildParser();
   try {
     final ArgResults results = argParser.parse(arguments);
     verbose = results.flag('verbose');
-    
+
     if (results.flag('help')) {
       printUsage(argParser);
       return;
     }
-    
-    var interpreter = InterpreterOptions('./zig-out/bin/zig_dough',[]);
-    await TestRunner(interpreter).runTests(Directory('./tests'));
 
+    var interpreter = InterpreterOptions('./zig-out/bin/zig_dough', []);
+
+    if (results.rest.isEmpty) {
+      await TestRunner(interpreter).runDir(Directory('./tests'));
+    } else {
+      await TestRunner(interpreter).runList(results.rest);
+    }
   } on FormatException catch (e) {
     print(e.message);
     print('');
@@ -71,18 +73,39 @@ class TestRunner {
   int failed = 0;
   int expectations = 0;
 
-
   TestRunner(this.interpreterOption);
 
-  Future<void> runTests(Directory testDir) async {
+  Future<void> runList(List<String> testFiles) async {
+    List<Future> tests = <Future>[];
+
+    for (final path in testFiles) {
+      logVerbose("run test: $path");
+      tests.add(executeTest(Test(path)));
+    }
+
+    await Future.wait(tests);
+
+    if (failed == 0) {
+      print(
+        "All ${term.green(passed)} tests passed "
+        "($expectations expectations).",
+      );
+    } else {
+      print(
+        "${term.green(passed)} tests passed. "
+        "${term.red(failed)} tests failed.",
+      );
+    }
+  }
+
+  Future<void> runDir(Directory testDir) async {
     logVerbose("run tests in $testDir");
 
-    List<Future> tests  = <Future>[];
+    List<Future> tests = <Future>[];
 
-
-    await for  (final entry in testDir.list(recursive: true)) {
-      if(entry is! File) continue;
-      if(!entry.path.endsWith('.dough')) continue;
+    await for (final entry in testDir.list(recursive: true)) {
+      if (entry is! File) continue;
+      if (!entry.path.endsWith('.dough')) continue;
 
       logVerbose("Dough file found: ${entry.path}");
 
@@ -91,25 +114,29 @@ class TestRunner {
 
     await Future.wait(tests);
 
-    if(failed == 0) {
-      print("All ${term.green(passed)} tests passed "
-        "($expectations expectations).");
+    if (failed == 0) {
+      print(
+        "All ${term.green(passed)} tests passed "
+        "($expectations expectations).",
+      );
     } else {
-      print("${term.green(passed)} tests passed. "
-        "${term.red(failed)} tests failed.");
+      print(
+        "${term.green(passed)} tests passed. "
+        "${term.red(failed)} tests failed.",
+      );
     }
   }
 
   Future<void> executeTest(Test test) async {
     var isTest = await test.parse();
-    if(!isTest) return;
+    if (!isTest) return;
 
     expectations += test.expectations;
     await test.run(interpreterOption);
 
-    if(test.failures.isEmpty) {
+    if (test.failures.isEmpty) {
       passed += 1;
-    }else {
+    } else {
       failed += 1;
       var message = "${term.red("FAIL ${test._path}")} ";
 
@@ -128,10 +155,11 @@ class ExpectedOutput {
   ExpectedOutput(this.line, this.output);
 }
 
-class Test{
+class Test {
   final _nonTestPattern = RegExp(r"// nontest");
   final _expectedOutputPattern = RegExp(r"// expect: ?(.*)");
   final _expectedCompileErrorPattern = RegExp(r"// expect compile error: (.+)");
+  final _errorLinePattern = RegExp(r"// \[line (\d+)\] (Error.*)");
   final _expectedRuntimeErrorPattern = RegExp(r"// expect runtime error: (.+)");
   final _syntaxErrorPattern = RegExp(r"\[.*line (\d+)\] (Error.+)");
   final _stackTracePattern = RegExp(r"\[line (\d+)\]");
@@ -155,17 +183,17 @@ class Test{
     logVerbose("Parsing test: $_path");
     var lines = await File(_path).readAsLines();
 
-    for(var lineNum = 1; lineNum <= lines.length; lineNum++) {
-      var line = lines[lineNum-1];
+    for (var lineNum = 1; lineNum <= lines.length; lineNum++) {
+      var line = lines[lineNum - 1];
 
       var match = _nonTestPattern.firstMatch(line);
-      if(match != null) {
+      if (match != null) {
         logVerbose("  This is not a test. (Nontest pattern found)");
         return false;
       }
 
       match = _expectedOutputPattern.firstMatch(line);
-      if(match != null) {
+      if (match != null) {
         logVerbose("  output expectation: '${match[1]}' on line $lineNum");
         _expectedOutput.add(ExpectedOutput(lineNum, match[1]!));
         expectations += 1;
@@ -173,17 +201,30 @@ class Test{
       }
 
       match = _expectedCompileErrorPattern.firstMatch(line);
-      if(match != null) {
-        logVerbose("  compile error expectation: '${match[1]}' on line $lineNum");
+      if (match != null) {
+        logVerbose(
+          "  compile error expectation: '${match[1]}' on line $lineNum",
+        );
         _expectedCompileErrors.add("[$lineNum] ${match[1]}");
         _expectedExitCode = 65; // Compile errors should exit with EX_DATAERR
         expectations += 1;
         continue;
       }
 
+      match = _errorLinePattern.firstMatch(line);
+      if (match != null) {
+        logVerbose(
+          "  compile error expectation: '${match[2]}' on line ${match[1]}",
+        );
+        _expectedCompileErrors.add("[${match[1]}] ${match[2]}");
+        _expectedExitCode = 65; // Compile errors should exit with EX_DATAERR
+        expectations += 1;
+        continue;
+      }
+
       match = _expectedRuntimeErrorPattern.firstMatch(line);
-      if(match != null) {
-        logVerbose("  compile runtime expectation: '${match[1]}' on line $lineNum");
+      if (match != null) {
+        logVerbose("  runtime expectation: '${match[1]}' on line $lineNum");
 
         _runtimeErrorLine = lineNum;
         _expectedRuntimeError = match[1]!;
@@ -193,7 +234,7 @@ class Test{
       }
     }
 
-    if(_expectedCompileErrors.isNotEmpty && _expectedRuntimeError != null) {
+    if (_expectedCompileErrors.isNotEmpty && _expectedRuntimeError != null) {
       print("${term.magenta('TEST ERROR')} $_path");
       print("     Cannot expect both compile and runtime errors.");
       print('');
@@ -206,11 +247,10 @@ class Test{
   }
 
   Future<List<String>> run(InterpreterOptions interpreterOptions) async {
-
     var result = await Process.run(interpreterOptions.interpreter, [
       ...interpreterOptions.options,
-      _path
-      ]);
+      _path,
+    ]);
 
     // Normalize Windows line endings.
     var outputLines = const LineSplitter().convert(result.stdout as String);
@@ -248,15 +288,19 @@ class Test{
 
       var expected = _expectedOutput[index];
       if (expected.output != line) {
-        fail("Expected output '${expected.output}' on line ${expected.line} "
-            " and got '$line'.");
+        fail(
+          "Expected output '${expected.output}' on line ${expected.line} "
+          " and got '$line'.",
+        );
       }
     }
 
     while (index < _expectedOutput.length) {
       var expected = _expectedOutput[index];
-      fail("Missing expected output '${expected.output}' on line "
-          "${expected.line}.");
+      fail(
+        "Missing expected output '${expected.output}' on line "
+        "${expected.line}.",
+      );
       index++;
     }
   }
@@ -321,8 +365,10 @@ class Test{
     } else {
       var stackLine = int.parse(match[1]!);
       if (stackLine != _runtimeErrorLine) {
-        fail("Expected runtime error on line $_runtimeErrorLine "
-            "but was on line $stackLine.");
+        fail(
+          "Expected runtime error on line $_runtimeErrorLine "
+          "but was on line $stackLine.",
+        );
       }
     }
   }
@@ -335,8 +381,10 @@ class Test{
       errorLines.add("(truncated...)");
     }
 
-    fail("Expected return code $_expectedExitCode and got $exitCode. Stderr:",
-        errorLines);
+    fail(
+      "Expected return code $_expectedExitCode and got $exitCode. Stderr:",
+      errorLines,
+    );
   }
 
   void fail(String message, [List<String>? lines]) {

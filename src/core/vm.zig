@@ -1,7 +1,9 @@
 const std = @import("std");
 
 const types = @import("../types.zig");
+const globals = @import("../globals.zig");
 const config = @import("../config.zig");
+const util = @import("../util/util.zig");
 const core = @import("./core.zig");
 
 const SlotAddress = types.SlotAddress;
@@ -43,13 +45,13 @@ pub const VirtualMachine = struct {
     slots: std.ArrayList(Value) = undefined,
 
     pub fn init(self: *VirtualMachine) !void {
-        self.strings = std.StringHashMap(*objects.DoughString).init(config.allocator);
+        self.strings = std.StringHashMap(*objects.DoughString).init(globals.allocator);
 
         // TODO: make this more dynamic (maybe estimate size while compilation on function level or someting)
-        self.frames = try config.allocator.alloc(CallFrame, FRAMES_MAX);
+        self.frames = try globals.allocator.alloc(CallFrame, FRAMES_MAX);
         self.frame_count = 0;
-        self.stack = try config.allocator.alloc(Value, 255);
-        self.slots = std.ArrayList(Value).init(config.allocator);
+        self.stack = try globals.allocator.alloc(Value, 255);
+        self.slots = std.ArrayList(Value).init(globals.allocator);
 
         self.resetStack();
     }
@@ -57,8 +59,8 @@ pub const VirtualMachine = struct {
     pub fn deinit(self: *VirtualMachine) void {
         self.strings.deinit();
 
-        config.allocator.free(self.frames);
-        config.allocator.free(self.stack);
+        globals.allocator.free(self.frames);
+        globals.allocator.free(self.stack);
     }
 
     pub fn execute(self: *VirtualMachine, executable: *DoughModule) !void {
@@ -138,9 +140,8 @@ pub const VirtualMachine = struct {
                     if (val_ptr == frame.slots) {
                         std.debug.print("|", .{});
                     }
-                    std.debug.print("[ ", .{});
-                    val_ptr[0].print();
-                    std.debug.print(" ]", .{});
+                    const string = val_ptr[0].toString();
+                    std.debug.print("[{s}] ", .{string.bytes});
                 }
 
                 std.debug.print("\n", .{});
@@ -256,7 +257,7 @@ pub const VirtualMachine = struct {
     }
 
     fn runtimeError(self: *VirtualMachine, comptime format: []const u8, args: anytype) void {
-        core.errorReporter.runtimeError(format, args, self.frames, self.frame_count);
+        util.errorReporter.runtimeError(format, args, self.frames, self.frame_count);
         self.resetStack();
     }
 };

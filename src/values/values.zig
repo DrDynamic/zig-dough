@@ -1,4 +1,5 @@
 const std = @import("std");
+const globals = @import("../globals.zig");
 pub const objects = @import("./objects.zig");
 
 // TODO: add NAN_BOXING
@@ -24,6 +25,17 @@ const UnionValue = union(enum) {
             .Number => |val| std.debug.print("{d}", .{val}),
             .Object => |val| val.print(),
         }
+    }
+
+    pub fn toString(self: UnionValue) *objects.DoughString {
+        return switch (self) {
+            .Uninitialized => objects.DoughString.copy("uninitialized") catch @panic("failed to create string!"),
+            .Void => objects.DoughString.copy("void") catch @panic("failed to create string!"),
+            .Null => objects.DoughString.copy("null") catch @panic("failed to create string!"),
+            .Bool => |val| objects.DoughString.copy(if (val) "true" else "false") catch @panic("failed to create string!"),
+            .Number => |val| objects.DoughString.init(std.fmt.allocPrint(globals.allocator, "{d}", .{val}) catch @panic("failed to allocate memory!")) catch @panic("failed to create string!"),
+            .Object => |val| val.toString(),
+        };
     }
 
     pub inline fn makeUninitialized() Value {

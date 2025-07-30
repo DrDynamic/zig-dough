@@ -76,10 +76,9 @@ fn constantAddressInstruction(name: []const u8, chunk: *Chunk, offset: usize) us
     const address: u24 = @bitCast(bytes);
 
     const value = chunk.constants.items[address];
+    const string = value.toString();
 
-    std.debug.print(OPCODE_NAME_FROMAT ++ " 0x{X:0>6} '", .{ name, address });
-    value.print();
-    std.debug.print("'\n", .{});
+    std.debug.print(OPCODE_NAME_FROMAT ++ " 0x{X:0>6} '{s}'\n", .{ name, address, string.bytes });
 
     return offset + 4;
 }

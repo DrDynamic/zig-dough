@@ -1,11 +1,22 @@
+{
+  var a = "first";
+  print(a); // expect: first
+}
+
+{
+  var a = "second";
+  print(a); // expect: second
+}
+
+
 //const print = require("std").io.print;
 
 var 🥟 = "Dumpling";
 print(🥟)
-
-var a = "🥟";
-print(a)
-
+{
+    var a = "🥟";
+    print(a)
+}
 /*
 var 🥟 = "Dumpling";
 const pizza = "🍕";

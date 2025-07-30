@@ -1,0 +1,2 @@
+var a = "Lorem";
+var a = "Iprum"; // expect compile error: Error at 'a': Name already in use in this scope
