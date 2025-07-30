@@ -205,7 +205,7 @@ pub const Scanner = struct {
 
     fn makeNumber(self: *Scanner) void {
         while (!self.isAtEnd()) {
-            if (std.ascii.isDigit(self.peek())) {
+            if (std.ascii.isDigit(self.peek()) or self.peek() == '.') {
                 _ = self.advance();
             } else {
                 break;
@@ -284,6 +284,7 @@ test "Scanns all tokens" {
         \\ this_is_a_identifier
         \\ "i read double quotes"
         \\ 123
+        \\ 13.37
         \\ const
         \\ else
         \\ false

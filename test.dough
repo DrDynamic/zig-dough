@@ -1,15 +1,10 @@
-{
-  var a = "first";
-  print(a); // expect: first
-}
-
-{
-  var a = "second";
-  print(a); // expect: second
-}
-
-
 //const print = require("std").io.print;
+
+var le = 13.37
+var et = 37
+
+print(le)
+print(et)
 
 var 🥟 = "Dumpling";
 print(🥟)

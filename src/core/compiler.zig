@@ -224,7 +224,7 @@ pub const ModuleCompiler = struct {
         // Literals.
         .Identifier = ParseRule{ .prefix = identifier },
         .String = ParseRule{ .prefix = string },
-        .Number = ParseRule{},
+        .Number = ParseRule{ .prefix = number },
         // Keywords.
         .Const = ParseRule{},
         .Else = ParseRule{},
@@ -379,6 +379,19 @@ pub const ModuleCompiler = struct {
             }
         }
         return arg_count;
+    }
+
+    fn number(self: *ModuleCompiler, _: CompilationContext) void {
+        if (std.fmt.parseFloat(f64, self.scanner.previous.lexeme.?)) |value| {
+            const address = self.current_compiler.?.addConstant(values.Value.fromNumber(value));
+            self.current_compiler.?.emitOpCode(.GetConstant);
+            self.current_compiler.?.emitConstantAddress(address);
+        } else |e| switch (e) {
+            error.InvalidCharacter => {
+                self.current_compiler.?.err("fsailed to parse number", .{});
+                return;
+            },
+        }
     }
 
     fn block(self: *ModuleCompiler) void {
