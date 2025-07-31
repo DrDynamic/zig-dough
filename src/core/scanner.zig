@@ -199,6 +199,11 @@ pub const Scanner = struct {
         }
         self.makeToken(TokenType.String);
 
+        if (self.isAtEnd()) {
+            self.makeError("Unterminated string.");
+            return;
+        }
+
         const tokenLen: usize = self._currentChar - self._tokenStart;
         self.next.lexeme = self._tokenStart[1 .. tokenLen - 1];
     }

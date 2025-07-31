@@ -211,7 +211,7 @@ pub const VirtualMachine = struct {
                         self.push(Value.fromNumber(num1 + num2));
                     } else {
                         // TODO: show types instead of values (e.g. 13 + "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {s} + {s}", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        self.runtimeError("Unsupported operand types: {s} + {s} (must both be numbers of strings)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
                         return InterpretError.RuntimeError;
                     }
                 },
@@ -223,7 +223,7 @@ pub const VirtualMachine = struct {
                         self.push(Value.fromNumber(num1 - num2));
                     } else {
                         // TODO: show types instead of values (e.g. 13 - "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {s} - {s}", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        self.runtimeError("Unsupported operand types: {s} - {s} (must be numbers)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
                         return InterpretError.RuntimeError;
                     }
                 },
@@ -235,7 +235,7 @@ pub const VirtualMachine = struct {
                         self.push(Value.fromNumber(num1 * num2));
                     } else {
                         // TODO: show types instead of values (e.g. 13 * "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {s} * {s}", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        self.runtimeError("Unsupported operand types: {s} * {s} (must be numbers)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
                         return InterpretError.RuntimeError;
                     }
                 },
@@ -247,7 +247,7 @@ pub const VirtualMachine = struct {
                         self.push(Value.fromNumber(num1 / num2));
                     } else {
                         // TODO: show types instead of values (e.g. 13 / "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {s} / {s}", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        self.runtimeError("Unsupported operand types: {s} / {s} (must be numbers)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
                         return InterpretError.RuntimeError;
                     }
                 },

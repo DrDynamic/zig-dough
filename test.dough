@@ -1,14 +1,13 @@
-//const print = require("std").io.print;
+var a = "before";
+print(a); // expect: before
 
-print(2 * 10 + 30 * 2)
+a = "after";
+print(a); // expect: after
+
+print(a = "arg"); // expect: arg
+print(a); // expect: arg
 
 
-var 🥟 = "Dumpling";
-print(🥟)
-{
-    var a = "🥟";
-    print(a)
-}
 /*
 var 🥟 = "Dumpling";
 const pizza = "🍕";

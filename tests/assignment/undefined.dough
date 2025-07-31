@@ -1,0 +1,1 @@
+unknown = "what"; // expect compile error: Error at 'what': Undefined identifier 'unknown'.

@@ -98,7 +98,7 @@ pub const FunctionCompiler = struct {
             return;
         }
 
-        self.err("Can not access identifier (not found).", .{});
+        self.err("Undefined identifier.", .{});
     }
 
     pub fn writeIdentifier(self: *FunctionCompiler, identifier: []const u8) void {
@@ -107,9 +107,10 @@ pub const FunctionCompiler = struct {
         if (maybeAddress) |address| {
             self.emitOpCode(.SetSlot);
             self.emitSlotAddress(address);
+            return;
         }
 
-        self.err("Can not access identifier (not found).", .{});
+        self.err("Undefined identifier '{s}'.", .{identifier});
     }
 
     pub fn emitByte(self: *FunctionCompiler, byte: u8) void {
@@ -197,7 +198,7 @@ pub const ModuleCompiler = struct {
 
     parse_rules: ParseRules = ParseRules.init(.{
         // Single-character tokens.
-        .LeftParen = ParseRule{ .prefix = null, .infix = call, .precedence = .Call },
+        .LeftParen = ParseRule{ .prefix = grouping, .infix = call, .precedence = .Call },
         .RightParen = ParseRule{},
         .LeftBrace = ParseRule{},
         .RightBrace = ParseRule{},
@@ -381,6 +382,11 @@ pub const ModuleCompiler = struct {
         return arg_count;
     }
 
+    fn grouping(self: *ModuleCompiler, _: CompilationContext) void {
+        self.expression();
+        self.consume(.RightParen, "Expect ')' after expression", .{});
+    }
+
     fn number(self: *ModuleCompiler, _: CompilationContext) void {
         if (std.fmt.parseFloat(f64, self.scanner.previous.lexeme.?)) |value| {
             const address = self.current_compiler.?.addConstant(values.Value.fromNumber(value));
@@ -440,6 +446,10 @@ pub const ModuleCompiler = struct {
                 return;
             };
             infix_rule(self, context);
+        }
+
+        if (context.can_assign and self.match(.Equal)) {
+            self.current_compiler.?.err("Invalid assignment target.", .{});
         }
     }
 
