@@ -1,8 +1,7 @@
 //const print = require("std").io.print;
 
-print(13 + 37)
+print(2 * 10 + 30 * 2)
 
-print("13"+"37")
 
 var 🥟 = "Dumpling";
 print(🥟)

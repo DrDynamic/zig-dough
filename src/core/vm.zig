@@ -215,6 +215,42 @@ pub const VirtualMachine = struct {
                         return InterpretError.RuntimeError;
                     }
                 },
+                .Subtract => {
+                    if (self.peek(0).isNumber() and self.peek(1).isNumber()) {
+                        const num2 = self.pop().toNumber();
+                        const num1 = self.pop().toNumber();
+
+                        self.push(Value.fromNumber(num1 - num2));
+                    } else {
+                        // TODO: show types instead of values (e.g. 13 - "37" leads to iretating error)
+                        self.runtimeError("Unsupported operand types: {s} - {s}", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        return InterpretError.RuntimeError;
+                    }
+                },
+                .Multiply => {
+                    if (self.peek(0).isNumber() and self.peek(1).isNumber()) {
+                        const num2 = self.pop().toNumber();
+                        const num1 = self.pop().toNumber();
+
+                        self.push(Value.fromNumber(num1 * num2));
+                    } else {
+                        // TODO: show types instead of values (e.g. 13 * "37" leads to iretating error)
+                        self.runtimeError("Unsupported operand types: {s} * {s}", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        return InterpretError.RuntimeError;
+                    }
+                },
+                .Divide => {
+                    if (self.peek(0).isNumber() and self.peek(1).isNumber()) {
+                        const num2 = self.pop().toNumber();
+                        const num1 = self.pop().toNumber();
+
+                        self.push(Value.fromNumber(num1 / num2));
+                    } else {
+                        // TODO: show types instead of values (e.g. 13 / "37" leads to iretating error)
+                        self.runtimeError("Unsupported operand types: {s} / {s}", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        return InterpretError.RuntimeError;
+                    }
+                },
 
                 // Stack Actions
                 //// Values

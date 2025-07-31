@@ -205,11 +205,11 @@ pub const ModuleCompiler = struct {
         .RightBracket = ParseRule{},
         .Comma = ParseRule{},
         .Dot = ParseRule{},
-        .Minus = ParseRule{},
+        .Minus = ParseRule{ .prefix = null, .infix = binary, .precedence = .Term },
         .Plus = ParseRule{ .prefix = null, .infix = binary, .precedence = .Term },
         .Semicolon = ParseRule{},
-        .Slash = ParseRule{},
-        .Star = ParseRule{},
+        .Slash = ParseRule{ .prefix = null, .infix = binary, .precedence = .Factor },
+        .Star = ParseRule{ .prefix = null, .infix = binary, .precedence = .Factor },
         // One or two character tokens.
         .Bang = ParseRule{},
         .BangEqual = ParseRule{},
@@ -402,6 +402,9 @@ pub const ModuleCompiler = struct {
 
         switch (operator_type) {
             .Plus => self.current_compiler.?.emitOpCode(.Add),
+            .Minus => self.current_compiler.?.emitOpCode(.Subtract),
+            .Star => self.current_compiler.?.emitOpCode(.Multiply),
+            .Slash => self.current_compiler.?.emitOpCode(.Divide),
             else => return,
         }
     }

@@ -13,9 +13,10 @@ pub const OpCode = enum(u8) {
 
     // Value interaction
     Call,
-
-    // Math
     Add,
+    Subtract,
+    Multiply,
+    Divide,
 
     // Stack Actions
     //// Values
