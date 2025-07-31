@@ -51,7 +51,10 @@ pub fn disassemble_instruction(chunk: *Chunk, slots: *SlotStack, offset: usize) 
 
         // Stack Actions
         .PushNull => simpleInstruction("PUSH_NULL", offset),
+        .PushTrue => simpleInstruction("PUSH_TRUE", offset),
+        .PushFalse => simpleInstruction("PUSH_FALSE", offset),
         .PushUninitialized => simpleInstruction("PUSH_UNINITIALIZED", offset),
+
         .Pop => simpleInstruction("POP", offset),
 
         .Return => simpleInstruction("RETURN", offset),

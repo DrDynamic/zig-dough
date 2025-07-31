@@ -28,7 +28,7 @@ fn runFile(path: []const u8) !void {
     var file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
-    const source = try file.readToEndAlloc(globals.allocator, config.MAX_FILE_SIZE);
+    const source = try file.readToEndAllocOptions(globals.allocator, config.MAX_FILE_SIZE, null, @alignOf(u8), 0);
 
     var vm = @import("core/vm.zig").VirtualMachine{};
     try vm.init();

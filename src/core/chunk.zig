@@ -19,9 +19,12 @@ pub const OpCode = enum(u8) {
     Divide,
 
     // Stack Actions
-    //// Values
+    //// Listerals
     PushNull, // push the value <null>
+    PushTrue, // push the value <true>
+    PushFalse, // push the value <false>
     PushUninitialized, // push the value <uninitialized>
+
     Pop, // pop a value
 
     Return,

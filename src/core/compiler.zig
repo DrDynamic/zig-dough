@@ -229,13 +229,13 @@ pub const ModuleCompiler = struct {
         // Keywords.
         .Const = ParseRule{},
         .Else = ParseRule{},
-        .False = ParseRule{},
+        .False = ParseRule{ .prefix = literal },
         .For = ParseRule{},
         .Function = ParseRule{},
         .If = ParseRule{},
-        .Null = ParseRule{},
+        .Null = ParseRule{ .prefix = literal },
         .Return = ParseRule{},
-        .True = ParseRule{},
+        .True = ParseRule{ .prefix = literal },
         .Var = ParseRule{},
         .While = ParseRule{},
 
@@ -382,6 +382,15 @@ pub const ModuleCompiler = struct {
         return arg_count;
     }
 
+    fn literal(self: *ModuleCompiler, _: CompilationContext) void {
+        switch (self.scanner.previous.token_type.?) {
+            .Null => self.current_compiler.?.emitOpCode(.PushNull),
+            .True => self.current_compiler.?.emitOpCode(.PushTrue),
+            .False => self.current_compiler.?.emitOpCode(.PushFalse),
+            else => return,
+        }
+    }
+
     fn grouping(self: *ModuleCompiler, _: CompilationContext) void {
         self.expression();
         self.consume(.RightParen, "Expect ')' after expression", .{});
@@ -487,6 +496,7 @@ pub const ModuleCompiler = struct {
 
     fn advance(self: *ModuleCompiler) void {
         var scanner = &self.scanner;
+
         while (true) {
             scanner.scanToken();
             if (scanner.current.token_type != TokenType.Error) break;

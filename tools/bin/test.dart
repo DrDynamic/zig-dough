@@ -53,7 +53,8 @@ void main(List<String> arguments) async {
       await TestRunner(interpreter).runList(results.rest);
     }
   } on FormatException catch (e) {
-    print(e.message);
+    print(e);
+
     print('');
     printUsage(argParser);
   }

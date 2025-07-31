@@ -253,9 +253,15 @@ pub const VirtualMachine = struct {
                 },
 
                 // Stack Actions
-                //// Values
+                //// literals
                 .PushNull => {
                     self.push(Value.makeNull());
+                },
+                .PushTrue => {
+                    self.push(Value.fromBoolean(true));
+                },
+                .PushFalse => {
+                    self.push(Value.fromBoolean(false));
                 },
                 .PushUninitialized => {
                     //self.push(Value.fromNumber(13.37));
@@ -322,6 +328,7 @@ pub const VirtualMachine = struct {
     }
 
     fn runtimeError(self: *VirtualMachine, comptime format: []const u8, args: anytype) void {
+        // TODO: use DWARF standard for debugging informations (https://dwarfstd.org/)
         util.errorReporter.runtimeError(format, args, self.frames, self.frame_count);
         self.resetStack();
     }
