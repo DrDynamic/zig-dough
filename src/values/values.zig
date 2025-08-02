@@ -40,6 +40,32 @@ const UnionValue = union(ValueType) {
         std.meta.activeTag(self);
     }
 
+    pub fn isFalsey(self: UnionValue) bool {
+        if (self.isNull()) return true;
+        if (self.isBoolean()) return !self.toBoolean();
+        return false;
+    }
+
+    pub fn equals(self: UnionValue, other: UnionValue) bool {
+        const all_bools = self.isBoolean() and other.isBoolean();
+        const all_nums = self.isNumber() and other.isNumber();
+        const all_objects = self.isObject() and other.isObject();
+        const all_nils = self.isNull() and other.isNull();
+
+        if (!all_bools and !all_nums and !all_objects and !all_nils) {
+            return false;
+        }
+
+        return switch (self) {
+            .Uninitialized => false,
+            .Void => true,
+            .Null => true,
+            .Bool => self.Bool == other.Bool,
+            .Number => self.Number == other.Number,
+            .Object => self.toObject().equals(other),
+        };
+    }
+
     pub fn toString(self: UnionValue) *objects.DoughString {
         return switch (self) {
             .Uninitialized => objects.DoughString.copy("uninitialized"),

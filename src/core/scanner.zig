@@ -211,7 +211,7 @@ pub const Scanner = struct {
 
     fn makeNumber(self: *Scanner) void {
         while (!self.isAtEnd()) {
-            if (std.ascii.isDigit(self.peek()) or self.peek() == '.') {
+            if (std.ascii.isDigit(self.peek()) or (self.peek() == '.' and std.ascii.isDigit(self.peekNext()))) {
                 _ = self.advance();
             } else {
                 break;

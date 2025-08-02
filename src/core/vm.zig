@@ -184,7 +184,76 @@ pub const VirtualMachine = struct {
                     try self.callValue(self.peek(argCount), argCount);
                 },
 
-                // Math
+                .LogicalNot => self.push(Value.fromBoolean(self.pop().isFalsey())),
+                .Negate => {
+                    if (self.peek(0).isNumber()) {
+                        const negated = -self.pop().toNumber();
+                        self.push(Value.fromNumber(negated));
+                    } else {
+                        self.runtimeError("Operand must be a number.", .{});
+                        return InterpretError.RuntimeError;
+                    }
+                },
+
+                .Equal => {
+                    const b = self.pop();
+                    const a = self.pop();
+                    self.push(Value.fromBoolean(a.equals(b)));
+                },
+                .NotEqual => {
+                    const b = self.pop();
+                    const a = self.pop();
+                    self.push(Value.fromBoolean(!a.equals(b)));
+                },
+                .Greater => {
+                    if (self.peek(0).isNumber() and self.peek(1).isNumber()) {
+                        const num2 = self.pop().toNumber();
+                        const num1 = self.pop().toNumber();
+
+                        self.push(Value.fromBoolean(num1 > num2));
+                    } else {
+                        // TODO: show types instead of values (e.g. 13 - "37" leads to iretating error)
+                        self.runtimeError("Unsupported operand types: {s} > {s} (must be numbers)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        return InterpretError.RuntimeError;
+                    }
+                },
+                .GreaterEqual => {
+                    if (self.peek(0).isNumber() and self.peek(1).isNumber()) {
+                        const num2 = self.pop().toNumber();
+                        const num1 = self.pop().toNumber();
+
+                        self.push(Value.fromBoolean(num1 >= num2));
+                    } else {
+                        // TODO: show types instead of values (e.g. 13 - "37" leads to iretating error)
+                        self.runtimeError("Unsupported operand types: {s} >= {s} (must be numbers)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        return InterpretError.RuntimeError;
+                    }
+                },
+                .Less => {
+                    if (self.peek(0).isNumber() and self.peek(1).isNumber()) {
+                        const num2 = self.pop().toNumber();
+                        const num1 = self.pop().toNumber();
+
+                        self.push(Value.fromBoolean(num1 < num2));
+                    } else {
+                        // TODO: show types instead of values (e.g. 13 - "37" leads to iretating error)
+                        self.runtimeError("Unsupported operand types: {s} < {s} (must be numbers)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        return InterpretError.RuntimeError;
+                    }
+                },
+                .LessEqual => {
+                    if (self.peek(0).isNumber() and self.peek(1).isNumber()) {
+                        const num2 = self.pop().toNumber();
+                        const num1 = self.pop().toNumber();
+
+                        self.push(Value.fromBoolean(num1 <= num2));
+                    } else {
+                        // TODO: show types instead of values (e.g. 13 - "37" leads to iretating error)
+                        self.runtimeError("Unsupported operand types: {s} <= {s} (must be numbers)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        return InterpretError.RuntimeError;
+                    }
+                },
+
                 .Add => {
                     if (self.peek(0).isString() and self.peek(1).isString()) {
                         // don't let the garbage collector grab this stings!
@@ -211,7 +280,7 @@ pub const VirtualMachine = struct {
                         self.push(Value.fromNumber(num1 + num2));
                     } else {
                         // TODO: show types instead of values (e.g. 13 + "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {s} + {s} (must both be numbers of strings)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        self.runtimeError("Unsupported operand types: {s} + {s} (must both be numbers or strings)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
                         return InterpretError.RuntimeError;
                     }
                 },

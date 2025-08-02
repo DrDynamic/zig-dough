@@ -43,7 +43,16 @@ pub fn disassemble_instruction(chunk: *Chunk, slots: *SlotStack, offset: usize) 
         // Value interaction
         .Call => byteDecimalInstruction("CALL", chunk, offset),
 
-        // Math
+        .LogicalNot => simpleInstruction("LOGICAL_NOT", offset),
+        .Negate => simpleInstruction("NEGATE", offset),
+
+        .NotEqual => simpleInstruction("NOT_EQUAL", offset),
+        .Equal => simpleInstruction("EQUAL", offset),
+        .Greater => simpleInstruction("GREATER", offset),
+        .GreaterEqual => simpleInstruction("GREATER_EQUAL", offset),
+        .Less => simpleInstruction("LESS", offset),
+        .LessEqual => simpleInstruction("LESS_EQUAL", offset),
+
         .Add => simpleInstruction("ADD", offset),
         .Subtract => simpleInstruction("SUBTRACT", offset),
         .Multiply => simpleInstruction("MULTIPLY", offset),

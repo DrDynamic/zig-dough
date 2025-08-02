@@ -13,6 +13,17 @@ pub const OpCode = enum(u8) {
 
     // Value interaction
     Call,
+
+    LogicalNot,
+    Negate,
+
+    NotEqual,
+    Equal,
+    Greater,
+    GreaterEqual,
+    Less,
+    LessEqual,
+
     Add,
     Subtract,
     Multiply,

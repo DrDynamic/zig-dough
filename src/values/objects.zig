@@ -100,6 +100,13 @@ pub const DoughObject = struct {
         };
     }
 
+    pub fn equals(self: *DoughObject, other: Value) bool {
+        return switch (self.obj_type) {
+            .Module, .NativeFunction, .Closure, .Function => self == other.toObject(),
+            .String => self.as(DoughString).equals(other),
+        };
+    }
+
     pub inline fn is(self: *DoughObject, obj_type: ObjType) bool {
         return self.obj_type == obj_type;
     }
@@ -274,5 +281,13 @@ pub const DoughString = struct {
 
     pub fn toString(self: *DoughString) *DoughString {
         return self;
+    }
+
+    pub fn equals(self: *DoughString, other: Value) bool {
+        if (!other.isString()) {
+            return false;
+        }
+
+        return std.mem.eql(u8, self.bytes, other.toObject().as(DoughString).bytes);
     }
 };

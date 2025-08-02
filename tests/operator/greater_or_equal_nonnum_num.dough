@@ -1,0 +1,1 @@
+"1" >= 1; // expect runtime error: Unsupported operand types: 1 >= 1 (must be numbers)

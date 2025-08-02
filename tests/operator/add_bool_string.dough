@@ -1,0 +1,1 @@
+true + "s"; // expect runtime error: Unsupported operand types: true + s (must both be numbers or strings)

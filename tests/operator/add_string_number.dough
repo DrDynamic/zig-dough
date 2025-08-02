@@ -1,0 +1,1 @@
+"s" + null; // expect runtime error: Unsupported operand types: s + null (must both be numbers or strings)

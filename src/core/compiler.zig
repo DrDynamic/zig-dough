@@ -205,21 +205,21 @@ pub const ModuleCompiler = struct {
         .LeftBracket = ParseRule{},
         .RightBracket = ParseRule{},
         .Comma = ParseRule{},
-        .Dot = ParseRule{},
-        .Minus = ParseRule{ .prefix = null, .infix = binary, .precedence = .Term },
+        .Dot = ParseRule{ .prefix = null, .infix = dot, .precedence = .Call },
+        .Minus = ParseRule{ .prefix = unary, .infix = binary, .precedence = .Term },
         .Plus = ParseRule{ .prefix = null, .infix = binary, .precedence = .Term },
         .Semicolon = ParseRule{},
         .Slash = ParseRule{ .prefix = null, .infix = binary, .precedence = .Factor },
         .Star = ParseRule{ .prefix = null, .infix = binary, .precedence = .Factor },
         // One or two character tokens.
-        .Bang = ParseRule{},
-        .BangEqual = ParseRule{},
+        .Bang = ParseRule{ .prefix = unary },
+        .BangEqual = ParseRule{ .prefix = null, .infix = binary, .precedence = .Equality },
         .Equal = ParseRule{},
-        .EqualEqual = ParseRule{},
-        .Greater = ParseRule{},
-        .GreaterEqual = ParseRule{},
-        .Less = ParseRule{},
-        .LessEqual = ParseRule{},
+        .EqualEqual = ParseRule{ .prefix = null, .infix = binary, .precedence = .Equality },
+        .Greater = ParseRule{ .prefix = null, .infix = binary, .precedence = .Comparison },
+        .GreaterEqual = ParseRule{ .prefix = null, .infix = binary, .precedence = .Comparison },
+        .Less = ParseRule{ .prefix = null, .infix = binary, .precedence = .Comparison },
+        .LessEqual = ParseRule{ .prefix = null, .infix = binary, .precedence = .Comparison },
         .LogicalAnd = ParseRule{},
         .LogicalOr = ParseRule{},
         // Literals.
@@ -382,6 +382,10 @@ pub const ModuleCompiler = struct {
         return arg_count;
     }
 
+    fn dot(self: *ModuleCompiler, _: CompilationContext) void {
+        self.consume(TokenType.Identifier, "Expect property name after '.'.", .{});
+    }
+
     fn literal(self: *ModuleCompiler, _: CompilationContext) void {
         switch (self.scanner.previous.token_type.?) {
             .Null => self.current_compiler.?.emitOpCode(.PushNull),
@@ -409,6 +413,18 @@ pub const ModuleCompiler = struct {
         }
     }
 
+    fn unary(self: *ModuleCompiler, _: CompilationContext) void {
+        const operatorType = self.scanner.previous.token_type.?;
+
+        self.parsePrecedence(.Unary);
+
+        switch (operatorType) {
+            .Bang => self.current_compiler.?.emitOpCode(.LogicalNot),
+            .Minus => self.current_compiler.?.emitOpCode(.Negate),
+            else => return,
+        }
+    }
+
     fn binary(self: *ModuleCompiler, _: CompilationContext) void {
         const operator_type = self.scanner.previous.token_type.?;
         const rule = self.parse_rules.getPtrConst(operator_type);
@@ -416,6 +432,13 @@ pub const ModuleCompiler = struct {
         self.parsePrecedence(@enumFromInt(@intFromEnum(rule.precedence) + 1));
 
         switch (operator_type) {
+            .BangEqual => self.current_compiler.?.emitOpCode(.NotEqual),
+            .EqualEqual => self.current_compiler.?.emitOpCode(.Equal),
+            .Greater => self.current_compiler.?.emitOpCode(.Greater),
+            .GreaterEqual => self.current_compiler.?.emitOpCode(.GreaterEqual),
+            .Less => self.current_compiler.?.emitOpCode(.Less),
+            .LessEqual => self.current_compiler.?.emitOpCode(.LessEqual),
+
             .Plus => self.current_compiler.?.emitOpCode(.Add),
             .Minus => self.current_compiler.?.emitOpCode(.Subtract),
             .Star => self.current_compiler.?.emitOpCode(.Multiply),
@@ -437,7 +460,7 @@ pub const ModuleCompiler = struct {
         const parse_rule: *const ParseRule = self.parse_rules.getPtrConst(self.scanner.previous.token_type.?);
         const prefix_rule: *const ParseFn = parse_rule.prefix orelse {
             // The last parsed token doesn't have a prefix rule
-            self.current_compiler.?.err("expect expression.", .{});
+            self.current_compiler.?.err("Expect expression.", .{});
             return;
         };
 

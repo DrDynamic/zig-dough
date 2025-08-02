@@ -1,0 +1,5 @@
+var 🍕 = "pizza";
+var pizza = "🍕";
+
+print(pizza); // expect: 🍕
+print(🍕);    // expect: pizza
