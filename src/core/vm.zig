@@ -118,6 +118,12 @@ pub const VirtualMachine = struct {
         return @bitCast(bytes);
     }
 
+    inline fn readJumpOffset(_: *VirtualMachine, frame: *CallFrame) u16 {
+        const bytes: [2]u8 = frame.ip[0..2].*;
+        frame.ip += 2;
+        return @bitCast(bytes);
+    }
+
     fn run(self: *VirtualMachine) !void {
         if (config.debug_trace_execution) {
             std.debug.print("\n", .{});
@@ -318,6 +324,25 @@ pub const VirtualMachine = struct {
                         // TODO: show types instead of values (e.g. 13 / "37" leads to iretating error)
                         self.runtimeError("Unsupported operand types: {s} / {s} (must be numbers)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
                         return InterpretError.RuntimeError;
+                    }
+                },
+
+                // Jumps
+                .Jump => {
+                    const offset = self.readJumpOffset(frame);
+                    frame.ip += offset;
+                },
+                .JumpIfTrue => {
+                    const offset = self.readJumpOffset(frame);
+                    if (!self.peek(0).isFalsey()) {
+                        frame.ip += offset;
+                    }
+                },
+                .JumpIfFalse => {
+                    const offset = self.readJumpOffset(frame);
+
+                    if (self.peek(0).isFalsey()) {
+                        frame.ip += offset;
                     }
                 },
 

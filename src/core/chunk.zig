@@ -29,6 +29,11 @@ pub const OpCode = enum(u8) {
     Multiply,
     Divide,
 
+    // Jumps
+    Jump,
+    JumpIfTrue,
+    JumpIfFalse,
+
     // Stack Actions
     //// Listerals
     PushNull, // push the value <null>

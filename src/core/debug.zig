@@ -58,6 +58,11 @@ pub fn disassemble_instruction(chunk: *Chunk, slots: *SlotStack, offset: usize) 
         .Multiply => simpleInstruction("MULTIPLY", offset),
         .Divide => simpleInstruction("DIVIDE", offset),
 
+        // Jumps
+        .Jump => jumpInstruction("JUMP", chunk, offset),
+        .JumpIfTrue => jumpInstruction("JUMP_IF_TRUE", chunk, offset),
+        .JumpIfFalse => jumpInstruction("JUMP_IF_FALSE", chunk, offset),
+
         // Stack Actions
         .PushNull => simpleInstruction("PUSH_NULL", offset),
         .PushTrue => simpleInstruction("PUSH_TRUE", offset),
@@ -73,6 +78,14 @@ pub fn disassemble_instruction(chunk: *Chunk, slots: *SlotStack, offset: usize) 
 fn byteDecimalInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
     std.debug.print(OPCODE_NAME_FROMAT ++ " {d}\n", .{ name, chunk.code.items[offset + 1] });
     return offset + 2;
+}
+
+fn jumpInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
+    const bytes = chunk.code.items[offset..][1..3].*;
+    const jump: u16 = @bitCast(bytes);
+    std.debug.print(OPCODE_NAME_FROMAT ++ " +{d}\n", .{ name, jump });
+
+    return offset + 3;
 }
 
 fn slotAddressInstruction(name: []const u8, chunk: *Chunk, slots: *SlotStack, offset: usize) usize {

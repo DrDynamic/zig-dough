@@ -132,8 +132,8 @@ pub const FunctionCompiler = struct {
         self.emitU24(address);
     }
 
-    pub fn emitU24(self: *FunctionCompiler, address: u24) void {
-        const bytes: [3]u8 = @bitCast(address);
+    pub fn emitU24(self: *FunctionCompiler, value: u24) void {
+        const bytes: [3]u8 = @bitCast(value);
 
         self.emitByte(bytes[0]);
         self.emitByte(bytes[1]);
@@ -143,6 +143,30 @@ pub const FunctionCompiler = struct {
     pub fn emitReturn(self: *FunctionCompiler) void {
         self.emitByte(@intFromEnum(OpCode.PushNull));
         self.emitByte(@intFromEnum(OpCode.Return));
+    }
+
+    pub fn emitJump(self: *FunctionCompiler, opcode: OpCode) usize {
+        self.emitOpCode(opcode);
+
+        self.emitByte(0xFF);
+        self.emitByte(0xFF);
+
+        return self.function.chunk.code.items.len - 2;
+    }
+
+    pub fn patchJump(self: *FunctionCompiler, offset: usize) void {
+        // -2 is for the 2-byte offset of the jump operand. See `emitJump`.
+        const jump = self.function.chunk.code.items.len - offset - 2;
+
+        if (jump > std.math.maxInt(u16)) {
+            self.err("Too much code to jump over.", .{});
+        }
+
+        //        const jump_u16: u16 = @intCast(jump);
+        const bytes: [2]u8 = @bitCast(@as(u16, @intCast(jump)));
+
+        self.function.chunk.code.items[offset] = bytes[0];
+        self.function.chunk.code.items[offset + 1] = bytes[1];
     }
 
     pub fn addConstant(self: *FunctionCompiler, value: values.Value) types.ConstantAddress {
@@ -220,8 +244,8 @@ pub const ModuleCompiler = struct {
         .GreaterEqual = ParseRule{ .prefix = null, .infix = binary, .precedence = .Comparison },
         .Less = ParseRule{ .prefix = null, .infix = binary, .precedence = .Comparison },
         .LessEqual = ParseRule{ .prefix = null, .infix = binary, .precedence = .Comparison },
-        .LogicalAnd = ParseRule{},
-        .LogicalOr = ParseRule{},
+        .LogicalAnd = ParseRule{ .prefix = null, .infix = and_, .precedence = .And },
+        .LogicalOr = ParseRule{ .prefix = null, .infix = or_, .precedence = .Or },
         // Literals.
         .Identifier = ParseRule{ .prefix = identifier },
         .String = ParseRule{ .prefix = string },
@@ -445,6 +469,24 @@ pub const ModuleCompiler = struct {
             .Slash => self.current_compiler.?.emitOpCode(.Divide),
             else => return,
         }
+    }
+
+    fn and_(self: *ModuleCompiler, _: CompilationContext) void {
+        const end_jump = self.current_compiler.?.emitJump(.JumpIfFalse);
+
+        self.current_compiler.?.emitOpCode(.Pop);
+        self.parsePrecedence(.And);
+
+        self.current_compiler.?.patchJump(end_jump);
+    }
+
+    fn or_(self: *ModuleCompiler, _: CompilationContext) void {
+        const end_jump = self.current_compiler.?.emitJump(.JumpIfTrue);
+
+        self.current_compiler.?.emitOpCode(.Pop);
+        self.parsePrecedence(.Or);
+
+        self.current_compiler.?.patchJump(end_jump);
     }
 
     fn block(self: *ModuleCompiler) void {
