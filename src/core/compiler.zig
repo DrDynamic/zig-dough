@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const types = @import("../types.zig");
-
+const globals = @import("../globals.zig");
 const util = @import("../util/util.zig");
 
 const core = @import("./core.zig");
@@ -215,8 +215,7 @@ pub const ModuleCompiler = struct {
     const ParseRules = std.EnumArray(TokenType, ParseRule);
 
     vm: *VirtualMachine = undefined,
-    module: *DoughModule = undefined,
-    scanner: Scanner,
+    scanner: Scanner = undefined,
     current_compiler: ?*FunctionCompiler = null,
     had_error: bool = false,
 
@@ -269,22 +268,23 @@ pub const ModuleCompiler = struct {
         .Eof = ParseRule{},
     }),
 
-    pub fn init(vm: *VirtualMachine, source: []const u8) ModuleCompiler {
+    pub fn init(vm: *VirtualMachine) ModuleCompiler {
         return ModuleCompiler{
             .vm = vm,
-            .scanner = Scanner.init(source),
         };
     }
 
-    pub fn compile(self: *ModuleCompiler, natives: []*objects.DoughNativeFunction) !*DoughModule {
-        self.module = DoughModule.init();
+    pub fn compile(self: *ModuleCompiler, source: []const u8, natives: []*objects.DoughNativeFunction) !*DoughModule {
+        self.scanner = Scanner.init(source);
 
         var compiler = try FunctionCompiler.init(&self.scanner);
         self.current_compiler = &compiler;
 
         _ = compiler.declareIdentifier(null, true);
 
-        // declare natives (workaround till we have a better solution)
+        self.current_compiler.?.beginScope();
+
+        // declare natives (workaround until we have a better solution)
         for (natives) |native| {
             const address = compiler.addConstant(values.Value.fromObject(native.asObject()));
             compiler.emitOpCode(.GetConstant);
@@ -298,18 +298,22 @@ pub const ModuleCompiler = struct {
             self.declaration();
         }
 
-        self.module.function = self.endCompiler();
+        const function = self.endCompiler();
+        try globals.tmpObjects.append(function.asObject());
+
+        const module = DoughModule.init(function);
+
+        _ = globals.tmpObjects.pop();
 
         if (compiler.had_error) {
             return InterpretError.CompileError;
         } else {
-            return self.module;
+            return module;
         }
     }
 
     fn endCompiler(self: *ModuleCompiler) *DoughFunction {
-        // TODO: check for not defined identifiers
-
+        self.current_compiler.?.endScope();
         self.current_compiler.?.emitReturn();
 
         const function = self.current_compiler.?.function;
@@ -319,9 +323,11 @@ pub const ModuleCompiler = struct {
             @import("./debug.zig").disassemble_function(function);
         }
 
-        if (self.current_compiler.?.enclosing) |enclosing| {
-            self.current_compiler = enclosing;
-        }
+        self.current_compiler = self.current_compiler.?.enclosing;
+
+        //        if (self.current_compiler.?.enclosing) |enclosing| {
+        //            self.current_compiler = enclosing;
+        //        }
 
         return function;
     }

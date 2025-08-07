@@ -92,6 +92,7 @@ fn slotAddressInstruction(name: []const u8, chunk: *Chunk, slots: *SlotStack, of
     const bytes: [3]u8 = chunk.code.items[offset..][1..4].*;
     const address: u24 = @bitCast(bytes);
 
+    // TODO: fix this (slots get cleaned after compilation so this alway returns invalid address)
     if (address > slots.properties.items.len - 1) {
         std.debug.print(OPCODE_NAME_FROMAT ++ " 0x{X:0>6} !INVALID ADDRESS!\n", .{ name, address });
     } else {

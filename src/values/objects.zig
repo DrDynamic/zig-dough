@@ -39,7 +39,7 @@ pub const DoughNativeFunction = struct {
     }
 
     pub fn deinit(self: *DoughNativeFunction) void {
-        config.dough_allocator.allocator().destroy(self);
+        globals.garbage_collector.allocator().destroy(self);
     }
 
     pub inline fn asObject(self: *DoughNativeFunction) *DoughObject {
@@ -50,6 +50,13 @@ pub const DoughNativeFunction = struct {
         std.debug.print("<native fn>", .{});
     }
 
+    pub fn format(self: DoughNativeFunction, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+        _ = fmt;
+        _ = options;
+
+        try out_stream.print("<native fn '{s}'>", .{self.name});
+    }
+
     pub fn toString(self: DoughNativeFunction) *DoughString {
         const bytes = std.fmt.allocPrint(globals.allocator, "<native fn '{s}'>", .{self.name}) catch @panic("failed to create string!");
         return DoughString.init(bytes);
@@ -58,14 +65,30 @@ pub const DoughNativeFunction = struct {
 
 pub const DoughObject = struct {
     obj_type: ObjType,
+
+    next: ?*DoughObject,
+    nextGray: ?*DoughObject,
     is_marked: bool,
 
     pub fn init(comptime T: type, obj_type: ObjType) !*DoughObject {
-        const ptr = try globals.dough_allocator.allocator().create(T);
+        const ptr = try globals.garbage_collector.allocator().create(T);
         ptr.obj = DoughObject{
             .obj_type = obj_type,
+
+            .next = globals.garbage_collector.doughObjects,
+            .nextGray = null,
             .is_marked = false,
         };
+
+        globals.garbage_collector.doughObjects = &ptr.obj;
+
+        if (config.debug_log_gc_alloc) {
+            std.debug.print("   [init] {*} ({s}) {d} bytes\n", .{
+                &ptr.obj,
+                @tagName(obj_type),
+                @sizeOf(T),
+            });
+        }
 
         return &ptr.obj;
     }
@@ -87,6 +110,16 @@ pub const DoughObject = struct {
             .Closure => self.as(DoughClosure).print(),
             .Function => self.as(DoughFunction).print(),
             .String => self.as(DoughString).print(),
+        }
+    }
+
+    pub fn format(self: *DoughObject, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+        switch (self.obj_type) {
+            .Module => try self.as(DoughModule).format(fmt, options, out_stream),
+            .NativeFunction => try self.as(DoughNativeFunction).format(fmt, options, out_stream),
+            .Closure => try self.as(DoughClosure).format(fmt, options, out_stream),
+            .Function => try self.as(DoughFunction).format(fmt, options, out_stream),
+            .String => try self.as(DoughString).format(fmt, options, out_stream),
         }
     }
 
@@ -114,25 +147,30 @@ pub const DoughObject = struct {
     pub inline fn as(self: *DoughObject, comptime T: type) *T {
         return @alignCast(@fieldParentPtr("obj", self));
     }
+
+    pub inline fn asValue(self: *DoughObject) Value {
+        return Value.fromObject(self);
+    }
 };
 
 pub const DoughModule = struct {
     obj: DoughObject,
-    function: *DoughFunction = undefined,
+    function: *DoughFunction,
 
-    pub fn init() *DoughModule {
+    pub fn init(function: *DoughFunction) *DoughModule {
         const obj = DoughObject.init(DoughModule, ObjType.Module) catch {
             @panic("failed to create DoughModule!");
         };
         const module = obj.as(DoughModule);
         module.* = .{
             .obj = obj.*,
+            .function = function,
         };
         return module;
     }
 
-    pub fn deinit(self: DoughModule) void {
-        config.dough_allocator.allocator().destroy(self);
+    pub fn deinit(self: *DoughModule) void {
+        globals.garbage_collector.allocator().destroy(self);
     }
 
     pub fn asObject(self: *DoughModule) *DoughObject {
@@ -141,6 +179,13 @@ pub const DoughModule = struct {
 
     pub fn print(_: *DoughModule) void {
         std.debug.print("<DoughModule>", .{});
+    }
+
+    pub fn format(_: DoughModule, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+        _ = fmt;
+        _ = options;
+
+        try out_stream.print("<DoughModule>", .{});
     }
 
     pub fn toString(_: *DoughModule) *DoughString {
@@ -165,7 +210,7 @@ pub const DoughClosure = struct {
     }
 
     pub fn deinit(self: *DoughClosure) void {
-        config.dough_allocator.allocator().destroy(self);
+        globals.garbage_collector.allocator().destroy(self);
     }
 
     pub fn asObject(self: *DoughClosure) *DoughObject {
@@ -174,6 +219,10 @@ pub const DoughClosure = struct {
 
     pub fn print(self: *DoughClosure) void {
         self.function.print();
+    }
+
+    pub fn format(self: DoughClosure, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+        try self.function.format(fmt, options, out_stream);
     }
 
     pub fn toString(self: *DoughClosure) *DoughString {
@@ -202,10 +251,10 @@ pub const DoughFunction = struct {
         return function;
     }
 
-    pub fn deinit(self: DoughFunction) void {
+    pub fn deinit(self: *DoughFunction) void {
         self.chunk.deinit();
         self.slots.deinit();
-        config.dough_allocator.allocator().destroy(self);
+        globals.garbage_collector.allocator().destroy(self);
     }
 
     pub inline fn asObject(self: *DoughFunction) *DoughObject {
@@ -215,6 +264,14 @@ pub const DoughFunction = struct {
     pub fn print(_: *DoughFunction) void {
         //        std.debug.print("<fn {s}>", .{self.name orelse "anonymous"});
         std.debug.print("<fn>", .{});
+    }
+
+    pub fn format(self: DoughFunction, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+        _ = fmt;
+        _ = options;
+
+        const name = self.name orelse "anonymous";
+        try out_stream.print("<fn '{s}'>", .{name});
     }
 
     pub fn toString(self: *DoughFunction) *DoughString {
@@ -244,7 +301,7 @@ pub const DoughString = struct {
                 .bytes = bytes,
             };
 
-            globals.tmpValues.append(Value.fromObject(string.asObject())) catch {
+            globals.tmpObjects.append(string.asObject()) catch {
                 @panic("failed to create DoughString!");
             };
 
@@ -252,7 +309,7 @@ pub const DoughString = struct {
                 @panic("failed to create DoughString!");
             };
 
-            _ = globals.tmpValues.pop();
+            _ = globals.tmpObjects.pop();
 
             return string;
         }
@@ -268,7 +325,7 @@ pub const DoughString = struct {
 
     pub fn deinit(self: *DoughString) void {
         globals.allocator.free(self.bytes);
-        globals.allocator.destroy(self);
+        globals.garbage_collector.allocator().destroy(self);
     }
 
     pub inline fn asObject(self: *DoughString) *DoughObject {
@@ -277,6 +334,13 @@ pub const DoughString = struct {
 
     pub fn print(self: *DoughString) void {
         std.debug.print("{s}", .{self.bytes});
+    }
+
+    pub fn format(self: DoughString, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+        _ = fmt;
+        _ = options;
+
+        try out_stream.print("{s}", .{self.bytes});
     }
 
     pub fn toString(self: *DoughString) *DoughString {

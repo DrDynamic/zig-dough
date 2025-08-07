@@ -1,5 +1,5 @@
 pub fn main() !void {
-    globals.init();
+    try globals.init();
     defer globals.deinit();
 
     var argsIterator = try std.process.ArgIterator.initWithAllocator(globals.allocator);
@@ -29,20 +29,24 @@ fn runFile(path: []const u8) !void {
     defer file.close();
 
     const source = try file.readToEndAllocOptions(globals.allocator, config.MAX_FILE_SIZE, null, @alignOf(u8), 0);
-
-    var vm = @import("core/vm.zig").VirtualMachine{};
-    try vm.init();
-
-    var compiler = @import("core/compiler.zig").ModuleCompiler.init(&vm, source);
+    defer globals.allocator.free(source);
 
     var n = [_]*DoughNativeFunction{undefined};
     n[0] = try DoughNativeFunction.init("print", natives.print);
+    try globals.tmpObjects.append(n[0].asObject());
 
-    const module = try compiler.compile(&n);
+    const module = try globals.compiler.compile(source, &n);
+    try globals.tmpObjects.append(module.asObject());
 
-    defer globals.allocator.free(source);
+    try globals.virtual_machine.execute(module);
 
-    try vm.execute(module);
+    _ = globals.tmpObjects.pop();
+    _ = globals.tmpObjects.pop();
+
+    //std.debug.print("--- program end ---", .{});
+    //config.debug_log_gc_stats = true;
+
+    globals.garbage_collector.collectGarbage();
 }
 
 const std = @import("std");

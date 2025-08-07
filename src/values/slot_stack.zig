@@ -74,8 +74,8 @@ pub const SlotStack = struct {
 
     pub fn init() SlotStack {
         return .{
-            .slots = std.ArrayList(Value).init(globals.dough_allocator.allocator()),
-            .properties = std.ArrayList(SlotProperties).init(globals.dough_allocator.allocator()),
+            .slots = std.ArrayList(Value).init(globals.garbage_collector.allocator()),
+            .properties = std.ArrayList(SlotProperties).init(globals.garbage_collector.allocator()),
             .addresses = std.StringHashMap(u24).init(globals.allocator),
         };
     }

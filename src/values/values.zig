@@ -77,6 +77,17 @@ const UnionValue = union(ValueType) {
         };
     }
 
+    pub fn format(self: UnionValue, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+        switch (self) {
+            .Uninitialized => try out_stream.print("uninitialized", .{}),
+            .Void => try out_stream.print("void", .{}),
+            .Null => try out_stream.print("null", .{}),
+            .Bool => |value| try out_stream.print("{}", .{value}),
+            .Number => |value| try out_stream.print("{d}", .{value}),
+            .Object => |obj| try obj.format(fmt, options, out_stream),
+        }
+    }
+
     pub inline fn isString(self: UnionValue) bool {
         return self.isObject() and self.toObject().obj_type == .String;
     }

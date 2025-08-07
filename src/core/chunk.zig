@@ -62,6 +62,8 @@ pub const Chunk = struct {
 
     pub fn deinit(self: Chunk) void {
         self.code.deinit();
+        self.constants.deinit();
+        self.lines.deinit();
     }
 
     pub fn getLinenumber(self: *Chunk, code_index: usize) ?usize {

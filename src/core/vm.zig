@@ -32,8 +32,6 @@ pub const CallFrame = struct {
 };
 
 pub const VirtualMachine = struct {
-    strings: std.StringHashMap(*objects.DoughString) = undefined,
-
     executable: *DoughModule = undefined,
 
     frames: []CallFrame = undefined,
@@ -45,8 +43,6 @@ pub const VirtualMachine = struct {
     slots: std.ArrayList(Value) = undefined,
 
     pub fn init(self: *VirtualMachine) !void {
-        self.strings = std.StringHashMap(*objects.DoughString).init(globals.allocator);
-
         // TODO: make this more dynamic (maybe estimate size while compilation on function level or someting)
         self.frames = try globals.allocator.alloc(CallFrame, FRAMES_MAX);
         self.frame_count = 0;
@@ -57,10 +53,10 @@ pub const VirtualMachine = struct {
     }
 
     pub fn deinit(self: *VirtualMachine) void {
-        self.strings.deinit();
-
         globals.allocator.free(self.frames);
         globals.allocator.free(self.stack);
+
+        self.slots.deinit();
     }
 
     pub fn execute(self: *VirtualMachine, executable: *DoughModule) !void {
@@ -74,6 +70,8 @@ pub const VirtualMachine = struct {
 
         try self.call(closure, 0);
         try self.run();
+
+        _ = self.pop();
     }
     pub fn interpret(self: *VirtualMachine, source: []const u8) !void {
         var compiler = core.compiler.ModuleCompiler.init(source);
@@ -143,8 +141,7 @@ pub const VirtualMachine = struct {
                     if (val_ptr == frame.slots) {
                         std.debug.print("|", .{});
                     }
-                    const string = val_ptr[0].toString();
-                    std.debug.print("[{s}] ", .{string.bytes});
+                    std.debug.print("[{}] ", .{val_ptr[0]});
                 }
 
                 std.debug.print("\n", .{});
@@ -218,8 +215,8 @@ pub const VirtualMachine = struct {
 
                         self.push(Value.fromBoolean(num1 > num2));
                     } else {
-                        // TODO: show types instead of values (e.g. 13 - "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {s} > {s} (must be numbers)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        // TODO: show types instead of values (e.g. 13 > "37" leads to iretating error)
+                        self.runtimeError("Unsupported operand types: {} > {} (must be numbers)", .{ self.peek(1), self.peek(0) });
                         return InterpretError.RuntimeError;
                     }
                 },
@@ -230,8 +227,8 @@ pub const VirtualMachine = struct {
 
                         self.push(Value.fromBoolean(num1 >= num2));
                     } else {
-                        // TODO: show types instead of values (e.g. 13 - "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {s} >= {s} (must be numbers)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        // TODO: show types instead of values (e.g. 13 >= "37" leads to iretating error)
+                        self.runtimeError("Unsupported operand types: {} >= {} (must be numbers)", .{ self.peek(1), self.peek(0) });
                         return InterpretError.RuntimeError;
                     }
                 },
@@ -242,8 +239,8 @@ pub const VirtualMachine = struct {
 
                         self.push(Value.fromBoolean(num1 < num2));
                     } else {
-                        // TODO: show types instead of values (e.g. 13 - "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {s} < {s} (must be numbers)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        // TODO: show types instead of values (e.g. 13 < "37" leads to iretating error)
+                        self.runtimeError("Unsupported operand types: {} < {} (must be numbers)", .{ self.peek(1), self.peek(0) });
                         return InterpretError.RuntimeError;
                     }
                 },
@@ -254,8 +251,8 @@ pub const VirtualMachine = struct {
 
                         self.push(Value.fromBoolean(num1 <= num2));
                     } else {
-                        // TODO: show types instead of values (e.g. 13 - "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {s} <= {s} (must be numbers)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        // TODO: show types instead of values (e.g. 13 <= "37" leads to iretating error)
+                        self.runtimeError("Unsupported operand types: {} <= {} (must be numbers)", .{ self.peek(1), self.peek(0) });
                         return InterpretError.RuntimeError;
                     }
                 },
@@ -286,7 +283,7 @@ pub const VirtualMachine = struct {
                         self.push(Value.fromNumber(num1 + num2));
                     } else {
                         // TODO: show types instead of values (e.g. 13 + "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {s} + {s} (must both be numbers or strings)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        self.runtimeError("Unsupported operand types: {} + {} (must both be numbers or strings)", .{ self.peek(1), self.peek(0) });
                         return InterpretError.RuntimeError;
                     }
                 },
@@ -298,7 +295,7 @@ pub const VirtualMachine = struct {
                         self.push(Value.fromNumber(num1 - num2));
                     } else {
                         // TODO: show types instead of values (e.g. 13 - "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {s} - {s} (must be numbers)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        self.runtimeError("Unsupported operand types: {} - {} (must be numbers)", .{ self.peek(1), self.peek(0) });
                         return InterpretError.RuntimeError;
                     }
                 },
@@ -310,7 +307,7 @@ pub const VirtualMachine = struct {
                         self.push(Value.fromNumber(num1 * num2));
                     } else {
                         // TODO: show types instead of values (e.g. 13 * "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {s} * {s} (must be numbers)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        self.runtimeError("Unsupported operand types: {} * {} (must be numbers)", .{ self.peek(1), self.peek(0) });
                         return InterpretError.RuntimeError;
                     }
                 },
@@ -322,7 +319,7 @@ pub const VirtualMachine = struct {
                         self.push(Value.fromNumber(num1 / num2));
                     } else {
                         // TODO: show types instead of values (e.g. 13 / "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {s} / {s} (must be numbers)", .{ self.peek(1).toString().bytes, self.peek(0).toString().bytes });
+                        self.runtimeError("Unsupported operand types: {} / {} (must be numbers)", .{ self.peek(1), self.peek(0) });
                         return InterpretError.RuntimeError;
                     }
                 },
@@ -368,6 +365,7 @@ pub const VirtualMachine = struct {
                 .Return => {
                     if (self.frame_count == 1) {
                         _ = self.pop();
+                        self.frame_count = 0;
                         return;
                     }
                     return InterpretError.RuntimeError;
