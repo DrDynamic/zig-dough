@@ -5,6 +5,10 @@ pub const Chunk = @import("./chunk.zig").Chunk;
 pub const objects = @import("./objects.zig");
 pub const natives = @import("./natives.zig");
 
+pub const types = @import("./types.zig");
+pub const Type = types.Type;
+pub const TypeError = types.TypeError;
+
 pub const ValueType = enum {
     Uninitialized,
     Void,

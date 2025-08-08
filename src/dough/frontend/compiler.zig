@@ -228,6 +228,7 @@ pub const ModuleCompiler = struct {
         .RightBrace = ParseRule{},
         .LeftBracket = ParseRule{},
         .RightBracket = ParseRule{},
+        .Colon = ParseRule{},
         .Comma = ParseRule{},
         .Dot = ParseRule{ .prefix = null, .infix = dot, .precedence = .Call },
         .Minus = ParseRule{ .prefix = unary, .infix = binary, .precedence = .Term },
@@ -346,14 +347,28 @@ pub const ModuleCompiler = struct {
     }
 
     fn varDeclaration(self: *ModuleCompiler) void {
-        if (self.match(TokenType.Equal)) {
+        if (self.match(.Colon)) {
+            _ = self.typeDefinition();
+        } else if (self.match(.Equal)) {
             self.expression();
         } else {
             self.current_compiler.?.emitOpCode(OpCode.PushUninitialized);
         }
 
         // TODO: or consume newLine
-        _ = self.match(TokenType.Semicolon);
+        _ = self.match(.Semicolon);
+    }
+
+    fn typeDefinition(self: *ModuleCompiler) values.Type {
+        if (self.match(.Identifier)) {
+            return values.Type.fromToken(self.scanner.previous) catch {
+                self.current_compiler.?.err("unknown type", .{});
+                return values.Type.makeVoid();
+            };
+        }
+
+        self.current_compiler.?.err("unknown type", .{});
+        return values.Type.makeVoid();
     }
 
     // Consumes an Identifier and reserve a slot in the current scope

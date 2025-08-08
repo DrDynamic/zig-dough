@@ -8,6 +8,7 @@ pub const TokenType = enum {
     RightBrace,
     LeftBracket,
     RightBracket,
+    Colon,
     Comma,
     Dot,
     Minus,

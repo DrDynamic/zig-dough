@@ -69,27 +69,28 @@ pub const Scanner = struct {
         const c = self.advance();
         switch (c) {
             // Single-character tokens.
-            '(' => self.makeToken(TokenType.LeftParen),
-            ')' => self.makeToken(TokenType.RightParen),
-            '{' => self.makeToken(TokenType.LeftBrace),
-            '}' => self.makeToken(TokenType.RightBrace),
-            '[' => self.makeToken(TokenType.LeftBracket),
-            ']' => self.makeToken(TokenType.RightBracket),
-            ',' => self.makeToken(TokenType.Comma),
-            '.' => self.makeToken(TokenType.Dot),
-            '-' => self.makeToken(TokenType.Minus),
-            '+' => self.makeToken(TokenType.Plus),
-            ';' => self.makeToken(TokenType.Semicolon),
-            '/' => self.makeToken(TokenType.Slash),
-            '*' => self.makeToken(TokenType.Star),
+            '(' => self.makeToken(.LeftParen),
+            ')' => self.makeToken(.RightParen),
+            '{' => self.makeToken(.LeftBrace),
+            '}' => self.makeToken(.RightBrace),
+            '[' => self.makeToken(.LeftBracket),
+            ']' => self.makeToken(.RightBracket),
+            ':' => self.makeToken(.Colon),
+            ',' => self.makeToken(.Comma),
+            '.' => self.makeToken(.Dot),
+            '-' => self.makeToken(.Minus),
+            '+' => self.makeToken(.Plus),
+            ';' => self.makeToken(.Semicolon),
+            '/' => self.makeToken(.Slash),
+            '*' => self.makeToken(.Star),
 
             // One or two character tokens.
-            '!' => if (self.match('=')) self.makeToken(TokenType.BangEqual) else self.makeToken(TokenType.Bang),
-            '=' => if (self.match('=')) self.makeToken(TokenType.EqualEqual) else self.makeToken(TokenType.Equal),
-            '>' => if (self.match('=')) self.makeToken(TokenType.GreaterEqual) else self.makeToken(TokenType.Greater),
-            '<' => if (self.match('=')) self.makeToken(TokenType.LessEqual) else self.makeToken(TokenType.Less),
-            '&' => if (self.match('&')) self.makeToken(TokenType.LogicalAnd) else self.makeError("Unexpected character."),
-            '|' => if (self.match('|')) self.makeToken(TokenType.LogicalOr) else self.makeError("Unexpected character."),
+            '!' => if (self.match('=')) self.makeToken(.BangEqual) else self.makeToken(.Bang),
+            '=' => if (self.match('=')) self.makeToken(.EqualEqual) else self.makeToken(.Equal),
+            '>' => if (self.match('=')) self.makeToken(.GreaterEqual) else self.makeToken(.Greater),
+            '<' => if (self.match('=')) self.makeToken(.LessEqual) else self.makeToken(.Less),
+            '&' => if (self.match('&')) self.makeToken(.LogicalAnd) else self.makeError("Unexpected character."),
+            '|' => if (self.match('|')) self.makeToken(.LogicalOr) else self.makeError("Unexpected character."),
 
             '"' => {
                 self.makeString('"');
@@ -231,26 +232,26 @@ pub const Scanner = struct {
         }
 
         const tokenType = switch (self._tokenStart[0]) {
-            'c' => self.matchIdentifier("onst", 1, 4, TokenType.Const),
-            'e' => self.matchIdentifier("lse", 1, 3, TokenType.Else),
+            'c' => self.matchIdentifier("onst", 1, 4, .Const),
+            'e' => self.matchIdentifier("lse", 1, 3, .Else),
             'f' => |_| f_case: {
                 if (self._currentChar - self._tokenStart > 1) {
                     break :f_case switch (self._tokenStart[1]) {
-                        'a' => self.matchIdentifier("lse", 2, 3, TokenType.False),
-                        'o' => self.matchIdentifier("r", 2, 1, TokenType.For),
-                        'u' => self.matchIdentifier("nction", 2, 6, TokenType.Function),
-                        else => TokenType.Identifier,
+                        'a' => self.matchIdentifier("lse", 2, 3, .False),
+                        'o' => self.matchIdentifier("r", 2, 1, .For),
+                        'u' => self.matchIdentifier("nction", 2, 6, .Function),
+                        else => .Identifier,
                     };
                 }
-                break :f_case TokenType.Identifier;
+                break :f_case .Identifier;
             },
-            'i' => self.matchIdentifier("f", 1, 1, TokenType.If),
-            'n' => self.matchIdentifier("ull", 1, 3, TokenType.Null),
-            'r' => self.matchIdentifier("eturn", 1, 5, TokenType.Return),
-            't' => self.matchIdentifier("rue", 1, 3, TokenType.True),
-            'v' => self.matchIdentifier("ar", 1, 2, TokenType.Var),
-            'w' => self.matchIdentifier("hile", 1, 4, TokenType.While),
-            else => TokenType.Identifier,
+            'i' => self.matchIdentifier("f", 1, 1, .If),
+            'n' => self.matchIdentifier("ull", 1, 3, .Null),
+            'r' => self.matchIdentifier("eturn", 1, 5, .Return),
+            't' => self.matchIdentifier("rue", 1, 3, .True),
+            'v' => self.matchIdentifier("ar", 1, 2, .Var),
+            'w' => self.matchIdentifier("hile", 1, 4, .While),
+            else => .Identifier,
         };
         self.makeToken(tokenType);
     }
@@ -259,7 +260,7 @@ pub const Scanner = struct {
         if (self._currentChar - self._tokenStart == start + length and std.mem.eql(u8, self._tokenStart[start..(start + length)], rest)) {
             return tokenType;
         }
-        return TokenType.Identifier;
+        return .Identifier;
     }
 };
 
