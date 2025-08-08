@@ -20,6 +20,8 @@ const objects = values.objects;
 const DoughModule = objects.DoughModule;
 const DoughFunction = objects.DoughFunction;
 
+const ReferenceStack = @import("./reference_stack.zig").ReferenceStack;
+
 const Precedence = enum {
     None,
     Assignment, // =
@@ -42,11 +44,18 @@ pub const FunctionCompiler = struct {
     scanner: *Scanner,
     scopeDepth: u24 = 0,
 
+    references: ReferenceStack,
+
     pub fn init(scanner: *Scanner) !FunctionCompiler {
         return FunctionCompiler{
             .function = objects.DoughFunction.init(),
             .scanner = scanner,
+            .references = ReferenceStack.init(),
         };
+    }
+
+    pub fn deinit(self: *FunctionCompiler) void {
+        self.references.deinit();
     }
 
     fn beginScope(self: *FunctionCompiler) void {
@@ -56,12 +65,12 @@ pub const FunctionCompiler = struct {
     fn endScope(self: *FunctionCompiler) void {
         self.scopeDepth -= 1;
 
-        var slots = &self.function.slots;
+        var references = &self.references;
 
-        if (slots.properties.items.len == 0) return;
+        if (references.properties.items.len == 0) return;
 
-        while (slots.properties.getLast().depth > self.scopeDepth) {
-            slots.pop() catch |e| {
+        while (references.properties.getLast().depth > self.scopeDepth) {
+            references.pop() catch |e| {
                 self.err("Unexpectd error occured: {s}\n", .{@errorName(e)});
             };
             self.emitOpCode(.Pop);
@@ -70,7 +79,7 @@ pub const FunctionCompiler = struct {
 
     pub fn declareIdentifier(self: *FunctionCompiler, identifier: ?[]const u8, readonly: bool) ?types.SlotAddress {
         if (identifier) |safeAnIdentifierAndNotNull| {
-            const props = self.function.slots.getProperties(safeAnIdentifierAndNotNull);
+            const props = self.references.getProperties(safeAnIdentifierAndNotNull);
 
             if (props != null and props.?.depth == self.scopeDepth) {
                 self.err("Name already in use in this scope", .{});
@@ -78,7 +87,7 @@ pub const FunctionCompiler = struct {
             }
         }
 
-        return self.function.slots.push(
+        return self.references.push(
             .{
                 .depth = self.scopeDepth,
                 .identifier = identifier,
@@ -91,7 +100,7 @@ pub const FunctionCompiler = struct {
     }
 
     pub fn readIdentifier(self: *FunctionCompiler, identifier: []const u8) void {
-        const maybeAddress = self.function.slots.addresses.get(identifier);
+        const maybeAddress = self.references.addresses.get(identifier);
 
         if (maybeAddress) |address| {
             self.emitOpCode(.GetSlot);
@@ -103,7 +112,7 @@ pub const FunctionCompiler = struct {
     }
 
     pub fn writeIdentifier(self: *FunctionCompiler, identifier: []const u8) void {
-        const maybeAddress = self.function.slots.addresses.get(identifier);
+        const maybeAddress = self.references.addresses.get(identifier);
 
         if (maybeAddress) |address| {
             self.emitOpCode(.SetSlot);
@@ -324,8 +333,10 @@ pub const ModuleCompiler = struct {
             // TODO: set module name / function name
             backend.debug.disassemble_function(function);
         }
+        var compiler = self.current_compiler.?;
+        self.current_compiler = compiler.enclosing;
 
-        self.current_compiler = self.current_compiler.?.enclosing;
+        compiler.deinit();
 
         //        if (self.current_compiler.?.enclosing) |enclosing| {
         //            self.current_compiler = enclosing;
@@ -346,10 +357,13 @@ pub const ModuleCompiler = struct {
         }
     }
 
-    fn varDeclaration(self: *ModuleCompiler) void {
+    fn varDeclaration(self: *ModuleCompiler, address: types.SlotAddress) void {
         if (self.match(.Colon)) {
-            _ = self.typeDefinition();
-        } else if (self.match(.Equal)) {
+            const t = self.typeDefinition();
+            self.current_compiler.?.references.properties.items[address].type = t;
+        }
+
+        if (self.match(.Equal)) {
             self.expression();
         } else {
             self.current_compiler.?.emitOpCode(OpCode.PushUninitialized);

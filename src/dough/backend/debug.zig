@@ -13,15 +13,14 @@ pub fn disassemble_function(function: *DoughFunction) void {
     std.debug.print("== <script> ==\n", .{}); // TODO: read name from function
 
     const chunk = &function.chunk;
-    const slots = &function.slots;
 
     var offset: usize = 0;
     while (offset < chunk.code.items.len) {
-        offset = disassemble_instruction(chunk, slots, offset);
+        offset = disassemble_instruction(chunk, offset);
     }
 }
 
-pub fn disassemble_instruction(chunk: *Chunk, slots: *SlotStack, offset: usize) usize {
+pub fn disassemble_instruction(chunk: *Chunk, offset: usize) usize {
     std.debug.print("[{d:0>4}] ", .{offset});
 
     if (offset > 0 and chunk.getLinenumber(offset) == chunk.getLinenumber(offset - 1)) {
@@ -33,9 +32,9 @@ pub fn disassemble_instruction(chunk: *Chunk, slots: *SlotStack, offset: usize) 
     const instruction: OpCode = @enumFromInt(chunk.code.items[offset]);
     return switch (instruction) {
         // Slot actions
-        .DefineSlot => slotAddressInstruction("DEFINE_SLOT", chunk, slots, offset),
-        .GetSlot => slotAddressInstruction("GET_SLOT", chunk, slots, offset),
-        .SetSlot => slotAddressInstruction("SET_SLOT", chunk, slots, offset),
+        .DefineSlot => slotAddressInstruction("DEFINE_SLOT", chunk, offset),
+        .GetSlot => slotAddressInstruction("GET_SLOT", chunk, offset),
+        .SetSlot => slotAddressInstruction("SET_SLOT", chunk, offset),
 
         // Constants
         .GetConstant => constantAddressInstruction("GET_CONSTANT", chunk, offset),
@@ -88,17 +87,11 @@ fn jumpInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
     return offset + 3;
 }
 
-fn slotAddressInstruction(name: []const u8, chunk: *Chunk, slots: *SlotStack, offset: usize) usize {
+fn slotAddressInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
     const bytes: [3]u8 = chunk.code.items[offset..][1..4].*;
     const address: u24 = @bitCast(bytes);
 
-    // TODO: fix this (slots get cleaned after compilation so this alway returns invalid address)
-    if (address > slots.properties.items.len - 1) {
-        std.debug.print(OPCODE_NAME_FROMAT ++ " 0x{X:0>6} !INVALID ADDRESS!\n", .{ name, address });
-    } else {
-        const identifier = slots.properties.items[address].identifier orelse "null";
-        std.debug.print(OPCODE_NAME_FROMAT ++ " 0x{X:0>6} '{s}'\n", .{ name, address, identifier });
-    }
+    std.debug.print(OPCODE_NAME_FROMAT ++ " 0x{X:0>6}\n", .{ name, address });
 
     return offset + 4;
 }

@@ -147,7 +147,7 @@ pub const VirtualMachine = struct {
                 std.debug.print("\n", .{});
 
                 const offset: usize = @intFromPtr(frame.ip) - @intFromPtr(frame.closure.function.chunk.code.items.ptr);
-                _ = @import("debug.zig").disassemble_instruction(&frame.closure.function.chunk, &frame.closure.function.slots, offset);
+                _ = @import("debug.zig").disassemble_instruction(&frame.closure.function.chunk, offset);
             }
 
             const instruction: OpCode = @enumFromInt(self.readByte(frame));
