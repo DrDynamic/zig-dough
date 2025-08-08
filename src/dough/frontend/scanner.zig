@@ -1,8 +1,9 @@
 const std = @import("std");
 
-const token = @import("./token.zig");
-const Token = token.Token;
-const TokenType = token.TokenType;
+const dough = @import("dough");
+const config = dough.config;
+const Token = dough.frontend.Token;
+const TokenType = dough.frontend.TokenType;
 
 pub const Scanner = struct {
     previous: Token = .{
@@ -33,7 +34,7 @@ pub const Scanner = struct {
         };
 
         scanner.scanToken();
-        if (@import("../config.zig").debug_print_tokens) {
+        if (config.debug_print_tokens) {
             scanner.debugPrint();
 
             scanner._tokenStart = @ptrCast(source);

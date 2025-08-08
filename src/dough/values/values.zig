@@ -1,6 +1,9 @@
 const std = @import("std");
-const globals = @import("../globals.zig");
+const dough = @import("dough");
+
+pub const Chunk = @import("./chunk.zig").Chunk;
 pub const objects = @import("./objects.zig");
+pub const natives = @import("./natives.zig");
 
 pub const ValueType = enum {
     Uninitialized,
@@ -72,7 +75,7 @@ const UnionValue = union(ValueType) {
             .Void => objects.DoughString.copy("void"),
             .Null => objects.DoughString.copy("null"),
             .Bool => |val| objects.DoughString.copy(if (val) "true" else "false"),
-            .Number => |val| objects.DoughString.init(std.fmt.allocPrint(globals.allocator, "{d}", .{val}) catch @panic("failed to allocate memory!")),
+            .Number => |val| objects.DoughString.init(std.fmt.allocPrint(dough.allocator, "{d}", .{val}) catch @panic("failed to allocate memory!")),
             .Object => |val| val.toString(),
         };
     }

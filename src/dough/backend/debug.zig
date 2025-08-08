@@ -1,8 +1,8 @@
 const std = @import("std");
 
-const core = @import("./core.zig");
-const Chunk = core.chunk.Chunk;
-const OpCode = core.chunk.OpCode;
+const dough = @import("dough");
+const Chunk = dough.values.Chunk;
+const OpCode = dough.backend.OpCode;
 
 const SlotStack = @import("../values/slot_stack.zig").SlotStack;
 const DoughFunction = @import("../values/objects.zig").DoughFunction;

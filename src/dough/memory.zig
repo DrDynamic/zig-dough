@@ -1,8 +1,12 @@
 const std = @import("std");
-const config = @import("../config.zig");
-const globals = @import("../globals.zig");
-const core = @import("../core/core.zig");
-const values = @import("../values/values.zig");
+
+const dough = @import("dough");
+const config = dough.config;
+
+const frontend = dough.frontend;
+const backend = dough.backend;
+
+const values = dough.values;
 const objects = values.objects;
 
 /// NOTE: only collects Obj types
@@ -22,10 +26,10 @@ pub const GarbageColletingAllocator = struct {
     grayObjects: ?*objects.DoughObject = null,
 
     // references for accessing roots to mark
-    compiler: *core.compiler.ModuleCompiler,
-    vm: *core.vm.VirtualMachine,
+    compiler: *frontend.ModuleCompiler,
+    vm: *backend.VirtualMachine,
 
-    pub fn init(parent_allocator: std.mem.Allocator, compiler: *core.compiler.ModuleCompiler, vm: *core.vm.VirtualMachine) GarbageColletingAllocator {
+    pub fn init(parent_allocator: std.mem.Allocator, compiler: *frontend.ModuleCompiler, vm: *backend.VirtualMachine) GarbageColletingAllocator {
         return .{
             .parent_allocator = parent_allocator,
             .bytes_allocated = 0,
@@ -199,7 +203,7 @@ pub const GarbageColletingAllocator = struct {
             size_before = self.bytes_allocated;
         }
 
-        for (globals.tmpObjects.items) |tmpObject| {
+        for (dough.tmpObjects.items) |tmpObject| {
             self.markObject(tmpObject);
         }
 
@@ -221,8 +225,8 @@ pub const GarbageColletingAllocator = struct {
                 const stack_top = self.vm.stack_top;
                 const stack = self.vm.stack;
 
-                std.debug.print("   # globals.tmpObjects: {d}\n", .{globals.tmpObjects.items.len});
-                std.debug.print("   # globals.internedStrings: {d}\n", .{globals.internedStrings.values().len});
+                std.debug.print("   # globals.tmpObjects: {d}\n", .{dough.tmpObjects.items.len});
+                std.debug.print("   # globals.internedStrings: {d}\n", .{dough.internedStrings.values().len});
                 std.debug.print("   # vm.stack: {d}\n", .{(@intFromPtr(stack_top) - @intFromPtr(stack.ptr)) / @sizeOf(values.Value)});
                 std.debug.print("   # vm.frames: {d}\n", .{self.vm.frame_count});
                 std.debug.print("   # compiler.current_compiler: {}\n", .{self.compiler.current_compiler != null});
@@ -261,7 +265,7 @@ pub const GarbageColletingAllocator = struct {
     }
 
     fn markCompilerRoots(self: *GarbageColletingAllocator) void {
-        var maybeCompiler: ?*core.compiler.FunctionCompiler = self.compiler.current_compiler;
+        var maybeCompiler: ?*frontend.FunctionCompiler = self.compiler.current_compiler;
         while (maybeCompiler) |fn_compiler| {
             self.markObject(fn_compiler.function.asObject());
             maybeCompiler = fn_compiler.enclosing;
@@ -278,20 +282,20 @@ pub const GarbageColletingAllocator = struct {
     }
 
     fn removeUnreferencedStrings(_: *GarbageColletingAllocator) void {
-        const strings = &globals.internedStrings;
+        const strings = &dough.internedStrings;
 
         std.debug.print("[interned] len: {d}\n", .{strings.count()});
         std.debug.print("[interned] keys.len: {d}\n", .{strings.keys().len});
         std.debug.print("[interned] vals.len: {d}\n", .{strings.values().len});
 
-        var interned = globals.internedStrings.iterator();
+        var interned = dough.internedStrings.iterator();
 
         while (interned.next()) |internedString| {
             std.debug.print("  [string] {s} = {*}\n", .{ internedString.key_ptr.*, internedString.value_ptr.* });
             if (!internedString.value_ptr.*.asObject().is_marked) {
                 std.debug.print("  [interned] remove {s}\n", .{internedString.key_ptr});
                 interned
-                    ._ = globals.internedStrings.swapRemove(internedString.key_ptr.*);
+                    ._ = dough.internedStrings.swapRemove(internedString.key_ptr.*);
             }
         }
         std.debug.print("[interned] len: {d}\n", .{strings.count()});
@@ -321,7 +325,7 @@ pub const GarbageColletingAllocator = struct {
                 }
 
                 if (unreached.is(.String)) {
-                    _ = globals.internedStrings.swapRemove(unreached.as(objects.DoughString).bytes);
+                    _ = dough.internedStrings.swapRemove(unreached.as(objects.DoughString).bytes);
                 }
                 unreached.deinit();
             }

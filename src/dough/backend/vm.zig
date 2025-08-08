@@ -1,14 +1,14 @@
 const std = @import("std");
 
 const types = @import("../types.zig");
-const globals = @import("../globals.zig");
-const config = @import("../config.zig");
-const util = @import("../util/util.zig");
-const core = @import("./core.zig");
+
+const dough = @import("dough");
+
+const config = dough.config;
 
 const SlotAddress = types.SlotAddress;
 const ConstantAddress = types.ConstantAddress;
-const OpCode = core.chunk.OpCode;
+const OpCode = dough.backend.OpCode;
 
 const values = @import("../values/values.zig");
 const Value = values.Value;
@@ -44,17 +44,17 @@ pub const VirtualMachine = struct {
 
     pub fn init(self: *VirtualMachine) !void {
         // TODO: make this more dynamic (maybe estimate size while compilation on function level or someting)
-        self.frames = try globals.allocator.alloc(CallFrame, FRAMES_MAX);
+        self.frames = try dough.allocator.alloc(CallFrame, FRAMES_MAX);
         self.frame_count = 0;
-        self.stack = try globals.allocator.alloc(Value, 255);
-        self.slots = std.ArrayList(Value).init(globals.allocator);
+        self.stack = try dough.allocator.alloc(Value, 255);
+        self.slots = std.ArrayList(Value).init(dough.allocator);
 
         self.resetStack();
     }
 
     pub fn deinit(self: *VirtualMachine) void {
-        globals.allocator.free(self.frames);
-        globals.allocator.free(self.stack);
+        dough.allocator.free(self.frames);
+        dough.allocator.free(self.stack);
 
         self.slots.deinit();
     }
@@ -74,7 +74,7 @@ pub const VirtualMachine = struct {
         _ = self.pop();
     }
     pub fn interpret(self: *VirtualMachine, source: []const u8) !void {
-        var compiler = core.compiler.ModuleCompiler.init(source);
+        var compiler = dough.frontend.compiler.ModuleCompiler.init(source);
         var module = try compiler.compile();
 
         self.push(Value.fromObject(module.function.?.asObject()));
@@ -263,7 +263,7 @@ pub const VirtualMachine = struct {
                         const str2 = self.peek(0).toObject().as(objects.DoughString).bytes;
                         const str1 = self.peek(1).toObject().as(objects.DoughString).bytes;
 
-                        var result = globals.allocator.alloc(u8, str1.len + str2.len) catch {
+                        var result = dough.allocator.alloc(u8, str1.len + str2.len) catch {
                             @panic("failed to concatinate strings!");
                         };
 
@@ -421,7 +421,7 @@ pub const VirtualMachine = struct {
 
     fn runtimeError(self: *VirtualMachine, comptime format: []const u8, args: anytype) void {
         // TODO: use DWARF standard for debugging informations (https://dwarfstd.org/)
-        util.errorReporter.runtimeError(format, args, self.frames, self.frame_count);
+        config.io_config.runtimeErrorReporter(format, args, self.frames, self.frame_count);
         self.resetStack();
     }
 };

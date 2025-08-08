@@ -1,21 +1,22 @@
 const std = @import("std");
 
-const types = @import("../types.zig");
-const globals = @import("../globals.zig");
-const util = @import("../util/util.zig");
+const dough = @import("dough");
+const types = dough.types;
+const frontend = dough.frontend;
+const backend = dough.backend;
 
-const core = @import("./core.zig");
-const Chunk = core.chunk.Chunk;
-const GarbageColletingAllocator = core.memory.GarbageColletingAllocator;
-const InterpretError = core.vm.InterpretError;
-const OpCode = core.chunk.OpCode;
-const Scanner = core.scanner.Scanner;
-const Token = core.token.Token;
-const TokenType = core.token.TokenType;
-const VirtualMachine = core.vm.VirtualMachine;
+const Scanner = frontend.Scanner;
+const Token = frontend.Token;
+const TokenType = frontend.TokenType;
 
-const values = @import("../values/values.zig");
+const VirtualMachine = backend.VirtualMachine;
+const OpCode = backend.OpCode;
+const InterpretError = backend.InterpretError;
+
+const values = dough.values;
+const Chunk = values.Chunk;
 const objects = values.objects;
+
 const DoughModule = objects.DoughModule;
 const DoughFunction = objects.DoughFunction;
 
@@ -192,7 +193,7 @@ pub const FunctionCompiler = struct {
         self.panic_mode = true;
         self.had_error = true;
 
-        util.errorReporter.compileError(token, message, args);
+        dough.config.io_config.compileErrorReporter(token, message, args);
     }
 };
 
@@ -299,11 +300,11 @@ pub const ModuleCompiler = struct {
         }
 
         const function = self.endCompiler();
-        try globals.tmpObjects.append(function.asObject());
+        try dough.tmpObjects.append(function.asObject());
 
         const module = DoughModule.init(function);
 
-        _ = globals.tmpObjects.pop();
+        _ = dough.tmpObjects.pop();
 
         if (compiler.had_error) {
             return InterpretError.CompileError;
@@ -318,9 +319,9 @@ pub const ModuleCompiler = struct {
 
         const function = self.current_compiler.?.function;
 
-        if (@import("../config.zig").debug_print_code) {
+        if (dough.config.debug_print_code) {
             // TODO: set module name / function name
-            @import("./debug.zig").disassemble_function(function);
+            backend.debug.disassemble_function(function);
         }
 
         self.current_compiler = self.current_compiler.?.enclosing;

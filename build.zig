@@ -28,6 +28,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const dough = b.createModule(.{
+        .root_source_file = b.path("src/dough/dough.zig"),
+    });
+    dough.addImport("dough", dough);
+
     // We will also create a module for our other entry point, 'main.zig'.
     const exe_mod = b.createModule(.{
         // `root_source_file` is the Zig "entry point" of the module. If a module
@@ -38,6 +43,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    exe_mod.addImport("dough", dough);
 
     // Modules can depend on one another using the `std.Build.Module.addImport` function.
     // This is what allows Zig source code to use `@import("foo")` where 'foo' is not a

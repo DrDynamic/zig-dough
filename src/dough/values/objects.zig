@@ -1,12 +1,11 @@
 const std = @import("std");
 
-const globals = @import("../globals.zig");
-const config = @import("../config.zig");
+const dough = @import("dough");
+const config = dough.config;
 
-const core = @import("../core/core.zig");
-const Chunk = core.chunk.Chunk;
-const VirtualMachine = core.vm.VirtualMachine;
-const InterpretError = core.vm.InterpretError;
+const Chunk = dough.values.Chunk;
+const VirtualMachine = dough.backend.VirtualMachine;
+const InterpretError = dough.backend.InterpretError;
 
 const slot_stack = @import("./slot_stack.zig");
 const SlotStack = slot_stack.SlotStack;
@@ -39,7 +38,7 @@ pub const DoughNativeFunction = struct {
     }
 
     pub fn deinit(self: *DoughNativeFunction) void {
-        globals.garbage_collector.allocator().destroy(self);
+        dough.garbage_collector.allocator().destroy(self);
     }
 
     pub inline fn asObject(self: *DoughNativeFunction) *DoughObject {
@@ -58,7 +57,7 @@ pub const DoughNativeFunction = struct {
     }
 
     pub fn toString(self: DoughNativeFunction) *DoughString {
-        const bytes = std.fmt.allocPrint(globals.allocator, "<native fn '{s}'>", .{self.name}) catch @panic("failed to create string!");
+        const bytes = std.fmt.allocPrint(dough.allocator, "<native fn '{s}'>", .{self.name}) catch @panic("failed to create string!");
         return DoughString.init(bytes);
     }
 };
@@ -71,16 +70,16 @@ pub const DoughObject = struct {
     is_marked: bool,
 
     pub fn init(comptime T: type, obj_type: ObjType) !*DoughObject {
-        const ptr = try globals.garbage_collector.allocator().create(T);
+        const ptr = try dough.garbage_collector.allocator().create(T);
         ptr.obj = DoughObject{
             .obj_type = obj_type,
 
-            .next = globals.garbage_collector.doughObjects,
+            .next = dough.garbage_collector.doughObjects,
             .nextGray = null,
             .is_marked = false,
         };
 
-        globals.garbage_collector.doughObjects = &ptr.obj;
+        dough.garbage_collector.doughObjects = &ptr.obj;
 
         if (config.debug_log_gc_alloc) {
             std.debug.print("   [init] {*} ({s}) {d} bytes\n", .{
@@ -170,7 +169,7 @@ pub const DoughModule = struct {
     }
 
     pub fn deinit(self: *DoughModule) void {
-        globals.garbage_collector.allocator().destroy(self);
+        dough.garbage_collector.allocator().destroy(self);
     }
 
     pub fn asObject(self: *DoughModule) *DoughObject {
@@ -210,7 +209,7 @@ pub const DoughClosure = struct {
     }
 
     pub fn deinit(self: *DoughClosure) void {
-        globals.garbage_collector.allocator().destroy(self);
+        dough.garbage_collector.allocator().destroy(self);
     }
 
     pub fn asObject(self: *DoughClosure) *DoughObject {
@@ -245,7 +244,7 @@ pub const DoughFunction = struct {
         function.* = .{
             .obj = obj.*,
             .arity = 0,
-            .chunk = Chunk.init(globals.allocator),
+            .chunk = Chunk.init(dough.allocator),
             .slots = SlotStack.init(),
         };
         return function;
@@ -254,7 +253,7 @@ pub const DoughFunction = struct {
     pub fn deinit(self: *DoughFunction) void {
         self.chunk.deinit();
         self.slots.deinit();
-        globals.garbage_collector.allocator().destroy(self);
+        dough.garbage_collector.allocator().destroy(self);
     }
 
     pub inline fn asObject(self: *DoughFunction) *DoughObject {
@@ -276,7 +275,7 @@ pub const DoughFunction = struct {
 
     pub fn toString(self: *DoughFunction) *DoughString {
         const name = self.name orelse "anonymous";
-        const bytes = std.fmt.allocPrint(globals.allocator, "<fn '{s}'>", .{name}) catch @panic("failed to create string!");
+        const bytes = std.fmt.allocPrint(dough.allocator, "<fn '{s}'>", .{name}) catch @panic("failed to create string!");
 
         return DoughString.init(bytes);
     }
@@ -287,8 +286,8 @@ pub const DoughString = struct {
     bytes: []const u8,
 
     pub fn init(bytes: []const u8) *DoughString {
-        if (globals.internedStrings.get(bytes)) |interned| {
-            globals.allocator.free(bytes);
+        if (dough.internedStrings.get(bytes)) |interned| {
+            dough.allocator.free(bytes);
             return interned;
         } else {
             const obj = DoughObject.init(DoughString, .String) catch {
@@ -301,22 +300,22 @@ pub const DoughString = struct {
                 .bytes = bytes,
             };
 
-            globals.tmpObjects.append(string.asObject()) catch {
+            dough.tmpObjects.append(string.asObject()) catch {
                 @panic("failed to create DoughString!");
             };
 
-            globals.internedStrings.put(bytes, string) catch {
+            dough.internedStrings.put(bytes, string) catch {
                 @panic("failed to create DoughString!");
             };
 
-            _ = globals.tmpObjects.pop();
+            _ = dough.tmpObjects.pop();
 
             return string;
         }
     }
 
     pub fn copy(bytes: []const u8) *DoughString {
-        const buffer = globals.allocator.alloc(u8, bytes.len) catch {
+        const buffer = dough.allocator.alloc(u8, bytes.len) catch {
             @panic("failed to create DoughString!");
         };
         @memcpy(buffer, bytes);
@@ -324,8 +323,8 @@ pub const DoughString = struct {
     }
 
     pub fn deinit(self: *DoughString) void {
-        globals.allocator.free(self.bytes);
-        globals.garbage_collector.allocator().destroy(self);
+        dough.allocator.free(self.bytes);
+        dough.garbage_collector.allocator().destroy(self);
     }
 
     pub inline fn asObject(self: *DoughString) *DoughObject {

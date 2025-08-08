@@ -1,4 +1,5 @@
 const std = @import("std");
+const dough = @import("dough");
 
 // debugging flags
 pub var debug_print_tokens = false;
@@ -16,6 +17,17 @@ pub fn debug_log_gc_any() bool {
 }
 
 pub var debug_stress_gc = true;
+
+//pub const IoConfig = struct {
+//    compileErrorReporter: *const fn (token: *const dough.frontend.Token, message: []const u8, args: anytype) void = undefined,
+//    runtimeErrorReporter: *const fn (format: []const u8, args: anytype, frames: []dough.backend.CallFrame, frameCount: usize) void = undefined,
+//    print: *const fn (format: []const u8, args: anytype) void = undefined,
+//};
+pub var io_config = .{
+    .compileErrorReporter = @import("./util/util.zig").errorReporter.compileError,
+    .runtimeErrorReporter = @import("./util/util.zig").errorReporter.runtimeError,
+    .print = @import("./util/util.zig").console.print,
+};
 
 // sizes and infos for sanity checks
 pub var MAX_FILE_SIZE: usize = std.math.maxInt(usize);

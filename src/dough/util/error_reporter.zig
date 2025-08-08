@@ -19,7 +19,7 @@ pub fn compileError(token: *const Token, comptime message: []const u8, args: any
     console.flushError();
 }
 
-pub fn runtimeError(comptime format: []const u8, args: anytype, frames: []core.vm.CallFrame, frameCount: usize) void {
+pub fn runtimeError(comptime format: []const u8, args: anytype, frames: []dough.backend.CallFrame, frameCount: usize) void {
     console.printErrorUnflushed(format, args);
     console.printErrorUnflushed("\n", .{});
 
@@ -45,7 +45,9 @@ pub fn runtimeError(comptime format: []const u8, args: anytype, frames: []core.v
     console.flushError();
 }
 
-const console = @import("console.zig");
-const core = @import("../core/core.zig");
-const Token = core.token.Token;
-const TokenType = core.token.TokenType;
+const console = @import("./console.zig");
+
+const dough = @import("dough");
+
+const Token = dough.frontend.Token;
+const TokenType = dough.frontend.TokenType;

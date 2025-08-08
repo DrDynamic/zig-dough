@@ -1,10 +1,10 @@
 const std = @import("std");
 
 const types = @import("../types.zig");
-const globals = @import("../globals.zig");
+const dough = @import("dough");
 const SlotAddress = types.SlotAddress;
 
-const config = @import("../config.zig");
+const config = dough.config;
 const Value = @import("./values.zig").Value;
 
 pub const StackError = error{
@@ -74,9 +74,9 @@ pub const SlotStack = struct {
 
     pub fn init() SlotStack {
         return .{
-            .slots = std.ArrayList(Value).init(globals.garbage_collector.allocator()),
-            .properties = std.ArrayList(SlotProperties).init(globals.garbage_collector.allocator()),
-            .addresses = std.StringHashMap(u24).init(globals.allocator),
+            .slots = std.ArrayList(Value).init(dough.garbage_collector.allocator()),
+            .properties = std.ArrayList(SlotProperties).init(dough.garbage_collector.allocator()),
+            .addresses = std.StringHashMap(u24).init(dough.allocator),
         };
     }
 
