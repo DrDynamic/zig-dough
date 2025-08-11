@@ -17,6 +17,7 @@ pub const StackError = error{
 };
 
 pub const SlotProperties = struct {
+    token: ?dough.frontend.Token = null,
     // TODO: increment scope only when necessary
     // a should have depth 0  and b should have depth 1
     // var a; {{{{{{{var b;}}}}}}}
@@ -33,6 +34,10 @@ pub const SlotProperties = struct {
     shadowsAddress: ?SlotAddress = null,
 
     type: ?Type = null,
+
+    isDeclared: bool = false,
+    isRead: bool = false,
+    isWritten: bool = false,
 
     pub fn debugPrint(self: SlotProperties) void {
         std.debug.print("[identifier: '{s}', depth: {d}, {s}", .{
@@ -118,10 +123,10 @@ pub const ReferenceStack = struct {
         }
     }
 
-    pub fn getProperties(self: ReferenceStack, identifier: []const u8) ?SlotProperties {
+    pub fn getProperties(self: ReferenceStack, identifier: []const u8) ?*SlotProperties {
         const address = self.addresses.get(identifier) orelse {
             return null;
         };
-        return self.properties.items[address];
+        return &self.properties.items[address];
     }
 };

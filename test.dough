@@ -1,4 +1,6 @@
 var a:String = "Lorem";
 a = 42;
 
+var b;
+
 print("a is", a)

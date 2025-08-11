@@ -63,6 +63,8 @@ pub const FunctionCompiler = struct {
     }
 
     fn endScope(self: *FunctionCompiler) void {
+        self.assertIdentifiers();
+
         self.scopeDepth -= 1;
 
         var references = &self.references;
@@ -77,7 +79,33 @@ pub const FunctionCompiler = struct {
         }
     }
 
-    pub fn declareIdentifier(self: *FunctionCompiler, identifier: ?[]const u8, readonly: bool) ?types.SlotAddress {
+    fn assertIdentifiers(self: *FunctionCompiler) void {
+        const props = self.references.properties.items;
+        for (props) |prop| {
+            if (!prop.isRead) {
+                // TODO: add warning: Variable not used
+                continue;
+            }
+
+            if (!prop.isWritten) {
+                if (prop.token) |token| {
+                    self.errAt(&token, "Variable not initialized", .{});
+                } else {
+                    self.err("Variable not initialized", .{});
+                }
+            }
+
+            if (prop.type == null) {
+                if (prop.token) |token| {
+                    self.errAt(&token, "Type could not be inferred", .{});
+                } else {
+                    self.err("Type could not be inferred", .{});
+                }
+            }
+        }
+    }
+
+    pub fn declareIdentifier(self: *FunctionCompiler, identifier: ?[]const u8, readonly: bool, token: ?Token) ?types.SlotAddress {
         if (identifier) |safeAnIdentifierAndNotNull| {
             const props = self.references.getProperties(safeAnIdentifierAndNotNull);
 
@@ -89,9 +117,11 @@ pub const FunctionCompiler = struct {
 
         return self.references.push(
             .{
+                .token = token,
                 .depth = self.scopeDepth,
                 .identifier = identifier,
                 .readonly = readonly,
+                .isDeclared = true,
             },
         ) catch |stackError| {
             self.err("Creating Identifier failed ({s}).", .{@errorName(stackError)});
@@ -105,6 +135,7 @@ pub const FunctionCompiler = struct {
         if (maybeAddress) |address| {
             self.emitOpCode(.GetSlot);
             self.emitSlotAddress(address);
+            self.references.properties.items[address].isRead = true;
             return;
         }
 
@@ -117,6 +148,7 @@ pub const FunctionCompiler = struct {
         if (maybeAddress) |address| {
             self.emitOpCode(.SetSlot);
             self.emitSlotAddress(address);
+            self.references.properties.items[address].isWritten = true;
             return;
         }
 
@@ -289,9 +321,13 @@ pub const ModuleCompiler = struct {
         self.scanner = Scanner.init(source);
 
         var compiler = try FunctionCompiler.init(&self.scanner);
+        const properties = &compiler.references.properties;
+
         self.current_compiler = &compiler;
 
-        _ = compiler.declareIdentifier(null, true);
+        const rootAddress = compiler.declareIdentifier(null, true, null).?;
+        properties.items[rootAddress].isWritten = true;
+        properties.items[rootAddress].type = .{ .Module = {} };
 
         self.current_compiler.?.beginScope();
 
@@ -300,7 +336,10 @@ pub const ModuleCompiler = struct {
             const address = compiler.addConstant(values.Value.fromObject(native.asObject()));
             compiler.emitOpCode(.GetConstant);
             compiler.emitConstantAddress(address);
-            _ = compiler.declareIdentifier(native.name, true);
+
+            const nativeAddress = compiler.declareIdentifier(native.name, true, null).?;
+            properties.items[nativeAddress].isWritten = true;
+            properties.items[nativeAddress].type = .{ .Void = {} };
         }
 
         self.advance();
@@ -333,6 +372,7 @@ pub const ModuleCompiler = struct {
             // TODO: set module name / function name
             backend.debug.disassemble_function(function);
         }
+
         var compiler = self.current_compiler.?;
         self.current_compiler = compiler.enclosing;
 
@@ -347,23 +387,25 @@ pub const ModuleCompiler = struct {
 
     fn declaration(self: *ModuleCompiler) void {
         if (self.match(.Var)) {
-            _ = self.parseIdentifier("Expect variable name.", false);
-            self.varDeclaration();
+            const address = self.parseIdentifier("Expect variable name.", false);
+            self.varDeclaration(address);
         } else if (self.match(.Const)) {
-            _ = self.parseIdentifier("Expect constant name.", true);
-            self.varDeclaration();
+            const address = self.parseIdentifier("Expect constant name.", true);
+            self.varDeclaration(address);
         } else {
             self.statement();
         }
     }
 
     fn varDeclaration(self: *ModuleCompiler, address: types.SlotAddress) void {
+        var props = &self.current_compiler.?.references.properties.items[address];
+
         if (self.match(.Colon)) {
-            const t = self.typeDefinition();
-            self.current_compiler.?.references.properties.items[address].type = t;
+            props.type = self.typeDefinition();
         }
 
         if (self.match(.Equal)) {
+            props.isWritten = true;
             self.expression();
         } else {
             self.current_compiler.?.emitOpCode(OpCode.PushUninitialized);
@@ -386,11 +428,11 @@ pub const ModuleCompiler = struct {
     }
 
     // Consumes an Identifier and reserve a slot in the current scope
-    fn parseIdentifier(self: *ModuleCompiler, message: []const u8, readonly: bool) ?u24 {
+    fn parseIdentifier(self: *ModuleCompiler, message: []const u8, readonly: bool) types.SlotAddress {
         self.consume(TokenType.Identifier, "{s}", .{message});
         const name = &self.scanner.previous;
 
-        return self.current_compiler.?.declareIdentifier(name.lexeme.?, readonly);
+        return self.current_compiler.?.declareIdentifier(name.lexeme.?, readonly, name.*) orelse std.math.maxInt(types.SlotAddress);
     }
 
     fn statement(self: *ModuleCompiler) void {
