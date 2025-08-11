@@ -129,26 +129,51 @@ pub const FunctionCompiler = struct {
         };
     }
 
-    pub fn readIdentifier(self: *FunctionCompiler, identifier: []const u8) void {
+    pub fn readIdentifier(self: *FunctionCompiler, identifier: []const u8, maybe_value_type: ?values.Type) ?values.Type {
         const maybeAddress = self.references.addresses.get(identifier);
 
         if (maybeAddress) |address| {
+            var props = &self.references.properties.items[address];
+            if (maybe_value_type) |value_type| {
+                if (props.type) |var_type| {
+                    if (!value_type.equals(var_type)) {
+                        self.err("mixing types is not allowed", .{});
+                    }
+                } else {
+                    self.err("variable not initialized", .{});
+                }
+            }
+
             self.emitOpCode(.GetSlot);
             self.emitSlotAddress(address);
-            self.references.properties.items[address].isRead = true;
-            return;
+            props.isRead = true;
+            return props.type;
         }
 
-        self.err("Undefined identifier.", .{});
+        self.err("Undefined identifier '{s}'.", .{identifier});
+        return null;
     }
 
-    pub fn writeIdentifier(self: *FunctionCompiler, identifier: []const u8) void {
+    pub fn writeIdentifier(self: *FunctionCompiler, identifier: []const u8, maybe_value_type: ?values.Type) void {
         const maybeAddress = self.references.addresses.get(identifier);
 
         if (maybeAddress) |address| {
+            var props = &self.references.properties.items[address];
+
+            if (maybe_value_type) |value_type| {
+                if (props.type) |varType| {
+                    if (!varType.equals(value_type)) {
+                        self.err("can not assign {} to {}", .{ value_type, varType });
+                    }
+                }
+            } else {
+                self.err("Type could not be inferred", .{});
+            }
+
             self.emitOpCode(.SetSlot);
             self.emitSlotAddress(address);
-            self.references.properties.items[address].isWritten = true;
+
+            props.isWritten = true;
             return;
         }
 
@@ -240,15 +265,12 @@ pub const FunctionCompiler = struct {
 
 const CompilationContext = struct {
     can_assign: bool = false,
-    pub fn init(can_assign: bool) CompilationContext {
-        return .{
-            .can_assign = can_assign,
-        };
-    }
+
+    type: ?values.Type = null,
 };
 
 pub const ModuleCompiler = struct {
-    const ParseFn = fn (self: *ModuleCompiler, context: CompilationContext) void;
+    const ParseFn = fn (self: *ModuleCompiler, context: *CompilationContext) void;
     const ParseRule = struct {
         prefix: ?*const ParseFn = null,
         infix: ?*const ParseFn = null,
@@ -406,7 +428,15 @@ pub const ModuleCompiler = struct {
 
         if (self.match(.Equal)) {
             props.isWritten = true;
-            self.expression();
+
+            var context = CompilationContext{};
+            self.expression(&context);
+
+            if (props.type) |propType| {
+                if (context.type != null and !propType.equals(context.type.?)) {
+                    self.current_compiler.?.err("can not assign {} to {}", .{ context.type.?, propType });
+                }
+            }
         } else {
             self.current_compiler.?.emitOpCode(OpCode.PushUninitialized);
         }
@@ -452,27 +482,27 @@ pub const ModuleCompiler = struct {
             // TODO: make semikolons optionals (check for new line instead?)
             self.current_compiler.?.emitReturn();
         } else {
-            self.expression();
+            self.expression(null);
             _ = self.match(TokenType.Semicolon);
             self.current_compiler.?.emitByte(@intFromEnum(OpCode.Return));
         }
     }
 
     fn expressionStatement(self: *ModuleCompiler) void {
-        self.expression();
+        self.expression(null);
         _ = self.match(TokenType.Semicolon);
         self.current_compiler.?.emitByte(@intFromEnum(OpCode.Pop));
     }
 
-    fn expression(self: *ModuleCompiler) void {
-        self.parsePrecedence(.Assignment);
+    fn expression(self: *ModuleCompiler, context: ?*CompilationContext) void {
+        self.parsePrecedence(.Assignment, context);
     }
 
     fn expressionList(self: *ModuleCompiler, endToken: TokenType, comptime too_many_error: []const u8) u8 {
         var arg_count: u8 = 0;
 
         while (!self.check(endToken)) {
-            self.expression();
+            self.expression(null);
             if (arg_count == 255) {
                 self.current_compiler.?.err(too_many_error, .{});
             }
@@ -484,41 +514,76 @@ pub const ModuleCompiler = struct {
         return arg_count;
     }
 
-    fn dot(self: *ModuleCompiler, _: CompilationContext) void {
+    fn dot(self: *ModuleCompiler, _: *CompilationContext) void {
         self.consume(TokenType.Identifier, "Expect property name after '.'.", .{});
     }
 
-    fn literal(self: *ModuleCompiler, _: CompilationContext) void {
+    fn literal(self: *ModuleCompiler, context: *CompilationContext) void {
         switch (self.scanner.previous.token_type.?) {
-            .Null => self.current_compiler.?.emitOpCode(.PushNull),
-            .True => self.current_compiler.?.emitOpCode(.PushTrue),
-            .False => self.current_compiler.?.emitOpCode(.PushFalse),
+            .Null => {
+                if (context.type) |valueType| {
+                    if (valueType != .Null) {
+                        self.current_compiler.?.err("mixing types is not allowed", .{});
+                    }
+                } else {
+                    context.type = values.Type.makeNull();
+                }
+                self.current_compiler.?.emitOpCode(.PushNull);
+            },
+            .True => {
+                if (context.type) |valueType| {
+                    if (valueType != .Bool) {
+                        self.current_compiler.?.err("mixing types is not allowed", .{});
+                    }
+                } else {
+                    context.type = values.Type.makeBool();
+                }
+                self.current_compiler.?.emitOpCode(.PushTrue);
+            },
+            .False => {
+                if (context.type) |valueType| {
+                    if (valueType != .Bool) {
+                        self.current_compiler.?.err("mixing types is not allowed", .{});
+                    }
+                } else {
+                    context.type = values.Type.makeBool();
+                }
+                self.current_compiler.?.emitOpCode(.PushFalse);
+            },
             else => return,
         }
     }
 
-    fn grouping(self: *ModuleCompiler, _: CompilationContext) void {
-        self.expression();
+    fn grouping(self: *ModuleCompiler, _: *CompilationContext) void {
+        self.expression(null);
         self.consume(.RightParen, "Expect ')' after expression", .{});
     }
 
-    fn number(self: *ModuleCompiler, _: CompilationContext) void {
+    fn number(self: *ModuleCompiler, context: *CompilationContext) void {
+        if (context.type) |valueType| {
+            if (valueType != .Number) {
+                self.current_compiler.?.err("mixing types is not allowed", .{});
+            }
+        } else {
+            context.type = values.Type.makeNumber();
+        }
+
         if (std.fmt.parseFloat(f64, self.scanner.previous.lexeme.?)) |value| {
             const address = self.current_compiler.?.addConstant(values.Value.fromNumber(value));
             self.current_compiler.?.emitOpCode(.GetConstant);
             self.current_compiler.?.emitConstantAddress(address);
         } else |e| switch (e) {
             error.InvalidCharacter => {
-                self.current_compiler.?.err("fsailed to parse number", .{});
+                self.current_compiler.?.err("failed to parse number", .{});
                 return;
             },
         }
     }
 
-    fn unary(self: *ModuleCompiler, _: CompilationContext) void {
+    fn unary(self: *ModuleCompiler, _: *CompilationContext) void {
         const operatorType = self.scanner.previous.token_type.?;
 
-        self.parsePrecedence(.Unary);
+        self.parsePrecedence(.Unary, null);
 
         switch (operatorType) {
             .Bang => self.current_compiler.?.emitOpCode(.LogicalNot),
@@ -527,11 +592,11 @@ pub const ModuleCompiler = struct {
         }
     }
 
-    fn binary(self: *ModuleCompiler, _: CompilationContext) void {
+    fn binary(self: *ModuleCompiler, context: *CompilationContext) void {
         const operator_type = self.scanner.previous.token_type.?;
         const rule = self.parse_rules.getPtrConst(operator_type);
 
-        self.parsePrecedence(@enumFromInt(@intFromEnum(rule.precedence) + 1));
+        self.parsePrecedence(@enumFromInt(@intFromEnum(rule.precedence) + 1), context);
 
         switch (operator_type) {
             .BangEqual => self.current_compiler.?.emitOpCode(.NotEqual),
@@ -549,20 +614,20 @@ pub const ModuleCompiler = struct {
         }
     }
 
-    fn and_(self: *ModuleCompiler, _: CompilationContext) void {
+    fn and_(self: *ModuleCompiler, _: *CompilationContext) void {
         const end_jump = self.current_compiler.?.emitJump(.JumpIfFalse);
 
         self.current_compiler.?.emitOpCode(.Pop);
-        self.parsePrecedence(.And);
+        self.parsePrecedence(.And, null);
 
         self.current_compiler.?.patchJump(end_jump);
     }
 
-    fn or_(self: *ModuleCompiler, _: CompilationContext) void {
+    fn or_(self: *ModuleCompiler, _: *CompilationContext) void {
         const end_jump = self.current_compiler.?.emitJump(.JumpIfTrue);
 
         self.current_compiler.?.emitOpCode(.Pop);
-        self.parsePrecedence(.Or);
+        self.parsePrecedence(.Or, null);
 
         self.current_compiler.?.patchJump(end_jump);
     }
@@ -575,7 +640,7 @@ pub const ModuleCompiler = struct {
         self.consume(.RightBrace, "Expect '}}' after block.", .{});
     }
 
-    fn parsePrecedence(self: *ModuleCompiler, precedence: Precedence) void {
+    fn parsePrecedence(self: *ModuleCompiler, precedence: Precedence, compilation_context: ?*CompilationContext) void {
         self.advance();
         const parse_rule: *const ParseRule = self.parse_rules.getPtrConst(self.scanner.previous.token_type.?);
         const prefix_rule: *const ParseFn = parse_rule.prefix orelse {
@@ -584,8 +649,14 @@ pub const ModuleCompiler = struct {
             return;
         };
 
-        const can_assign = @intFromEnum(precedence) <= @intFromEnum(Precedence.Assignment);
-        const context = CompilationContext.init(can_assign);
+        var context: *CompilationContext = undefined;
+        if (compilation_context) |assured| {
+            context = assured;
+        } else {
+            var ctx = CompilationContext{};
+            context = &ctx;
+        }
+        context.can_assign = @intFromEnum(precedence) <= @intFromEnum(Precedence.Assignment);
 
         // Compile the prefix
         prefix_rule(self, context);
@@ -605,15 +676,19 @@ pub const ModuleCompiler = struct {
         }
     }
 
-    fn identifier(self: *ModuleCompiler, context: CompilationContext) void {
+    fn identifier(self: *ModuleCompiler, context: *CompilationContext) void {
         const name = self.scanner.previous;
 
         if (context.can_assign and self.match(TokenType.Equal)) {
             // TODO: check access intent (can write ?)
-            self.expression();
-            self.current_compiler.?.writeIdentifier(name.lexeme.?);
+            self.expression(context);
+
+            self.current_compiler.?.writeIdentifier(name.lexeme.?, context.type);
         } else {
-            self.current_compiler.?.readIdentifier(name.lexeme.?);
+            const maybe_var_type = self.current_compiler.?.readIdentifier(name.lexeme.?, context.type);
+            if (maybe_var_type) |var_type| {
+                context.type = var_type;
+            }
         }
     }
 
@@ -622,7 +697,15 @@ pub const ModuleCompiler = struct {
         return values.Value.fromObject(dstring.asObject());
     }
 
-    fn string(self: *ModuleCompiler, _: CompilationContext) void {
+    fn string(self: *ModuleCompiler, context: *CompilationContext) void {
+        if (context.type) |valueType| {
+            if (valueType != .String) {
+                self.current_compiler.?.err("mixing types is not allowed", .{});
+            }
+        } else {
+            context.type = values.Type.makeString();
+        }
+
         const chars = self.scanner.previous.lexeme.?[0..self.scanner.previous.lexeme.?.len];
         const dstring = self.stringValue(chars);
         const address = self.current_compiler.?.addConstant(dstring);
@@ -630,7 +713,7 @@ pub const ModuleCompiler = struct {
         self.current_compiler.?.emitConstantAddress(address);
     }
 
-    fn call(self: *ModuleCompiler, _: CompilationContext) void {
+    fn call(self: *ModuleCompiler, _: *CompilationContext) void {
         const arg_count = self.expressionList(TokenType.RightParen, "Can't have more than 255 arguments.");
         self.consume(TokenType.RightParen, "Expect ')' after arguments.", .{});
         self.current_compiler.?.emitOpCode(.Call);

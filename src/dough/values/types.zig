@@ -18,6 +18,56 @@ pub const Type = union(enum) {
         return Type{ .Void = {} };
     }
 
+    pub fn makeNull() Type {
+        return Type{ .Null = {} };
+    }
+
+    pub fn makeBool() Type {
+        return Type{ .Bool = {} };
+    }
+
+    pub fn makeNumber() Type {
+        return Type{ .Number = {} };
+    }
+
+    pub fn makeString() Type {
+        return Type{ .String = {} };
+    }
+
+    pub fn makeFunction() Type {
+        return Type{ .Function = undefined };
+    }
+
+    pub fn makeModule() Type {
+        return Type{ .Module = {} };
+    }
+
+    pub fn equals(self: Type, other: Type) bool {
+        return switch (self) {
+            else => std.meta.activeTag(self) == std.meta.activeTag(other),
+        };
+    }
+
+    pub fn format(
+        self: Type,
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        out_stream: anytype,
+    ) !void {
+        _ = fmt;
+        _ = options;
+
+        switch (self) {
+            .Void => try out_stream.print("Void", .{}),
+            .Null => try out_stream.print("Null", .{}),
+            .Bool => try out_stream.print("Bool", .{}),
+            .Number => try out_stream.print("Number", .{}),
+            .String => try out_stream.print("String", .{}),
+            .Function => try out_stream.print("Function () => Void", .{}),
+            .Module => try out_stream.print("Module", .{}),
+        }
+    }
+
     pub fn fromToken(token: Token) !Type {
         return switch (token.lexeme.?[0]) {
             'V' => matchIdentifier(token, "oid", 1, 3, .Void),

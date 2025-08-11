@@ -1,6 +1,16 @@
-var a:String = "Lorem";
-a = 42;
+print(!"2");
 
-var b;
 
-print("a is", a)
+//var d = "";
+//var e = 0;
+//
+//d = e;
+//
+//var f;
+//f = d;
+//f = e;
+//
+//var c;
+//a = c;
+//
+//print("a is",test,  a, b,  d)

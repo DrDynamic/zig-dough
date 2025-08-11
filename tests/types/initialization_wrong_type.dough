@@ -1,0 +1,1 @@
+var a:String = 42; // expect compile error: Error at '42': can not assign Number to String
