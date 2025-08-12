@@ -249,6 +249,14 @@ pub const FunctionCompiler = struct {
         };
     }
 
+    pub fn assertType(self: *FunctionCompiler, a: values.Type, b: ?values.Type, comptime wrongType: []const u8) void {
+        if (b) |assured_b| {
+            if (!a.equals(assured_b)) {
+                self.err(wrongType, .{});
+            }
+        }
+    }
+
     pub fn err(self: *FunctionCompiler, comptime message: []const u8, args: anytype) void {
         self.errAt(&self.scanner.previous, message, args);
     }
@@ -629,15 +637,72 @@ pub const ModuleCompiler = struct {
         switch (operator_type) {
             .BangEqual => self.current_compiler.?.emitOpCode(.NotEqual),
             .EqualEqual => self.current_compiler.?.emitOpCode(.Equal),
-            .Greater => self.current_compiler.?.emitOpCode(.Greater),
-            .GreaterEqual => self.current_compiler.?.emitOpCode(.GreaterEqual),
-            .Less => self.current_compiler.?.emitOpCode(.Less),
-            .LessEqual => self.current_compiler.?.emitOpCode(.LessEqual),
 
-            .Plus => self.current_compiler.?.emitOpCode(.Add),
-            .Minus => self.current_compiler.?.emitOpCode(.Subtract),
-            .Star => self.current_compiler.?.emitOpCode(.Multiply),
-            .Slash => self.current_compiler.?.emitOpCode(.Divide),
+            .Greater => {
+                self.current_compiler.?.assertType(
+                    .Number,
+                    context.shared.type,
+                    "Unsupported operand types: must both be numbers",
+                );
+                self.current_compiler.?.emitOpCode(.Greater);
+            },
+            .GreaterEqual => {
+                self.current_compiler.?.assertType(
+                    .Number,
+                    context.shared.type,
+                    "Unsupported operand types: must both be numbers",
+                );
+                self.current_compiler.?.emitOpCode(.GreaterEqual);
+            },
+            .Less => {
+                self.current_compiler.?.assertType(
+                    .Number,
+                    context.shared.type,
+                    "Unsupported operand types: must both be numbers",
+                );
+                self.current_compiler.?.emitOpCode(.Less);
+            },
+            .LessEqual => {
+                self.current_compiler.?.assertType(
+                    .Number,
+                    context.shared.type,
+                    "Unsupported operand types: must both be numbers",
+                );
+                self.current_compiler.?.emitOpCode(.LessEqual);
+            },
+
+            .Plus => {
+                if (context.shared.type) |value_type| {
+                    if (value_type != .String and value_type != .Number) {
+                        self.current_compiler.?.err("Unsupported operand types: must both be numbers or strings", .{});
+                    }
+                }
+                self.current_compiler.?.emitOpCode(.Add);
+            },
+            .Minus => {
+                self.current_compiler.?.assertType(
+                    .Number,
+                    context.shared.type,
+                    "Unsupported operand types: must both be numbers",
+                );
+                self.current_compiler.?.emitOpCode(.Subtract);
+            },
+            .Star => {
+                self.current_compiler.?.assertType(
+                    .Number,
+                    context.shared.type,
+                    "Unsupported operand types: must both be numbers",
+                );
+                self.current_compiler.?.emitOpCode(.Multiply);
+            },
+            .Slash => {
+                self.current_compiler.?.assertType(
+                    .Number,
+                    context.shared.type,
+                    "Unsupported operand types: must both be numbers",
+                );
+                self.current_compiler.?.emitOpCode(.Divide);
+            },
             else => return,
         }
     }

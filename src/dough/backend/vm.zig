@@ -164,12 +164,6 @@ pub const VirtualMachine = struct {
                 },
                 .GetSlot => {
                     const address = self.readSlotAddress(frame);
-
-                    if (Value.isUninitialized(frame.slots[address])) {
-                        self.runtimeError("cannot access uninitialized variable", .{});
-                        return InterpretError.RuntimeError;
-                    }
-
                     self.push(frame.slots[address]);
                 },
                 .SetSlot => {
@@ -189,13 +183,8 @@ pub const VirtualMachine = struct {
 
                 .LogicalNot => self.push(Value.fromBoolean(self.pop().isFalsey())),
                 .Negate => {
-                    if (self.peek(0).isNumber()) {
-                        const negated = -self.pop().toNumber();
-                        self.push(Value.fromNumber(negated));
-                    } else {
-                        self.runtimeError("Operand must be a number.", .{});
-                        return InterpretError.RuntimeError;
-                    }
+                    const negated = -self.pop().toNumber();
+                    self.push(Value.fromNumber(negated));
                 },
 
                 .Equal => {
@@ -209,55 +198,32 @@ pub const VirtualMachine = struct {
                     self.push(Value.fromBoolean(!a.equals(b)));
                 },
                 .Greater => {
-                    if (self.peek(0).isNumber() and self.peek(1).isNumber()) {
-                        const num2 = self.pop().toNumber();
-                        const num1 = self.pop().toNumber();
+                    const num2 = self.pop().toNumber();
+                    const num1 = self.pop().toNumber();
 
-                        self.push(Value.fromBoolean(num1 > num2));
-                    } else {
-                        // TODO: show types instead of values (e.g. 13 > "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {} > {} (must be numbers)", .{ self.peek(1), self.peek(0) });
-                        return InterpretError.RuntimeError;
-                    }
+                    self.push(Value.fromBoolean(num1 > num2));
                 },
                 .GreaterEqual => {
-                    if (self.peek(0).isNumber() and self.peek(1).isNumber()) {
-                        const num2 = self.pop().toNumber();
-                        const num1 = self.pop().toNumber();
+                    const num2 = self.pop().toNumber();
+                    const num1 = self.pop().toNumber();
 
-                        self.push(Value.fromBoolean(num1 >= num2));
-                    } else {
-                        // TODO: show types instead of values (e.g. 13 >= "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {} >= {} (must be numbers)", .{ self.peek(1), self.peek(0) });
-                        return InterpretError.RuntimeError;
-                    }
+                    self.push(Value.fromBoolean(num1 >= num2));
                 },
                 .Less => {
-                    if (self.peek(0).isNumber() and self.peek(1).isNumber()) {
-                        const num2 = self.pop().toNumber();
-                        const num1 = self.pop().toNumber();
+                    const num2 = self.pop().toNumber();
+                    const num1 = self.pop().toNumber();
 
-                        self.push(Value.fromBoolean(num1 < num2));
-                    } else {
-                        // TODO: show types instead of values (e.g. 13 < "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {} < {} (must be numbers)", .{ self.peek(1), self.peek(0) });
-                        return InterpretError.RuntimeError;
-                    }
+                    self.push(Value.fromBoolean(num1 < num2));
                 },
                 .LessEqual => {
-                    if (self.peek(0).isNumber() and self.peek(1).isNumber()) {
-                        const num2 = self.pop().toNumber();
-                        const num1 = self.pop().toNumber();
+                    const num2 = self.pop().toNumber();
+                    const num1 = self.pop().toNumber();
 
-                        self.push(Value.fromBoolean(num1 <= num2));
-                    } else {
-                        // TODO: show types instead of values (e.g. 13 <= "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {} <= {} (must be numbers)", .{ self.peek(1), self.peek(0) });
-                        return InterpretError.RuntimeError;
-                    }
+                    self.push(Value.fromBoolean(num1 <= num2));
                 },
 
                 .Add => {
+                    // TODO: put string concat in separate opcode
                     if (self.peek(0).isString() and self.peek(1).isString()) {
                         // don't let the garbage collector grab this stings!
                         const str2 = self.peek(0).toObject().as(objects.DoughString).bytes;
@@ -276,52 +242,30 @@ pub const VirtualMachine = struct {
 
                         const dstring = objects.DoughString.init(result);
                         self.push(Value.fromObject(dstring.asObject()));
-                    } else if (self.peek(0).isNumber() and self.peek(1).isNumber()) {
+                    } else {
                         const num2 = self.pop().toNumber();
                         const num1 = self.pop().toNumber();
 
                         self.push(Value.fromNumber(num1 + num2));
-                    } else {
-                        // TODO: show types instead of values (e.g. 13 + "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {} + {} (must both be numbers or strings)", .{ self.peek(1), self.peek(0) });
-                        return InterpretError.RuntimeError;
                     }
                 },
                 .Subtract => {
-                    if (self.peek(0).isNumber() and self.peek(1).isNumber()) {
-                        const num2 = self.pop().toNumber();
-                        const num1 = self.pop().toNumber();
+                    const num2 = self.pop().toNumber();
+                    const num1 = self.pop().toNumber();
 
-                        self.push(Value.fromNumber(num1 - num2));
-                    } else {
-                        // TODO: show types instead of values (e.g. 13 - "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {} - {} (must be numbers)", .{ self.peek(1), self.peek(0) });
-                        return InterpretError.RuntimeError;
-                    }
+                    self.push(Value.fromNumber(num1 - num2));
                 },
                 .Multiply => {
-                    if (self.peek(0).isNumber() and self.peek(1).isNumber()) {
-                        const num2 = self.pop().toNumber();
-                        const num1 = self.pop().toNumber();
+                    const num2 = self.pop().toNumber();
+                    const num1 = self.pop().toNumber();
 
-                        self.push(Value.fromNumber(num1 * num2));
-                    } else {
-                        // TODO: show types instead of values (e.g. 13 * "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {} * {} (must be numbers)", .{ self.peek(1), self.peek(0) });
-                        return InterpretError.RuntimeError;
-                    }
+                    self.push(Value.fromNumber(num1 * num2));
                 },
                 .Divide => {
-                    if (self.peek(0).isNumber() and self.peek(1).isNumber()) {
-                        const num2 = self.pop().toNumber();
-                        const num1 = self.pop().toNumber();
+                    const num2 = self.pop().toNumber();
+                    const num1 = self.pop().toNumber();
 
-                        self.push(Value.fromNumber(num1 / num2));
-                    } else {
-                        // TODO: show types instead of values (e.g. 13 / "37" leads to iretating error)
-                        self.runtimeError("Unsupported operand types: {} / {} (must be numbers)", .{ self.peek(1), self.peek(0) });
-                        return InterpretError.RuntimeError;
-                    }
+                    self.push(Value.fromNumber(num1 / num2));
                 },
 
                 // Jumps
