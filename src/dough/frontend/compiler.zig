@@ -673,11 +673,14 @@ pub const ModuleCompiler = struct {
 
             .Plus => {
                 if (context.shared.type) |value_type| {
-                    if (value_type != .String and value_type != .Number) {
+                    if (value_type == .String) {
+                        self.current_compiler.?.emitOpCode(.ConcatString);
+                    } else if (value_type == .Number) {
+                        self.current_compiler.?.emitOpCode(.Add);
+                    } else {
                         self.current_compiler.?.err("Unsupported operand types: must both be numbers or strings", .{});
                     }
                 }
-                self.current_compiler.?.emitOpCode(.Add);
             },
             .Minus => {
                 self.current_compiler.?.assertType(

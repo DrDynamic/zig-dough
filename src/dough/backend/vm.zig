@@ -181,6 +181,26 @@ pub const VirtualMachine = struct {
                     try self.callValue(self.peek(argCount), argCount);
                 },
 
+                .ConcatString => {
+                    // don't let the garbage collector grab this stings!
+                    const str2 = self.peek(0).toObject().as(objects.DoughString).bytes;
+                    const str1 = self.peek(1).toObject().as(objects.DoughString).bytes;
+
+                    var result = dough.allocator.alloc(u8, str1.len + str2.len) catch {
+                        @panic("failed to concatinate strings!");
+                    };
+
+                    @memcpy(result[0..str1.len], str1);
+                    @memcpy(result[str1.len..], str2);
+
+                    // now the gabage collect can have them...
+                    _ = self.pop();
+                    _ = self.pop();
+
+                    const dstring = objects.DoughString.init(result);
+                    self.push(Value.fromObject(dstring.asObject()));
+                },
+
                 .LogicalNot => self.push(Value.fromBoolean(self.pop().isFalsey())),
                 .Negate => {
                     const negated = -self.pop().toNumber();
@@ -223,31 +243,10 @@ pub const VirtualMachine = struct {
                 },
 
                 .Add => {
-                    // TODO: put string concat in separate opcode
-                    if (self.peek(0).isString() and self.peek(1).isString()) {
-                        // don't let the garbage collector grab this stings!
-                        const str2 = self.peek(0).toObject().as(objects.DoughString).bytes;
-                        const str1 = self.peek(1).toObject().as(objects.DoughString).bytes;
+                    const num2 = self.pop().toNumber();
+                    const num1 = self.pop().toNumber();
 
-                        var result = dough.allocator.alloc(u8, str1.len + str2.len) catch {
-                            @panic("failed to concatinate strings!");
-                        };
-
-                        @memcpy(result[0..str1.len], str1);
-                        @memcpy(result[str1.len..], str2);
-
-                        // now the gabage collect can have them...
-                        _ = self.pop();
-                        _ = self.pop();
-
-                        const dstring = objects.DoughString.init(result);
-                        self.push(Value.fromObject(dstring.asObject()));
-                    } else {
-                        const num2 = self.pop().toNumber();
-                        const num1 = self.pop().toNumber();
-
-                        self.push(Value.fromNumber(num1 + num2));
-                    }
+                    self.push(Value.fromNumber(num1 + num2));
                 },
                 .Subtract => {
                     const num2 = self.pop().toNumber();
@@ -299,7 +298,6 @@ pub const VirtualMachine = struct {
                     self.push(Value.fromBoolean(false));
                 },
                 .PushUninitialized => {
-                    //self.push(Value.fromNumber(13.37));
                     self.push(Value.makeUninitialized());
                 },
                 .Pop => {

@@ -42,6 +42,8 @@ pub fn disassemble_instruction(chunk: *Chunk, offset: usize) usize {
         // Value interaction
         .Call => byteDecimalInstruction("CALL", chunk, offset),
 
+        .ConcatString => simpleInstruction("CONCAT_STRING", offset),
+
         .LogicalNot => simpleInstruction("LOGICAL_NOT", offset),
         .Negate => simpleInstruction("NEGATE", offset),
 

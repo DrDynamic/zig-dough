@@ -10,6 +10,8 @@ pub const OpCode = enum(u8) {
     // Value interaction
     Call,
 
+    ConcatString,
+
     LogicalNot,
     Negate,
 
