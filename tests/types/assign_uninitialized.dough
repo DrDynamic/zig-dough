@@ -1,0 +1,3 @@
+var a:String;
+var c;
+a = c; // expect compile error: Error at 'c': Variable not initialized

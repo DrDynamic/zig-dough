@@ -1,1 +1,1 @@
-true + "s"; // expect runtime error: Unsupported operand types: true + s (must both be numbers or strings)
+true + "s"; // expect compile error: Error at 's': mixing types is not allowed

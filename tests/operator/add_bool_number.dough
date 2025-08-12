@@ -1,1 +1,1 @@
-true + 123; // expect runtime error: Unsupported operand types: true + 123 (must both be numbers or strings)
+true + 123; // expect compile error: Error at '123': mixing types is not allowed

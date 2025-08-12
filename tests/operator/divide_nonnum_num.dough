@@ -1,1 +1,1 @@
-"1" / 1; // expect runtime error: Unsupported operand types: 1 / 1 (must be numbers)
+"1" / 1; // expect compile error: Error at '1': mixing types is not allowed

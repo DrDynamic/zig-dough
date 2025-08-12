@@ -121,7 +121,6 @@ pub const FunctionCompiler = struct {
                 .depth = self.scopeDepth,
                 .identifier = identifier,
                 .readonly = readonly,
-                .isDeclared = true,
             },
         ) catch |stackError| {
             self.err("Creating Identifier failed ({s}).", .{@errorName(stackError)});
@@ -134,6 +133,11 @@ pub const FunctionCompiler = struct {
 
         if (maybeAddress) |address| {
             var props = &self.references.properties.items[address];
+
+            if (!props.isDeclared) {
+                self.err("Can't read variable in its own initializer.", .{});
+            }
+
             if (maybe_value_type) |value_type| {
                 if (props.type) |var_type| {
                     if (!value_type.equals(var_type)) {
@@ -150,7 +154,7 @@ pub const FunctionCompiler = struct {
             return props.type;
         }
 
-        self.err("Undefined identifier '{s}'.", .{identifier});
+        self.err("Undefined identifier.", .{});
         return null;
     }
 
@@ -165,9 +169,11 @@ pub const FunctionCompiler = struct {
                     if (!varType.equals(value_type)) {
                         self.err("can not assign {} to {}", .{ value_type, varType });
                     }
+                } else {
+                    props.type = value_type;
                 }
             } else {
-                self.err("Type could not be inferred", .{});
+                self.err("Variable not initialized", .{});
             }
 
             self.emitOpCode(.SetSlot);
@@ -263,14 +269,17 @@ pub const FunctionCompiler = struct {
     }
 };
 
-const CompilationContext = struct {
-    can_assign: bool = false,
-
+const SharedContext = struct {
     type: ?values.Type = null,
 };
 
+const CompilationContext = struct {
+    can_assign: bool = false,
+    shared: *SharedContext = undefined,
+};
+
 pub const ModuleCompiler = struct {
-    const ParseFn = fn (self: *ModuleCompiler, context: *CompilationContext) void;
+    const ParseFn = fn (self: *ModuleCompiler, context: CompilationContext) void;
     const ParseRule = struct {
         prefix: ?*const ParseFn = null,
         infix: ?*const ParseFn = null,
@@ -282,6 +291,8 @@ pub const ModuleCompiler = struct {
     scanner: Scanner = undefined,
     current_compiler: ?*FunctionCompiler = null,
     had_error: bool = false,
+
+    recursion_count: u32 = 0,
 
     parse_rules: ParseRules = ParseRules.init(.{
         // Single-character tokens.
@@ -360,6 +371,7 @@ pub const ModuleCompiler = struct {
             compiler.emitConstantAddress(address);
 
             const nativeAddress = compiler.declareIdentifier(native.name, true, null).?;
+            properties.items[nativeAddress].isDeclared = true;
             properties.items[nativeAddress].isWritten = true;
             properties.items[nativeAddress].type = .{ .Void = {} };
         }
@@ -409,11 +421,15 @@ pub const ModuleCompiler = struct {
 
     fn declaration(self: *ModuleCompiler) void {
         if (self.match(.Var)) {
-            const address = self.parseIdentifier("Expect variable name.", false);
-            self.varDeclaration(address);
+            const maybe_address = self.parseIdentifier("Expect variable name.", false);
+            if (maybe_address) |address| {
+                self.varDeclaration(address);
+            }
         } else if (self.match(.Const)) {
-            const address = self.parseIdentifier("Expect constant name.", true);
-            self.varDeclaration(address);
+            const maybe_address = self.parseIdentifier("Expect constant name.", true);
+            if (maybe_address) |address| {
+                self.varDeclaration(address);
+            }
         } else {
             self.statement();
         }
@@ -429,17 +445,21 @@ pub const ModuleCompiler = struct {
         if (self.match(.Equal)) {
             props.isWritten = true;
 
-            var context = CompilationContext{};
+            var context = SharedContext{};
             self.expression(&context);
 
             if (props.type) |propType| {
                 if (context.type != null and !propType.equals(context.type.?)) {
                     self.current_compiler.?.err("can not assign {} to {}", .{ context.type.?, propType });
                 }
+            } else {
+                props.type = context.type;
             }
         } else {
             self.current_compiler.?.emitOpCode(OpCode.PushUninitialized);
         }
+
+        props.isDeclared = true;
 
         // TODO: or consume newLine
         _ = self.match(.Semicolon);
@@ -458,11 +478,11 @@ pub const ModuleCompiler = struct {
     }
 
     // Consumes an Identifier and reserve a slot in the current scope
-    fn parseIdentifier(self: *ModuleCompiler, message: []const u8, readonly: bool) types.SlotAddress {
+    fn parseIdentifier(self: *ModuleCompiler, message: []const u8, readonly: bool) ?types.SlotAddress {
         self.consume(TokenType.Identifier, "{s}", .{message});
         const name = &self.scanner.previous;
 
-        return self.current_compiler.?.declareIdentifier(name.lexeme.?, readonly, name.*) orelse std.math.maxInt(types.SlotAddress);
+        return self.current_compiler.?.declareIdentifier(name.lexeme.?, readonly, name.*) orelse null;
     }
 
     fn statement(self: *ModuleCompiler) void {
@@ -494,8 +514,8 @@ pub const ModuleCompiler = struct {
         self.current_compiler.?.emitByte(@intFromEnum(OpCode.Pop));
     }
 
-    fn expression(self: *ModuleCompiler, context: ?*CompilationContext) void {
-        self.parsePrecedence(.Assignment, context);
+    fn expression(self: *ModuleCompiler, shared_context: ?*SharedContext) void {
+        self.parsePrecedence(.Assignment, shared_context);
     }
 
     fn expressionList(self: *ModuleCompiler, endToken: TokenType, comptime too_many_error: []const u8) u8 {
@@ -514,39 +534,39 @@ pub const ModuleCompiler = struct {
         return arg_count;
     }
 
-    fn dot(self: *ModuleCompiler, _: *CompilationContext) void {
+    fn dot(self: *ModuleCompiler, _: CompilationContext) void {
         self.consume(TokenType.Identifier, "Expect property name after '.'.", .{});
     }
 
-    fn literal(self: *ModuleCompiler, context: *CompilationContext) void {
+    fn literal(self: *ModuleCompiler, context: CompilationContext) void {
         switch (self.scanner.previous.token_type.?) {
             .Null => {
-                if (context.type) |valueType| {
-                    if (valueType != .Null) {
+                if (context.shared.type) |value_type| {
+                    if (value_type != .Null) {
                         self.current_compiler.?.err("mixing types is not allowed", .{});
                     }
                 } else {
-                    context.type = values.Type.makeNull();
+                    context.shared.type = values.Type.makeNull();
                 }
                 self.current_compiler.?.emitOpCode(.PushNull);
             },
             .True => {
-                if (context.type) |valueType| {
-                    if (valueType != .Bool) {
+                if (context.shared.type) |value_type| {
+                    if (value_type != .Bool) {
                         self.current_compiler.?.err("mixing types is not allowed", .{});
                     }
                 } else {
-                    context.type = values.Type.makeBool();
+                    context.shared.type = values.Type.makeBool();
                 }
                 self.current_compiler.?.emitOpCode(.PushTrue);
             },
             .False => {
-                if (context.type) |valueType| {
-                    if (valueType != .Bool) {
+                if (context.shared.type) |value_type| {
+                    if (value_type != .Bool) {
                         self.current_compiler.?.err("mixing types is not allowed", .{});
                     }
                 } else {
-                    context.type = values.Type.makeBool();
+                    context.shared.type = values.Type.makeBool();
                 }
                 self.current_compiler.?.emitOpCode(.PushFalse);
             },
@@ -554,18 +574,18 @@ pub const ModuleCompiler = struct {
         }
     }
 
-    fn grouping(self: *ModuleCompiler, _: *CompilationContext) void {
+    fn grouping(self: *ModuleCompiler, _: CompilationContext) void {
         self.expression(null);
         self.consume(.RightParen, "Expect ')' after expression", .{});
     }
 
-    fn number(self: *ModuleCompiler, context: *CompilationContext) void {
-        if (context.type) |valueType| {
-            if (valueType != .Number) {
+    fn number(self: *ModuleCompiler, context: CompilationContext) void {
+        if (context.shared.type) |value_type| {
+            if (value_type != .Number) {
                 self.current_compiler.?.err("mixing types is not allowed", .{});
             }
         } else {
-            context.type = values.Type.makeNumber();
+            context.shared.type = values.Type.makeNumber();
         }
 
         if (std.fmt.parseFloat(f64, self.scanner.previous.lexeme.?)) |value| {
@@ -580,23 +600,33 @@ pub const ModuleCompiler = struct {
         }
     }
 
-    fn unary(self: *ModuleCompiler, _: *CompilationContext) void {
+    fn unary(self: *ModuleCompiler, context: CompilationContext) void {
         const operatorType = self.scanner.previous.token_type.?;
 
-        self.parsePrecedence(.Unary, null);
+        self.parsePrecedence(.Unary, context.shared);
 
         switch (operatorType) {
-            .Bang => self.current_compiler.?.emitOpCode(.LogicalNot),
-            .Minus => self.current_compiler.?.emitOpCode(.Negate),
+            .Bang => {
+                self.current_compiler.?.emitOpCode(.LogicalNot);
+                context.shared.type = values.Type.makeBool();
+            },
+            .Minus => {
+                if (context.shared.type) |value_type| {
+                    if (value_type != .Number) {
+                        self.current_compiler.?.err("Operand must be a number.", .{});
+                    }
+                }
+                self.current_compiler.?.emitOpCode(.Negate);
+            },
             else => return,
         }
     }
 
-    fn binary(self: *ModuleCompiler, context: *CompilationContext) void {
+    fn binary(self: *ModuleCompiler, context: CompilationContext) void {
         const operator_type = self.scanner.previous.token_type.?;
         const rule = self.parse_rules.getPtrConst(operator_type);
 
-        self.parsePrecedence(@enumFromInt(@intFromEnum(rule.precedence) + 1), context);
+        self.parsePrecedence(@enumFromInt(@intFromEnum(rule.precedence) + 1), context.shared);
 
         switch (operator_type) {
             .BangEqual => self.current_compiler.?.emitOpCode(.NotEqual),
@@ -614,7 +644,7 @@ pub const ModuleCompiler = struct {
         }
     }
 
-    fn and_(self: *ModuleCompiler, _: *CompilationContext) void {
+    fn and_(self: *ModuleCompiler, _: CompilationContext) void {
         const end_jump = self.current_compiler.?.emitJump(.JumpIfFalse);
 
         self.current_compiler.?.emitOpCode(.Pop);
@@ -623,7 +653,7 @@ pub const ModuleCompiler = struct {
         self.current_compiler.?.patchJump(end_jump);
     }
 
-    fn or_(self: *ModuleCompiler, _: *CompilationContext) void {
+    fn or_(self: *ModuleCompiler, _: CompilationContext) void {
         const end_jump = self.current_compiler.?.emitJump(.JumpIfTrue);
 
         self.current_compiler.?.emitOpCode(.Pop);
@@ -640,7 +670,8 @@ pub const ModuleCompiler = struct {
         self.consume(.RightBrace, "Expect '}}' after block.", .{});
     }
 
-    fn parsePrecedence(self: *ModuleCompiler, precedence: Precedence, compilation_context: ?*CompilationContext) void {
+    fn parsePrecedence(self: *ModuleCompiler, precedence: Precedence, shared_context: ?*SharedContext) void {
+        self.recursion_count += 1;
         self.advance();
         const parse_rule: *const ParseRule = self.parse_rules.getPtrConst(self.scanner.previous.token_type.?);
         const prefix_rule: *const ParseFn = parse_rule.prefix orelse {
@@ -649,14 +680,15 @@ pub const ModuleCompiler = struct {
             return;
         };
 
-        var context: *CompilationContext = undefined;
-        if (compilation_context) |assured| {
-            context = assured;
+        var context = CompilationContext{
+            .can_assign = @intFromEnum(precedence) <= @intFromEnum(Precedence.Assignment),
+        };
+        if (shared_context) |assured| {
+            context.shared = assured;
         } else {
-            var ctx = CompilationContext{};
-            context = &ctx;
+            var shared = SharedContext{};
+            context.shared = &shared;
         }
-        context.can_assign = @intFromEnum(precedence) <= @intFromEnum(Precedence.Assignment);
 
         // Compile the prefix
         prefix_rule(self, context);
@@ -674,20 +706,20 @@ pub const ModuleCompiler = struct {
         if (context.can_assign and self.match(.Equal)) {
             self.current_compiler.?.err("Invalid assignment target.", .{});
         }
+        self.recursion_count -= 1;
     }
 
-    fn identifier(self: *ModuleCompiler, context: *CompilationContext) void {
+    fn identifier(self: *ModuleCompiler, context: CompilationContext) void {
         const name = self.scanner.previous;
 
         if (context.can_assign and self.match(TokenType.Equal)) {
             // TODO: check access intent (can write ?)
-            self.expression(context);
-
-            self.current_compiler.?.writeIdentifier(name.lexeme.?, context.type);
+            self.expression(context.shared);
+            self.current_compiler.?.writeIdentifier(name.lexeme.?, context.shared.type);
         } else {
-            const maybe_var_type = self.current_compiler.?.readIdentifier(name.lexeme.?, context.type);
+            const maybe_var_type = self.current_compiler.?.readIdentifier(name.lexeme.?, context.shared.type);
             if (maybe_var_type) |var_type| {
-                context.type = var_type;
+                context.shared.type = var_type;
             }
         }
     }
@@ -697,13 +729,13 @@ pub const ModuleCompiler = struct {
         return values.Value.fromObject(dstring.asObject());
     }
 
-    fn string(self: *ModuleCompiler, context: *CompilationContext) void {
-        if (context.type) |valueType| {
-            if (valueType != .String) {
+    fn string(self: *ModuleCompiler, context: CompilationContext) void {
+        if (context.shared.type) |value_type| {
+            if (value_type != .String) {
                 self.current_compiler.?.err("mixing types is not allowed", .{});
             }
         } else {
-            context.type = values.Type.makeString();
+            context.shared.type = values.Type.makeString();
         }
 
         const chars = self.scanner.previous.lexeme.?[0..self.scanner.previous.lexeme.?.len];
@@ -713,7 +745,7 @@ pub const ModuleCompiler = struct {
         self.current_compiler.?.emitConstantAddress(address);
     }
 
-    fn call(self: *ModuleCompiler, _: *CompilationContext) void {
+    fn call(self: *ModuleCompiler, _: CompilationContext) void {
         const arg_count = self.expressionList(TokenType.RightParen, "Can't have more than 255 arguments.");
         self.consume(TokenType.RightParen, "Expect ')' after arguments.", .{});
         self.current_compiler.?.emitOpCode(.Call);

@@ -1,1 +1,1 @@
-"s" + null; // expect runtime error: Unsupported operand types: s + null (must both be numbers or strings)
+"s" + null; // expect compile error: Error at 'null': mixing types is not allowed

@@ -1,0 +1,4 @@
+var a = "";
+var b = 0;
+
+a = b; // expect compile error: Error at 'b': can not assign Number to String

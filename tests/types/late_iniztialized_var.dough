@@ -1,0 +1,8 @@
+var a = "";
+var b = 0;
+
+var c;
+c = a;
+c = b; // expect compile error: Error at 'b': can not assign Number to String
+
+print(c);
