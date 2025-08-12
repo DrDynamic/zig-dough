@@ -43,7 +43,12 @@ pub const TokenType = enum {
     True,
     Var,
     While,
-
+    // Types
+    TypeBool,
+    TypeNull,
+    TypeNumber,
+    TypeString,
+    TypeVoid,
     // Special tokens
     Synthetic,
     Error,

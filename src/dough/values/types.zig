@@ -69,28 +69,12 @@ pub const Type = union(enum) {
     }
 
     pub fn fromToken(token: Token) !Type {
-        return switch (token.lexeme.?[0]) {
-            'V' => matchIdentifier(token, "oid", 1, 3, .Void),
-            'N' => |_| N_case: {
-                if (token.lexeme.?.len > 1) {
-                    break :N_case switch (token.lexeme.?[1]) {
-                        'u' => |_| Nu_case: {
-                            if (token.lexeme.?.len > 2) {
-                                break :Nu_case switch (token.lexeme.?[2]) {
-                                    'l' => matchIdentifier(token, "l", 3, 1, .Null),
-                                    'm' => matchIdentifier(token, "ber", 3, 3, .Number),
-                                    else => TypeError.NoSimpleType,
-                                };
-                            }
-                            break :Nu_case TypeError.NoSimpleType;
-                        },
-                        else => TypeError.NoSimpleType,
-                    };
-                }
-                break :N_case TypeError.NoSimpleType;
-            },
-            'B' => matchIdentifier(token, "ool", 1, 3, .Bool),
-            'S' => matchIdentifier(token, "tring", 1, 5, .String),
+        return switch (token.token_type.?) {
+            .TypeBool => Type.makeBool(),
+            .TypeNull => Type.makeNull(),
+            .TypeNumber => Type.makeNumber(),
+            .TypeString => Type.makeString(),
+            .TypeVoid => Type.makeVoid(),
             else => TypeError.NoSimpleType,
         };
     }

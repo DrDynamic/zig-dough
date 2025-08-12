@@ -343,6 +343,12 @@ pub const ModuleCompiler = struct {
         .True = ParseRule{ .prefix = literal },
         .Var = ParseRule{},
         .While = ParseRule{},
+        // Types
+        .TypeBool = ParseRule{},
+        .TypeNull = ParseRule{},
+        .TypeNumber = ParseRule{},
+        .TypeString = ParseRule{},
+        .TypeVoid = ParseRule{},
 
         // Special tokens
         .Synthetic = ParseRule{},
@@ -472,15 +478,11 @@ pub const ModuleCompiler = struct {
     }
 
     fn typeDefinition(self: *ModuleCompiler) values.Type {
-        if (self.match(.Identifier)) {
-            return values.Type.fromToken(self.scanner.previous) catch {
-                self.current_compiler.?.err("unknown type", .{});
-                return values.Type.makeVoid();
-            };
-        }
-
-        self.current_compiler.?.err("unknown type", .{});
-        return values.Type.makeVoid();
+        self.scanner.scanToken();
+        return values.Type.fromToken(self.scanner.previous) catch {
+            self.current_compiler.?.err("unknown type", .{});
+            return values.Type.makeVoid();
+        };
     }
 
     // Consumes an Identifier and reserve a slot in the current scope

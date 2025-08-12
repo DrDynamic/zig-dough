@@ -232,6 +232,28 @@ pub const Scanner = struct {
         }
 
         const tokenType = switch (self._tokenStart[0]) {
+            'B' => self.matchIdentifier("ool", 1, 3, .TypeBool),
+            'N' => |_| N_case: {
+                if (self._currentChar - self._tokenStart > 1) {
+                    break :N_case switch (self._tokenStart[1]) {
+                        'u' => |_| Nu_case: {
+                            if (self._currentChar - self._tokenStart > 2) {
+                                break :Nu_case switch (self._tokenStart[2]) {
+                                    'l' => self.matchIdentifier("l", 3, 1, .TypeNull),
+                                    'm' => self.matchIdentifier("ber", 3, 3, .TypeNumber),
+                                    else => .Identifier,
+                                };
+                            }
+                            break :Nu_case .Identifier;
+                        },
+                        else => .Identifier,
+                    };
+                }
+                break :N_case .Identifier;
+            },
+            'S' => self.matchIdentifier("tring", 1, 5, .TypeString),
+            'V' => self.matchIdentifier("oid", 1, 3, .TypeVoid),
+
             'c' => self.matchIdentifier("onst", 1, 4, .Const),
             'e' => self.matchIdentifier("lse", 1, 3, .Else),
             'f' => |_| f_case: {
