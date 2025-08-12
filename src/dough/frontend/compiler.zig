@@ -292,8 +292,6 @@ pub const ModuleCompiler = struct {
     current_compiler: ?*FunctionCompiler = null,
     had_error: bool = false,
 
-    recursion_count: u32 = 0,
-
     parse_rules: ParseRules = ParseRules.init(.{
         // Single-character tokens.
         .LeftParen = ParseRule{ .prefix = grouping, .infix = call, .precedence = .Call },
@@ -671,7 +669,6 @@ pub const ModuleCompiler = struct {
     }
 
     fn parsePrecedence(self: *ModuleCompiler, precedence: Precedence, shared_context: ?*SharedContext) void {
-        self.recursion_count += 1;
         self.advance();
         const parse_rule: *const ParseRule = self.parse_rules.getPtrConst(self.scanner.previous.token_type.?);
         const prefix_rule: *const ParseFn = parse_rule.prefix orelse {
@@ -706,7 +703,6 @@ pub const ModuleCompiler = struct {
         if (context.can_assign and self.match(.Equal)) {
             self.current_compiler.?.err("Invalid assignment target.", .{});
         }
-        self.recursion_count -= 1;
     }
 
     fn identifier(self: *ModuleCompiler, context: CompilationContext) void {
