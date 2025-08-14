@@ -121,6 +121,10 @@ pub const ReferenceStack = struct {
                 _ = self.addresses.remove(identifier);
             }
         }
+
+        if (props.type) |t| {
+            t.deinit();
+        }
     }
 
     pub fn getProperties(self: ReferenceStack, identifier: []const u8) ?*SlotProperties {

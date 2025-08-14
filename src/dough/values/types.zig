@@ -5,6 +5,10 @@ pub const FunctionMeta = struct {
     return_type: Type,
 };
 
+pub const UnionTypeMeta = struct {
+    types: []Type,
+};
+
 pub const Type = union(enum) {
     Void,
     Null,
@@ -13,6 +17,9 @@ pub const Type = union(enum) {
     String,
     Function: *FunctionMeta,
     Module,
+
+    // Meta Types
+    UnionType: *UnionTypeMeta,
 
     pub fn makeVoid() Type {
         return Type{ .Void = {} };
@@ -42,9 +49,50 @@ pub const Type = union(enum) {
         return Type{ .Module = {} };
     }
 
+    pub fn makeUnionType(types: []Type) !Type {
+        const own_types = try dough.allocator.alloc(Type, types.len);
+        @memcpy(own_types, types);
+
+        var type_meta = try dough.allocator.create(UnionTypeMeta);
+        type_meta.types = own_types;
+
+        return Type{ .UnionType = type_meta };
+    }
+
+    pub fn deinit(self: Type) void {
+        switch (self) {
+            .UnionType => |union_type| {
+                dough.allocator.free(union_type.types);
+                dough.allocator.destroy(union_type);
+            },
+            else => {},
+        }
+    }
+
     pub fn equals(self: Type, other: Type) bool {
         return switch (self) {
             else => std.meta.activeTag(self) == std.meta.activeTag(other),
+        };
+    }
+
+    pub fn isAssignable(self: Type, value_type: Type) bool {
+        return switch (self) {
+            .Void => false, // nothing can be assigned to void
+            .Null => value_type == .Null,
+            .Bool => value_type == .Bool,
+            .Number => value_type == .Number,
+            .String => value_type == .String,
+            .Function => false, // no functions in frontend yet
+            .Module => false, // no mudules in frontend yet
+            .UnionType => |union_type| UnionType_case: {
+                break :UnionType_case switch (value_type) {
+                    .Void, .Function, .Module => false,
+
+                    .Null, .Bool, .Number, .String => containsType(union_type.types, value_type),
+
+                    .UnionType => |value_union| containsAllTypes(union_type.types, value_union.types),
+                };
+            },
         };
     }
 
@@ -65,6 +113,14 @@ pub const Type = union(enum) {
             .String => try out_stream.print("String", .{}),
             .Function => try out_stream.print("Function () => Void", .{}),
             .Module => try out_stream.print("Module", .{}),
+            .UnionType => |union_type| {
+                for (0.., union_type.types) |index, t| {
+                    if (index != 0) {
+                        try out_stream.print(" or ", .{});
+                    }
+                    try out_stream.print("{}", .{t});
+                }
+            },
         }
     }
 
@@ -80,11 +136,26 @@ pub const Type = union(enum) {
     }
 };
 
-fn matchIdentifier(token: Token, rest: []const u8, start: u8, length: u8, t: Type) !Type {
-    if (token.lexeme.?.len == start + length and std.mem.eql(u8, token.lexeme.?[start..(start + length)], rest)) {
-        return t;
+fn containsType(haystack: []Type, needle: Type) bool {
+    for (haystack) |element| {
+        if (element.equals(needle)) {
+            return true;
+        }
     }
-    return TypeError.NoSimpleType;
+    return false;
+}
+
+fn containsAllTypes(haystack: []Type, needles: []Type) bool {
+    if (haystack.len < needles.len) {
+        return false;
+    }
+
+    for (needles) |needle| {
+        if (!containsType(haystack, needle)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 const std = @import("std");

@@ -165,9 +165,9 @@ pub const FunctionCompiler = struct {
             var props = &self.references.properties.items[address];
 
             if (maybe_value_type) |value_type| {
-                if (props.type) |varType| {
-                    if (!varType.equals(value_type)) {
-                        self.err("can not assign {} to {}", .{ value_type, varType });
+                if (props.type) |prop_type| {
+                    if (!prop_type.isAssignable(value_type)) {
+                        self.err("can not assign {} to {}", .{ value_type, prop_type });
                     }
                 } else {
                     props.type = value_type;
@@ -460,9 +460,9 @@ pub const ModuleCompiler = struct {
             var context = SharedContext{};
             self.expression(&context);
 
-            if (props.type) |propType| {
-                if (context.type != null and !propType.equals(context.type.?)) {
-                    self.current_compiler.?.err("can not assign {} to {}", .{ context.type.?, propType });
+            if (props.type) |prop_type| {
+                if (context.type != null and !prop_type.isAssignable(context.type.?)) {
+                    self.current_compiler.?.err("can not assign {} to {}", .{ context.type.?, prop_type });
                 }
             } else {
                 props.type = context.type;
@@ -478,11 +478,40 @@ pub const ModuleCompiler = struct {
     }
 
     fn typeDefinition(self: *ModuleCompiler) values.Type {
-        self.scanner.scanToken();
-        return values.Type.fromToken(self.scanner.previous) catch {
+        var t: values.Type = values.Type.fromToken(self.scanner.current) catch {
             self.current_compiler.?.err("unknown type", .{});
             return values.Type.makeVoid();
         };
+
+        self.scanner.scanToken();
+
+        if (self.scanner.current.token_type == .LogicalOr) {
+            var union_type_list = std.ArrayList(values.Type).init(dough.allocator);
+            union_type_list.append(t) catch {
+                self.current_compiler.?.err("allocation failed", .{});
+                return values.Type.makeVoid();
+            };
+
+            while (self.scanner.current.token_type == .LogicalOr) {
+                self.scanner.scanToken();
+                union_type_list.append(values.Type.fromToken(self.scanner.current) catch {
+                    self.current_compiler.?.err("unknown type", .{});
+                    return values.Type.makeVoid();
+                }) catch {
+                    self.current_compiler.?.err("allocation failed", .{});
+                    return values.Type.makeVoid();
+                };
+                self.scanner.scanToken();
+            }
+
+            t = values.Type.makeUnionType(union_type_list.items) catch {
+                self.current_compiler.?.err("allocation failed", .{});
+                return values.Type.makeVoid();
+            };
+            union_type_list.deinit();
+        }
+
+        return t;
     }
 
     // Consumes an Identifier and reserve a slot in the current scope

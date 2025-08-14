@@ -1,21 +1,16 @@
-var a:String;
-var c;
-a = c; // expect compile error: Error at 'c': Variable not initialized
+var a:String || Number = 3;
+print(a);
+
+a = "Lorem";
+print(a);
 
 
-// var a:String || Number = 3;
-// print(a);
-// 
-// a = "Lorem";
-// print(a);
-// 
-// 
-// print("------");
-// 
-// type Special = String || Number;
-// 
-// b:Special = "Special";
-// print(b);
-// 
-// b = 5;
-// print(b);
+print("------");
+
+//type Special = String || Number;
+//
+//b:Special = "Special";
+//print(b);
+//
+//b = 5;
+//print(b);
