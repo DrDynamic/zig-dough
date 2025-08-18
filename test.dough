@@ -7,10 +7,10 @@ print(a);
 
 print("------");
 
-//type Special = String || Number;
-//
-//b:Special = "Special";
-//print(b);
-//
-//b = 5;
-//print(b);
+type Special = String || Number;
+
+b:Special = "Special";
+print(b);
+
+b = 5;
+print(b);

@@ -4,7 +4,6 @@ const dough = @import("dough");
 const Chunk = dough.values.Chunk;
 const OpCode = dough.backend.OpCode;
 
-const SlotStack = @import("../values/slot_stack.zig").SlotStack;
 const DoughFunction = @import("../values/objects.zig").DoughFunction;
 
 const OPCODE_NAME_FROMAT = "{s: >20}";

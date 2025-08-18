@@ -270,7 +270,17 @@ pub const Scanner = struct {
             'i' => self.matchIdentifier("f", 1, 1, .If),
             'n' => self.matchIdentifier("ull", 1, 3, .Null),
             'r' => self.matchIdentifier("eturn", 1, 5, .Return),
-            't' => self.matchIdentifier("rue", 1, 3, .True),
+            't' => |_| t_case: {
+                if (self._currentChar - self._tokenStart > 1) {
+                    break :t_case switch (self._tokenStart[1]) {
+                        'r' => self.matchIdentifier("ue", 2, 2, .True),
+                        'y' => self.matchIdentifier("pe", 2, 2, .Type),
+                        else => .Identifier,
+                    };
+                }
+                break :t_case .Identifier;
+            },
+
             'v' => self.matchIdentifier("ar", 1, 2, .Var),
             'w' => self.matchIdentifier("hile", 1, 4, .While),
             else => .Identifier,

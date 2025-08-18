@@ -5,7 +5,7 @@ pub const FunctionMeta = struct {
     return_type: Type,
 };
 
-pub const UnionTypeMeta = struct {
+pub const TypeUnionMeta = struct {
     types: []Type,
 };
 
@@ -19,7 +19,7 @@ pub const Type = union(enum) {
     Module,
 
     // Meta Types
-    UnionType: *UnionTypeMeta,
+    TypeUnion: *TypeUnionMeta,
 
     pub fn makeVoid() Type {
         return Type{ .Void = {} };
@@ -49,19 +49,19 @@ pub const Type = union(enum) {
         return Type{ .Module = {} };
     }
 
-    pub fn makeUnionType(types: []Type) !Type {
+    pub fn makeTypeUnion(types: []Type) !Type {
         const own_types = try dough.allocator.alloc(Type, types.len);
         @memcpy(own_types, types);
 
-        var type_meta = try dough.allocator.create(UnionTypeMeta);
+        var type_meta = try dough.allocator.create(TypeUnionMeta);
         type_meta.types = own_types;
 
-        return Type{ .UnionType = type_meta };
+        return Type{ .TypeUnion = type_meta };
     }
 
     pub fn deinit(self: Type) void {
         switch (self) {
-            .UnionType => |union_type| {
+            .TypeUnion => |union_type| {
                 dough.allocator.free(union_type.types);
                 dough.allocator.destroy(union_type);
             },
@@ -75,7 +75,7 @@ pub const Type = union(enum) {
         };
     }
 
-    pub fn isAssignable(self: Type, value_type: Type) bool {
+    pub fn satisfiesShape(self: Type, value_type: Type) bool {
         return switch (self) {
             .Void => false, // nothing can be assigned to void
             .Null => value_type == .Null,
@@ -84,13 +84,13 @@ pub const Type = union(enum) {
             .String => value_type == .String,
             .Function => false, // no functions in frontend yet
             .Module => false, // no mudules in frontend yet
-            .UnionType => |union_type| UnionType_case: {
-                break :UnionType_case switch (value_type) {
+            .TypeUnion => |union_type| TypeUnion_case: {
+                break :TypeUnion_case switch (value_type) {
                     .Void, .Function, .Module => false,
 
                     .Null, .Bool, .Number, .String => containsType(union_type.types, value_type),
 
-                    .UnionType => |value_union| containsAllTypes(union_type.types, value_union.types),
+                    .TypeUnion => |value_union| containsAllTypes(union_type.types, value_union.types),
                 };
             },
         };
@@ -113,7 +113,7 @@ pub const Type = union(enum) {
             .String => try out_stream.print("String", .{}),
             .Function => try out_stream.print("Function () => Void", .{}),
             .Module => try out_stream.print("Module", .{}),
-            .UnionType => |union_type| {
+            .TypeUnion => |union_type| {
                 for (0.., union_type.types) |index, t| {
                     if (index != 0) {
                         try out_stream.print(" or ", .{});

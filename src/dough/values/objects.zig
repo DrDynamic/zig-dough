@@ -7,9 +7,6 @@ const Chunk = dough.values.Chunk;
 const VirtualMachine = dough.backend.VirtualMachine;
 const InterpretError = dough.backend.InterpretError;
 
-const slot_stack = @import("./slot_stack.zig");
-const SlotStack = slot_stack.SlotStack;
-
 const Value = @import("values.zig").Value;
 
 pub const ObjType = enum {
@@ -233,7 +230,6 @@ pub const DoughFunction = struct {
     obj: DoughObject,
     arity: u8,
     chunk: Chunk,
-    slots: SlotStack,
     name: ?[]const u8 = null,
 
     pub fn init() *DoughFunction {
@@ -245,14 +241,12 @@ pub const DoughFunction = struct {
             .obj = obj.*,
             .arity = 0,
             .chunk = Chunk.init(dough.allocator),
-            .slots = SlotStack.init(),
         };
         return function;
     }
 
     pub fn deinit(self: *DoughFunction) void {
         self.chunk.deinit();
-        self.slots.deinit();
         dough.garbage_collector.allocator().destroy(self);
     }
 

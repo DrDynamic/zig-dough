@@ -13,7 +13,26 @@ const Type = values.Type;
 pub const StackError = error{
     Overflow,
     Underflow,
+    IdentifierCollision,
     ReferenceUndefined,
+};
+pub const TypeProperties = struct {
+    depth: u24 = 0,
+    identifier: []const u8,
+    type: Type,
+
+    pub fn format(
+        self: TypeProperties,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        try writer.print("[identifier: '{?s}' depth: {d}, type: {}]", .{
+            self.identifier,
+            self.depth,
+            self.type,
+        });
+    }
 };
 
 pub const SlotProperties = struct {
@@ -39,75 +58,107 @@ pub const SlotProperties = struct {
     isRead: bool = false,
     isWritten: bool = false,
 
-    pub fn debugPrint(self: SlotProperties) void {
-        std.debug.print("[identifier: '{s}', depth: {d}, {s}", .{
-            self.identifier orelse "null",
+    pub fn format(
+        self: TypeProperties,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        try writer.print("[identifier: '{?s}' depth: {d}, {s}", .{
+            self.identifier,
             self.depth,
             if (self.readonly) "readonly" else "writable",
         });
 
         if (self.shadowsAddress) |shadows| {
-            std.debug.print(", shadows: 0x{X}", .{shadows});
+            try writer.print(" shadows: 0x{X}", .{shadows});
         }
-
-        std.debug.print("]", .{});
+        try writer.print("]", .{});
     }
 };
 
-pub const ReferenceStack = struct {
+pub const TypeStack = struct {
+    /// a list of properties for variables, constants, etc
+    properties: std.ArrayList(TypeProperties),
+
+    /// a table to resove indetifiers to slot adresses
+    addresses: std.StringHashMap(u24),
+
+    _internals: _internalFunctions(TypeProperties, u24, std.math.maxInt(u24)),
+
+    pub fn init() TypeStack {
+        return .{
+            .properties = std.ArrayList(TypeProperties).init(dough.allocator),
+            .addresses = std.StringHashMap(u24).init(dough.allocator),
+            ._internals = .{},
+        };
+    }
+
+    pub fn deinit(self: *TypeStack) void {
+        self.properties.deinit();
+        self.addresses.deinit();
+    }
+
+    pub fn debugPrint(self: *TypeStack) void {
+        self._internals.debugPrint("TypeStack - Properties", self.properties.items);
+    }
+
+    pub fn push(self: *TypeStack, properties: TypeProperties) !u24 {
+        if (self.addresses.contains(properties.identifier)) {
+            return StackError.IdentifierCollision;
+        }
+
+        return self._internals.push(&self.addresses, &self.properties, properties.identifier, properties);
+    }
+
+    pub fn pop(self: *TypeStack) !void {
+        const props = try self._internals.pop(&self.addresses, &self.properties);
+        props.type.deinit();
+    }
+
+    pub fn getProperties(self: *TypeStack, identifier: []const u8) ?*TypeProperties {
+        return self._internals.getProperties(&self.addresses, &self.properties, identifier);
+    }
+};
+
+pub const SlotStack = struct {
     /// a list of properties for variables, constants, etc
     properties: std.ArrayList(SlotProperties),
 
     /// a table to resove indetifiers to slot adresses
     addresses: std.StringHashMap(SlotAddress),
 
-    pub fn init() ReferenceStack {
+    _internals: _internalFunctions(SlotProperties, SlotAddress, types.max_slot_address),
+
+    pub fn init() SlotStack {
         return .{
-            .properties = std.ArrayList(SlotProperties).init(dough.garbage_collector.allocator()),
-            .addresses = std.StringHashMap(u24).init(dough.allocator),
+            .properties = std.ArrayList(SlotProperties).init(dough.allocator),
+            .addresses = std.StringHashMap(SlotAddress).init(dough.allocator),
+            ._internals = .{},
         };
     }
 
-    pub fn deinit(self: *ReferenceStack) void {
+    pub fn deinit(self: *SlotStack) void {
         self.properties.deinit();
         self.addresses.deinit();
     }
 
-    pub fn debugPrint(self: *ReferenceStack) void {
-        std.debug.print("=== ReferenceStack - Properties ===\n", .{});
-
-        for (self.properties.items) |props| {
-            props.debugPrint();
-            std.debug.print("\n", .{});
-        }
+    pub fn debugPrint(self: *SlotStack) void {
+        self._internals.debugPrint("SlotStack - Properties", self.properties.items);
     }
 
-    pub fn push(self: *ReferenceStack, properties: SlotProperties) !SlotAddress {
-        if (self.properties.items.len >= types.max_slot_address) {
-            return StackError.Overflow;
-        }
-
-        const id: SlotAddress = @intCast(self.properties.items.len);
-
+    pub fn push(self: *SlotStack, properties: SlotProperties) !SlotAddress {
         var props = properties;
-        if (props.identifier) |identifier| {
-            if (self.addresses.contains(identifier)) {
-                props.shadowsAddress = self.addresses.get(identifier).?;
+        if (properties.identifier) |assured_identifier| {
+            if (self.addresses.contains(assured_identifier)) {
+                props.shadowsAddress = self.addresses.get(assured_identifier).?;
             }
-
-            self.addresses.put(identifier, id) catch {
-                return StackError.Overflow;
-            };
         }
 
-        self.properties.append(props) catch {
-            return StackError.Overflow;
-        };
-
-        return id;
+        return self._internals.push(&self.addresses, &self.properties, properties.identifier, props);
     }
 
-    pub fn pop(self: *ReferenceStack) !void {
+    pub fn pop(self: *SlotStack) !void {
         const props = self.properties.pop() orelse {
             return StackError.Underflow;
         };
@@ -127,10 +178,61 @@ pub const ReferenceStack = struct {
         }
     }
 
-    pub fn getProperties(self: ReferenceStack, identifier: []const u8) ?*SlotProperties {
-        const address = self.addresses.get(identifier) orelse {
-            return null;
-        };
-        return &self.properties.items[address];
+    pub fn getProperties(self: *SlotStack, identifier: []const u8) ?*SlotProperties {
+        return self._internals.getProperties(&self.addresses, &self.properties, identifier);
     }
 };
+
+fn _internalFunctions(comptime PropertyType: type, comptime AddressType: type, comptime max_stack_size: comptime_int) type {
+    return struct {
+        const Self = @This();
+
+        fn debugPrint(_: Self, title: []const u8, properties: []PropertyType) void {
+            std.debug.print("=== {s} ===\n", .{title});
+
+            for (properties) |props| {
+                std.debug.print("{}\n", .{props});
+            }
+        }
+
+        fn push(_: Self, addresses: *std.StringHashMap(AddressType), properties: *std.ArrayList(PropertyType), identifier: ?[]const u8, pushable: PropertyType) !AddressType {
+            if (properties.items.len >= max_stack_size) {
+                return StackError.Overflow;
+            }
+
+            const id: AddressType = @intCast(properties.items.len);
+
+            if (identifier) |assured_identifier| {
+                addresses.put(assured_identifier, id) catch {
+                    return StackError.Overflow;
+                };
+            }
+
+            properties.append(pushable) catch {
+                return StackError.Overflow;
+            };
+
+            return id;
+        }
+
+        pub fn pop(_: Self, addresses: *std.StringHashMap(AddressType), properties: *std.ArrayList(PropertyType)) !PropertyType {
+            const props = properties.pop() orelse {
+                return StackError.Underflow;
+            };
+
+            const maybe_identifier: ?[]const u8 = props.identifier;
+            if (maybe_identifier) |identifier| {
+                _ = addresses.remove(identifier);
+            }
+
+            return props;
+        }
+
+        pub fn getProperties(_: Self, addresses: *std.StringHashMap(AddressType), properties: *std.ArrayList(PropertyType), identifier: []const u8) ?*PropertyType {
+            const address = addresses.get(identifier) orelse {
+                return null;
+            };
+            return &properties.items[address];
+        }
+    };
+}

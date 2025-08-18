@@ -41,6 +41,7 @@ pub const TokenType = enum {
     Null,
     Return,
     True,
+    Type,
     Var,
     While,
     // Types

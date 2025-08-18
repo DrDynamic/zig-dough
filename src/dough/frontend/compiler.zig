@@ -20,7 +20,10 @@ const objects = values.objects;
 const DoughModule = objects.DoughModule;
 const DoughFunction = objects.DoughFunction;
 
-const ReferenceStack = @import("./reference_stack.zig").ReferenceStack;
+const SlotProperties = frontend.SlotProperties;
+const SlotStack = frontend.SlotStack;
+const TypeProperties = frontend.TypeProperties;
+const TypeStack = frontend.TypeStack;
 
 const Precedence = enum {
     None,
@@ -44,17 +47,20 @@ pub const FunctionCompiler = struct {
     scanner: *Scanner,
     scopeDepth: u24 = 0,
 
-    references: ReferenceStack,
+    types: TypeStack,
+    references: SlotStack,
 
     pub fn init(scanner: *Scanner) !FunctionCompiler {
         return FunctionCompiler{
             .function = objects.DoughFunction.init(),
             .scanner = scanner,
-            .references = ReferenceStack.init(),
+            .types = TypeStack.init(),
+            .references = SlotStack.init(),
         };
     }
 
     pub fn deinit(self: *FunctionCompiler) void {
+        self.types.deinit();
         self.references.deinit();
     }
 
@@ -67,11 +73,15 @@ pub const FunctionCompiler = struct {
 
         self.scopeDepth -= 1;
 
+        var types_stack = &self.types;
+        while (types_stack.properties.items.len > 0 and types_stack.properties.getLast().depth > self.scopeDepth) {
+            types_stack.pop() catch |e| {
+                self.err("Unexpected error occured: {s}\n", .{@errorName(e)});
+            };
+        }
+
         var references = &self.references;
-
-        if (references.properties.items.len == 0) return;
-
-        while (references.properties.getLast().depth > self.scopeDepth) {
+        while (references.properties.items.len > 0 and references.properties.getLast().depth > self.scopeDepth) {
             references.pop() catch |e| {
                 self.err("Unexpectd error occured: {s}\n", .{@errorName(e)});
             };
@@ -103,6 +113,24 @@ pub const FunctionCompiler = struct {
                 }
             }
         }
+    }
+
+    pub fn declareType(self: *FunctionCompiler, type_identifier: []const u8, type_definition: values.Type) ?u24 {
+        const props = self.types.getProperties(type_identifier);
+
+        if (props != null) {
+            self.err("Name of Type already in use", .{});
+            return null;
+        }
+
+        return self.types.push(.{
+            .depth = self.scopeDepth,
+            .identifier = type_identifier,
+            .type = type_definition,
+        }) catch |stackError| {
+            self.err("Creating Identifier failed ({s}).", .{@errorName(stackError)});
+            return null;
+        };
     }
 
     pub fn declareIdentifier(self: *FunctionCompiler, identifier: ?[]const u8, readonly: bool, token: ?Token) ?types.SlotAddress {
@@ -166,7 +194,7 @@ pub const FunctionCompiler = struct {
 
             if (maybe_value_type) |value_type| {
                 if (props.type) |prop_type| {
-                    if (!prop_type.isAssignable(value_type)) {
+                    if (!prop_type.satisfiesShape(value_type)) {
                         self.err("can not assign {} to {}", .{ value_type, prop_type });
                     }
                 } else {
@@ -302,58 +330,59 @@ pub const ModuleCompiler = struct {
 
     parse_rules: ParseRules = ParseRules.init(.{
         // Single-character tokens.
-        .LeftParen = ParseRule{ .prefix = grouping, .infix = call, .precedence = .Call },
-        .RightParen = ParseRule{},
-        .LeftBrace = ParseRule{},
-        .RightBrace = ParseRule{},
-        .LeftBracket = ParseRule{},
-        .RightBracket = ParseRule{},
-        .Colon = ParseRule{},
-        .Comma = ParseRule{},
-        .Dot = ParseRule{ .prefix = null, .infix = dot, .precedence = .Call },
-        .Minus = ParseRule{ .prefix = unary, .infix = binary, .precedence = .Term },
-        .Plus = ParseRule{ .prefix = null, .infix = binary, .precedence = .Term },
-        .Semicolon = ParseRule{},
-        .Slash = ParseRule{ .prefix = null, .infix = binary, .precedence = .Factor },
-        .Star = ParseRule{ .prefix = null, .infix = binary, .precedence = .Factor },
+        .LeftParen = .{ .prefix = grouping, .infix = call, .precedence = .Call },
+        .RightParen = .{},
+        .LeftBrace = .{},
+        .RightBrace = .{},
+        .LeftBracket = .{},
+        .RightBracket = .{},
+        .Colon = .{},
+        .Comma = .{},
+        .Dot = .{ .prefix = null, .infix = dot, .precedence = .Call },
+        .Minus = .{ .prefix = unary, .infix = binary, .precedence = .Term },
+        .Plus = .{ .prefix = null, .infix = binary, .precedence = .Term },
+        .Semicolon = .{},
+        .Slash = .{ .prefix = null, .infix = binary, .precedence = .Factor },
+        .Star = .{ .prefix = null, .infix = binary, .precedence = .Factor },
         // One or two character tokens.
-        .Bang = ParseRule{ .prefix = unary },
-        .BangEqual = ParseRule{ .prefix = null, .infix = binary, .precedence = .Equality },
-        .Equal = ParseRule{},
-        .EqualEqual = ParseRule{ .prefix = null, .infix = binary, .precedence = .Equality },
-        .Greater = ParseRule{ .prefix = null, .infix = binary, .precedence = .Comparison },
-        .GreaterEqual = ParseRule{ .prefix = null, .infix = binary, .precedence = .Comparison },
-        .Less = ParseRule{ .prefix = null, .infix = binary, .precedence = .Comparison },
-        .LessEqual = ParseRule{ .prefix = null, .infix = binary, .precedence = .Comparison },
-        .LogicalAnd = ParseRule{ .prefix = null, .infix = and_, .precedence = .And },
-        .LogicalOr = ParseRule{ .prefix = null, .infix = or_, .precedence = .Or },
+        .Bang = .{ .prefix = unary },
+        .BangEqual = .{ .prefix = null, .infix = binary, .precedence = .Equality },
+        .Equal = .{},
+        .EqualEqual = .{ .prefix = null, .infix = binary, .precedence = .Equality },
+        .Greater = .{ .prefix = null, .infix = binary, .precedence = .Comparison },
+        .GreaterEqual = .{ .prefix = null, .infix = binary, .precedence = .Comparison },
+        .Less = .{ .prefix = null, .infix = binary, .precedence = .Comparison },
+        .LessEqual = .{ .prefix = null, .infix = binary, .precedence = .Comparison },
+        .LogicalAnd = .{ .prefix = null, .infix = and_, .precedence = .And },
+        .LogicalOr = .{ .prefix = null, .infix = or_, .precedence = .Or },
         // Literals.
-        .Identifier = ParseRule{ .prefix = identifier },
-        .String = ParseRule{ .prefix = string },
-        .Number = ParseRule{ .prefix = number },
+        .Identifier = .{ .prefix = identifier },
+        .String = .{ .prefix = string },
+        .Number = .{ .prefix = number },
         // Keywords.
-        .Const = ParseRule{},
-        .Else = ParseRule{},
-        .False = ParseRule{ .prefix = literal },
-        .For = ParseRule{},
-        .Function = ParseRule{},
-        .If = ParseRule{},
-        .Null = ParseRule{ .prefix = literal },
-        .Return = ParseRule{},
-        .True = ParseRule{ .prefix = literal },
-        .Var = ParseRule{},
-        .While = ParseRule{},
+        .Const = .{},
+        .Else = .{},
+        .False = .{ .prefix = literal },
+        .For = .{},
+        .Function = .{},
+        .If = .{},
+        .Null = .{ .prefix = literal },
+        .Return = .{},
+        .True = .{ .prefix = literal },
+        .Type = .{},
+        .Var = .{},
+        .While = .{},
         // Types
-        .TypeBool = ParseRule{},
-        .TypeNull = ParseRule{},
-        .TypeNumber = ParseRule{},
-        .TypeString = ParseRule{},
-        .TypeVoid = ParseRule{},
+        .TypeBool = .{},
+        .TypeNull = .{},
+        .TypeNumber = .{},
+        .TypeString = .{},
+        .TypeVoid = .{},
 
         // Special tokens
-        .Synthetic = ParseRule{},
-        .Error = ParseRule{},
-        .Eof = ParseRule{},
+        .Synthetic = .{},
+        .Error = .{},
+        .Eof = .{},
     }),
 
     pub fn init(vm: *VirtualMachine) ModuleCompiler {
@@ -432,7 +461,9 @@ pub const ModuleCompiler = struct {
     }
 
     fn declaration(self: *ModuleCompiler) void {
-        if (self.match(.Var)) {
+        if (self.match(.Type)) {
+            self.typeDeclaration();
+        } else if (self.match(.Var)) {
             const maybe_address = self.parseIdentifier("Expect variable name.", false);
             if (maybe_address) |address| {
                 self.varDeclaration(address);
@@ -445,6 +476,12 @@ pub const ModuleCompiler = struct {
         } else {
             self.statement();
         }
+    }
+
+    fn typeDeclaration(self: *ModuleCompiler) void {
+        const type_identifier = self.scanner.current;
+        const type_definition = self.typeDefinition();
+        _ = self.current_compiler.?.declareType(type_identifier.lexeme.?, type_definition);
     }
 
     fn varDeclaration(self: *ModuleCompiler, address: types.SlotAddress) void {
@@ -461,7 +498,7 @@ pub const ModuleCompiler = struct {
             self.expression(&context);
 
             if (props.type) |prop_type| {
-                if (context.type != null and !prop_type.isAssignable(context.type.?)) {
+                if (context.type != null and !prop_type.satisfiesShape(context.type.?)) {
                     self.current_compiler.?.err("can not assign {} to {}", .{ context.type.?, prop_type });
                 }
             } else {
@@ -504,7 +541,7 @@ pub const ModuleCompiler = struct {
                 self.scanner.scanToken();
             }
 
-            t = values.Type.makeUnionType(union_type_list.items) catch {
+            t = values.Type.makeTypeUnion(union_type_list.items) catch {
                 self.current_compiler.?.err("allocation failed", .{});
                 return values.Type.makeVoid();
             };
