@@ -9,7 +9,7 @@ print("------");
 
 type Special = String || Number;
 
-b:Special = "Special";
+var b:Special = "Special";
 print(b);
 
 b = 5;

@@ -174,7 +174,10 @@ pub const SlotStack = struct {
         }
 
         if (props.type) |t| {
-            t.deinit();
+            if (t.getName() == null) {
+                // only deinit unnamed types. (The named ones are stored in the TypeStack and may be reused until the go out of scope)
+                t.deinit();
+            }
         }
     }
 

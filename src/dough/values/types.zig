@@ -6,6 +6,7 @@ pub const FunctionMeta = struct {
 };
 
 pub const TypeUnionMeta = struct {
+    name: ?[]const u8,
     types: []Type,
 };
 
@@ -49,11 +50,19 @@ pub const Type = union(enum) {
         return Type{ .Module = {} };
     }
 
-    pub fn makeTypeUnion(types: []Type) !Type {
+    pub fn makeTypeUnion(name: ?[]const u8, types: []Type) !Type {
+        var own_name: ?[]const u8 = null;
+        if (name) |assured_name| {
+            const tmp = try dough.allocator.alloc(u8, assured_name.len);
+            @memcpy(tmp, assured_name);
+            own_name = tmp;
+        }
+
         const own_types = try dough.allocator.alloc(Type, types.len);
         @memcpy(own_types, types);
 
         var type_meta = try dough.allocator.create(TypeUnionMeta);
+        type_meta.name = own_name;
         type_meta.types = own_types;
 
         return Type{ .TypeUnion = type_meta };
@@ -62,6 +71,9 @@ pub const Type = union(enum) {
     pub fn deinit(self: Type) void {
         switch (self) {
             .TypeUnion => |union_type| {
+                if (union_type.name) |assured_name| {
+                    dough.allocator.free(assured_name);
+                }
                 dough.allocator.free(union_type.types);
                 dough.allocator.destroy(union_type);
             },
@@ -114,6 +126,10 @@ pub const Type = union(enum) {
             .Function => try out_stream.print("Function () => Void", .{}),
             .Module => try out_stream.print("Module", .{}),
             .TypeUnion => |union_type| {
+                if (union_type.name) |name| {
+                    try out_stream.print("{s}", .{name});
+                }
+
                 for (0.., union_type.types) |index, t| {
                     if (index != 0) {
                         try out_stream.print(" or ", .{});
@@ -124,14 +140,16 @@ pub const Type = union(enum) {
         }
     }
 
-    pub fn fromToken(token: Token) !Type {
-        return switch (token.token_type.?) {
-            .TypeBool => Type.makeBool(),
-            .TypeNull => Type.makeNull(),
-            .TypeNumber => Type.makeNumber(),
-            .TypeString => Type.makeString(),
-            .TypeVoid => Type.makeVoid(),
-            else => TypeError.NoSimpleType,
+    pub fn getName(self: Type) ?[]const u8 {
+        return switch (self) {
+            .Void => "Void",
+            .Null => "Null",
+            .Bool => "Bool",
+            .Number => "Number",
+            .String => "String",
+            .Function => unreachable,
+            .Module => unreachable,
+            .TypeUnion => |union_type| union_type.name,
         };
     }
 };

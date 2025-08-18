@@ -372,12 +372,6 @@ pub const ModuleCompiler = struct {
         .Type = .{},
         .Var = .{},
         .While = .{},
-        // Types
-        .TypeBool = .{},
-        .TypeNull = .{},
-        .TypeNumber = .{},
-        .TypeString = .{},
-        .TypeVoid = .{},
 
         // Special tokens
         .Synthetic = .{},
@@ -416,6 +410,33 @@ pub const ModuleCompiler = struct {
             properties.items[nativeAddress].isWritten = true;
             properties.items[nativeAddress].type = .{ .Void = {} };
         }
+
+        // declare primitive types (workaround until we have a better solution)
+        _ = try compiler.types.push(.{
+            .depth = 0,
+            .identifier = "Void",
+            .type = values.Type.makeVoid(),
+        });
+        _ = try compiler.types.push(.{
+            .depth = 0,
+            .identifier = "Null",
+            .type = values.Type.makeNull(),
+        });
+        _ = try compiler.types.push(.{
+            .depth = 0,
+            .identifier = "Bool",
+            .type = values.Type.makeBool(),
+        });
+        _ = try compiler.types.push(.{
+            .depth = 0,
+            .identifier = "Number",
+            .type = values.Type.makeNumber(),
+        });
+        _ = try compiler.types.push(.{
+            .depth = 0,
+            .identifier = "String",
+            .type = values.Type.makeString(),
+        });
 
         self.advance();
 
@@ -479,8 +500,15 @@ pub const ModuleCompiler = struct {
     }
 
     fn typeDeclaration(self: *ModuleCompiler) void {
-        const type_identifier = self.scanner.current;
-        const type_definition = self.typeDefinition();
+        self.consume(.Identifier, "Expect type name.", .{});
+        const type_identifier = self.scanner.previous;
+
+        self.consume(.Equal, "Expect type definition.", .{});
+
+        const type_definition = self.typeDefinition(type_identifier);
+
+        _ = self.match(.Semicolon);
+
         _ = self.current_compiler.?.declareType(type_identifier.lexeme.?, type_definition);
     }
 
@@ -488,7 +516,7 @@ pub const ModuleCompiler = struct {
         var props = &self.current_compiler.?.references.properties.items[address];
 
         if (self.match(.Colon)) {
-            props.type = self.typeDefinition();
+            props.type = self.typeDefinition(null);
         }
 
         if (self.match(.Equal)) {
@@ -514,13 +542,8 @@ pub const ModuleCompiler = struct {
         _ = self.match(.Semicolon);
     }
 
-    fn typeDefinition(self: *ModuleCompiler) values.Type {
-        var t: values.Type = values.Type.fromToken(self.scanner.current) catch {
-            self.current_compiler.?.err("unknown type", .{});
-            return values.Type.makeVoid();
-        };
-
-        self.scanner.scanToken();
+    fn typeDefinition(self: *ModuleCompiler, type_name: ?Token) values.Type {
+        var t = self.singleType();
 
         if (self.scanner.current.token_type == .LogicalOr) {
             var union_type_list = std.ArrayList(values.Type).init(dough.allocator);
@@ -531,17 +554,19 @@ pub const ModuleCompiler = struct {
 
             while (self.scanner.current.token_type == .LogicalOr) {
                 self.scanner.scanToken();
-                union_type_list.append(values.Type.fromToken(self.scanner.current) catch {
-                    self.current_compiler.?.err("unknown type", .{});
-                    return values.Type.makeVoid();
-                }) catch {
+
+                union_type_list.append(self.singleType()) catch {
                     self.current_compiler.?.err("allocation failed", .{});
                     return values.Type.makeVoid();
                 };
-                self.scanner.scanToken();
             }
 
-            t = values.Type.makeTypeUnion(union_type_list.items) catch {
+            var type_name_chars: ?[]const u8 = null;
+            if (type_name) |assured_name| {
+                type_name_chars = assured_name.lexeme.?;
+            }
+
+            t = values.Type.makeTypeUnion(type_name_chars, union_type_list.items) catch {
                 self.current_compiler.?.err("allocation failed", .{});
                 return values.Type.makeVoid();
             };
@@ -549,6 +574,16 @@ pub const ModuleCompiler = struct {
         }
 
         return t;
+    }
+
+    fn singleType(self: *ModuleCompiler) values.Type {
+        self.consume(.Identifier, "expect Type.", .{});
+        const type_props = self.current_compiler.?.types.getProperties(self.scanner.previous.lexeme.?);
+        if (type_props) |props| {
+            return props.type;
+        }
+        self.current_compiler.?.err("unknown Type.", .{});
+        return values.Type.makeVoid();
     }
 
     // Consumes an Identifier and reserve a slot in the current scope
