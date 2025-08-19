@@ -1,0 +1,7 @@
+type OptionalString = String or Null;
+
+var a:OptionalString = null;
+print(a); // expect: null
+
+a = "Lorem";
+print(a); // expect: Lorem

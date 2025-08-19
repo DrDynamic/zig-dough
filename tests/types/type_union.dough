@@ -1,0 +1,8 @@
+var a:Number or String or Null = null;
+print(a); // expect: null
+
+a = "Lorem";
+print(a); // expect: Lorem
+
+a = 42;
+print(a); // expect: 42

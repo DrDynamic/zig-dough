@@ -89,8 +89,6 @@ pub const Scanner = struct {
             '=' => if (self.match('=')) self.makeToken(.EqualEqual) else self.makeToken(.Equal),
             '>' => if (self.match('=')) self.makeToken(.GreaterEqual) else self.makeToken(.Greater),
             '<' => if (self.match('=')) self.makeToken(.LessEqual) else self.makeToken(.Less),
-            '&' => if (self.match('&')) self.makeToken(.LogicalAnd) else self.makeError("Unexpected character."),
-            '|' => if (self.match('|')) self.makeToken(.LogicalOr) else self.makeError("Unexpected character."),
 
             '"' => {
                 self.makeString('"');
@@ -232,6 +230,7 @@ pub const Scanner = struct {
         }
 
         const tokenType = switch (self._tokenStart[0]) {
+            'a' => self.matchIdentifier("nd", 1, 2, .LogicalAnd),
             'c' => self.matchIdentifier("onst", 1, 4, .Const),
             'e' => self.matchIdentifier("lse", 1, 3, .Else),
             'f' => |_| f_case: {
@@ -247,6 +246,7 @@ pub const Scanner = struct {
             },
             'i' => self.matchIdentifier("f", 1, 1, .If),
             'n' => self.matchIdentifier("ull", 1, 3, .Null),
+            'o' => self.matchIdentifier("r", 1, 1, .LogicalOr),
             'r' => self.matchIdentifier("eturn", 1, 5, .Return),
             't' => |_| t_case: {
                 if (self._currentChar - self._tokenStart > 1) {

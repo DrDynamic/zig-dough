@@ -73,19 +73,19 @@ pub const FunctionCompiler = struct {
 
         self.scopeDepth -= 1;
 
-        var types_stack = &self.types;
-        while (types_stack.properties.items.len > 0 and types_stack.properties.getLast().depth > self.scopeDepth) {
-            types_stack.pop() catch |e| {
-                self.err("Unexpected error occured: {s}\n", .{@errorName(e)});
-            };
-        }
-
         var references = &self.references;
         while (references.properties.items.len > 0 and references.properties.getLast().depth > self.scopeDepth) {
             references.pop() catch |e| {
                 self.err("Unexpectd error occured: {s}\n", .{@errorName(e)});
             };
             self.emitOpCode(.Pop);
+        }
+
+        var types_stack = &self.types;
+        while (types_stack.properties.items.len > 0 and types_stack.properties.getLast().depth > self.scopeDepth) {
+            types_stack.pop() catch |e| {
+                self.err("Unexpected error occured: {s}\n", .{@errorName(e)});
+            };
         }
     }
 
@@ -527,7 +527,7 @@ pub const ModuleCompiler = struct {
 
             if (props.type) |prop_type| {
                 if (context.type != null and !prop_type.satisfiesShape(context.type.?)) {
-                    self.current_compiler.?.err("can not assign {} to {}", .{ context.type.?, prop_type });
+                    self.current_compiler.?.err("can not assign {shape} to {shape}", .{ context.type.?, prop_type });
                 }
             } else {
                 props.type = context.type;

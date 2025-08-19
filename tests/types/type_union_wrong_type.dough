@@ -1,0 +1,2 @@
+var a:Number or String or Null = null;
+a= true; // expect compile error: Error at 'true': can not assign Bool to Number or String or Null

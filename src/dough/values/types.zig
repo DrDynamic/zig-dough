@@ -114,7 +114,6 @@ pub const Type = union(enum) {
         options: std.fmt.FormatOptions,
         out_stream: anytype,
     ) !void {
-        _ = fmt;
         _ = options;
 
         switch (self) {
@@ -126,8 +125,11 @@ pub const Type = union(enum) {
             .Function => try out_stream.print("Function () => Void", .{}),
             .Module => try out_stream.print("Module", .{}),
             .TypeUnion => |union_type| {
-                if (union_type.name) |name| {
-                    try out_stream.print("{s}", .{name});
+                if (!std.mem.eql(u8, fmt, "shape")) {
+                    if (union_type.name) |name| {
+                        try out_stream.print("{s}", .{name});
+                        return;
+                    }
                 }
 
                 for (0.., union_type.types) |index, t| {
