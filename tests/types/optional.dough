@@ -1,0 +1,5 @@
+var a:?Number = null;
+print(a); // expect: null
+
+a= 42;
+print(a); // expect: 42

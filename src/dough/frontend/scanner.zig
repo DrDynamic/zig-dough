@@ -80,6 +80,7 @@ pub const Scanner = struct {
             '.' => self.makeToken(.Dot),
             '-' => self.makeToken(.Minus),
             '+' => self.makeToken(.Plus),
+            '?' => self.makeToken(.QuestionMark),
             ';' => self.makeToken(.Semicolon),
             '/' => self.makeToken(.Slash),
             '*' => self.makeToken(.Star),

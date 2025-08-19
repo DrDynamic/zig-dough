@@ -341,6 +341,7 @@ pub const ModuleCompiler = struct {
         .Dot = .{ .prefix = null, .infix = dot, .precedence = .Call },
         .Minus = .{ .prefix = unary, .infix = binary, .precedence = .Term },
         .Plus = .{ .prefix = null, .infix = binary, .precedence = .Term },
+        .QuestionMark = .{},
         .Semicolon = .{},
         .Slash = .{ .prefix = null, .infix = binary, .precedence = .Factor },
         .Star = .{ .prefix = null, .infix = binary, .precedence = .Factor },
@@ -543,17 +544,55 @@ pub const ModuleCompiler = struct {
     }
 
     fn typeDefinition(self: *ModuleCompiler, type_name: ?Token) values.Type {
-        var t = self.singleType();
+        var t: values.Type = undefined;
+        if (self.match(.QuestionMark)) {
+            t = self.singleType();
 
-        if (self.scanner.current.token_type == .LogicalOr) {
-            var union_type_list = std.ArrayList(values.Type).init(dough.allocator);
-            union_type_list.append(t) catch {
+            var _types = [_]values.Type{
+                t,
+                values.Type.makeNull(),
+            };
+
+            t = values.Type.makeTypeUnion(
+                if (type_name) |tkn| tkn.lexeme else null,
+                _types[0..],
+            ) catch {
                 self.current_compiler.?.err("allocation failed", .{});
                 return values.Type.makeVoid();
             };
+        } else {
+            t = self.singleType();
+        }
+
+        if (self.scanner.current.token_type == .LogicalOr) {
+            var union_type_list = std.ArrayList(values.Type).init(dough.allocator);
+
+            if (t == .TypeUnion) {
+                union_type_list.append(t.TypeUnion.types[0]) catch {
+                    self.current_compiler.?.err("allocation failed", .{});
+                    return values.Type.makeVoid();
+                };
+                union_type_list.append(t.TypeUnion.types[0]) catch {
+                    self.current_compiler.?.err("allocation failed", .{});
+                    return values.Type.makeVoid();
+                };
+                t.deinit();
+            } else {
+                union_type_list.append(t) catch {
+                    self.current_compiler.?.err("allocation failed", .{});
+                    return values.Type.makeVoid();
+                };
+            }
 
             while (self.scanner.current.token_type == .LogicalOr) {
                 self.scanner.scanToken();
+
+                if (self.match(.QuestionMark)) {
+                    union_type_list.append(values.Type.makeNull()) catch {
+                        self.current_compiler.?.err("allocation failed", .{});
+                        return values.Type.makeVoid();
+                    };
+                }
 
                 union_type_list.append(self.singleType()) catch {
                     self.current_compiler.?.err("allocation failed", .{});

@@ -13,6 +13,7 @@ pub const TokenType = enum {
     Dot,
     Minus,
     Plus,
+    QuestionMark,
     Semicolon,
     Slash,
     Star,

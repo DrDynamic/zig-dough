@@ -1,0 +1,1 @@
+var a:?String = 4; // expect compile error: Error at '4': can not assign Number to String or Null
