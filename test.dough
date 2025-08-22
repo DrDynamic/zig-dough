@@ -1,3 +1,7 @@
-type OptionalString = String or Null;
 
-var a:OptionalString = 1; // expect compile error: Error at '1': can not assign Number to String or Null
+var a: ?Bool = null;
+if(a) {
+    print("if true");
+} else {
+    print("if false");
+}

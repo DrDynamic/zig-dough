@@ -1,0 +1,3 @@
+type OptionalString = String or ?Number; // expect compile error: Error at '?': Can not use optional shorthand in type union (if this should be nullable add 'or Null').
+
+var a:OptionalString = "a"; 

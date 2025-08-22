@@ -544,8 +544,11 @@ pub const ModuleCompiler = struct {
     }
 
     fn typeDefinition(self: *ModuleCompiler, type_name: ?Token) values.Type {
+        var optional_token: ?Token = null;
         var t: values.Type = undefined;
         if (self.match(.QuestionMark)) {
+            optional_token = self.scanner.previous;
+
             t = self.singleType();
 
             var _types = [_]values.Type{
@@ -566,32 +569,22 @@ pub const ModuleCompiler = struct {
 
         if (self.scanner.current.token_type == .LogicalOr) {
             var union_type_list = std.ArrayList(values.Type).init(dough.allocator);
-
-            if (t == .TypeUnion) {
-                union_type_list.append(t.TypeUnion.types[0]) catch {
-                    self.current_compiler.?.err("allocation failed", .{});
-                    return values.Type.makeVoid();
-                };
-                union_type_list.append(t.TypeUnion.types[0]) catch {
-                    self.current_compiler.?.err("allocation failed", .{});
-                    return values.Type.makeVoid();
-                };
-                t.deinit();
-            } else {
-                union_type_list.append(t) catch {
-                    self.current_compiler.?.err("allocation failed", .{});
-                    return values.Type.makeVoid();
-                };
+            if (optional_token) |token| {
+                self.current_compiler.?.errAt(&token, "Can not use optional shorthand in type union (if this should be nullable add 'or Null').", .{});
+                return values.Type.makeVoid();
             }
+
+            union_type_list.append(t) catch {
+                self.current_compiler.?.err("allocation failed", .{});
+                return values.Type.makeVoid();
+            };
 
             while (self.scanner.current.token_type == .LogicalOr) {
                 self.scanner.scanToken();
 
                 if (self.match(.QuestionMark)) {
-                    union_type_list.append(values.Type.makeNull()) catch {
-                        self.current_compiler.?.err("allocation failed", .{});
-                        return values.Type.makeVoid();
-                    };
+                    self.current_compiler.?.errAt(&self.scanner.previous, "Can not use optional shorthand in type union (if this should be nullable add 'or Null').", .{});
+                    return values.Type.makeVoid();
                 }
 
                 union_type_list.append(self.singleType()) catch {
@@ -634,7 +627,9 @@ pub const ModuleCompiler = struct {
     }
 
     fn statement(self: *ModuleCompiler) void {
-        if (self.match(.Return)) {
+        if (self.match(.If)) {
+            self.ifStatement();
+        } else if (self.match(.Return)) {
             self.returnStatement();
         } else if (self.match(.LeftBrace)) {
             self.current_compiler.?.beginScope();
@@ -643,6 +638,35 @@ pub const ModuleCompiler = struct {
         } else {
             self.expressionStatement();
         }
+    }
+
+    fn ifStatement(self: *ModuleCompiler) void {
+        self.consume(.LeftParen, "Expect '(' after 'if'.", .{});
+        self.expression(null);
+        self.consume(.RightParen, "Expect ')' after condition.", .{});
+
+        const jump_to_else = self.current_compiler.?.emitJump(.JumpIfFalse);
+
+        // Pop value from condition
+        self.current_compiler.?.emitOpCode(.Pop);
+
+        // the then block
+        self.statement();
+
+        // jump out of if when then block was executed
+        const jump_behind_if = self.current_compiler.?.emitJump(.Jump);
+
+        self.current_compiler.?.patchJump(jump_to_else);
+
+        // When then block is not executed:
+        // Pop value from condition
+        self.current_compiler.?.emitOpCode(.Pop);
+
+        if (self.match(.Else)) {
+            self.statement();
+        }
+
+        self.current_compiler.?.patchJump(jump_behind_if);
     }
 
     fn returnStatement(self: *ModuleCompiler) void {
