@@ -642,7 +642,17 @@ pub const ModuleCompiler = struct {
 
     fn ifStatement(self: *ModuleCompiler) void {
         self.consume(.LeftParen, "Expect '(' after 'if'.", .{});
-        self.expression(null);
+        var context = SharedContext{};
+        self.expression(&context);
+
+        if (context.type) |condition_type| {
+            if (condition_type != .Bool) {
+                self.current_compiler.?.err("condition must evaluate to a Bool.", .{});
+            }
+        } else {
+            self.current_compiler.?.err("conditoon has an unknown type.", .{});
+        }
+
         self.consume(.RightParen, "Expect ')' after condition.", .{});
 
         const jump_to_else = self.current_compiler.?.emitJump(.JumpIfFalse);
@@ -876,20 +886,49 @@ pub const ModuleCompiler = struct {
         }
     }
 
-    fn and_(self: *ModuleCompiler, _: CompilationContext) void {
+    fn and_(self: *ModuleCompiler, context: CompilationContext) void {
         const end_jump = self.current_compiler.?.emitJump(.JumpIfFalse);
 
         self.current_compiler.?.emitOpCode(.Pop);
-        self.parsePrecedence(.And, null);
+
+        self.current_compiler.?.assertType(
+            .Bool,
+            context.shared.type,
+            "expressions of logical operators have to evaluate to Bool",
+        );
+
+        var new_context = SharedContext{};
+        self.parsePrecedence(.And, &new_context);
+
+        self.current_compiler.?.assertType(
+            .Bool,
+            new_context.type,
+            "expressions of logical operators have to evaluate to Bool",
+        );
 
         self.current_compiler.?.patchJump(end_jump);
     }
 
-    fn or_(self: *ModuleCompiler, _: CompilationContext) void {
+    fn or_(self: *ModuleCompiler, context: CompilationContext) void {
         const end_jump = self.current_compiler.?.emitJump(.JumpIfTrue);
 
         self.current_compiler.?.emitOpCode(.Pop);
-        self.parsePrecedence(.Or, null);
+
+        self.current_compiler.?.assertType(
+            .Bool,
+            context.shared.type,
+            "expressions of logical operators have to evaluate to Bool",
+        );
+
+        var new_context = SharedContext{};
+        self.parsePrecedence(.Or, &new_context);
+
+        self.current_compiler.?.assertType(
+            .Bool,
+            new_context.type,
+            "expressions of logical operators have to evaluate to Bool",
+        );
+        // TODO: test early exit (since only bool expressions are allowed now, we need functions to test this)
 
         self.current_compiler.?.patchJump(end_jump);
     }

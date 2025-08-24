@@ -1,7 +1,6 @@
-
-var a: ?Bool = null;
-if(a) {
-    print("if true");
+var a: String = "a";
+if(a == "" or a = "b") {
+    print("if true", a);
 } else {
-    print("if false");
+    print("if false", a);
 }
