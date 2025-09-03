@@ -1,0 +1,1 @@
+true == false and 42; // expect compile error: Error at '42': expressions of logical operators have to evaluate to Bool

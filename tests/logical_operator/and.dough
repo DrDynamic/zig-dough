@@ -1,3 +1,4 @@
+// skip: both sides of an 'and' need to evaluate to bool. So we need functions to test this!
 // Note: These tests implicitly depend on ints being truthy.
 
 // Return the first non-true argument.

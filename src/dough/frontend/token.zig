@@ -17,6 +17,7 @@ pub const TokenType = enum {
     Semicolon,
     Slash,
     Star,
+    VerticalLine,
     // One or two character tokens.
     Bang,
     BangEqual,

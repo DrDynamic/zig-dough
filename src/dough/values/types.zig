@@ -8,11 +8,52 @@ pub const FunctionMeta = struct {
 pub const TypeUnionMeta = struct {
     name: ?[]const u8,
     types: []Type,
+
+    pub fn makeTypeUnion(name: ?[]const u8, types: []Type) !Type {
+        var own_name: ?[]const u8 = null;
+        if (name) |assured_name| {
+            const tmp = try dough.allocator.alloc(u8, assured_name.len);
+            @memcpy(tmp, assured_name);
+            own_name = tmp;
+        }
+
+        const own_types = try dough.allocator.alloc(Type, types.len);
+        @memcpy(own_types, types);
+
+        var type_meta = try dough.allocator.create(TypeUnionMeta);
+        type_meta.name = own_name;
+        type_meta.types = own_types;
+
+        return Type{ .TypeUnion = type_meta };
+    }
+
+    pub fn copyWithoutType(self: TypeUnionMeta, lose_type: Type) !Type {
+        var new_size: usize = 0;
+        for (self.types) |own_type| {
+            if (!own_type.equals(lose_type)) {
+                new_size += 1;
+            }
+        }
+
+        const own_types = try dough.allocator.alloc(Type, new_size);
+        for (0.., self.types) |index, own_type| {
+            if (!own_type.equals(lose_type)) {
+                own_types[index] = own_type;
+            }
+        }
+
+        var type_meta = try dough.allocator.create(TypeUnionMeta);
+        type_meta.name = null;
+        type_meta.types = own_types;
+
+        return Type{ .TypeUnion = type_meta };
+    }
 };
 
 pub const Type = union(enum) {
     Void,
     Null,
+    Error,
     Bool,
     Number,
     String,
@@ -51,21 +92,7 @@ pub const Type = union(enum) {
     }
 
     pub fn makeTypeUnion(name: ?[]const u8, types: []Type) !Type {
-        var own_name: ?[]const u8 = null;
-        if (name) |assured_name| {
-            const tmp = try dough.allocator.alloc(u8, assured_name.len);
-            @memcpy(tmp, assured_name);
-            own_name = tmp;
-        }
-
-        const own_types = try dough.allocator.alloc(Type, types.len);
-        @memcpy(own_types, types);
-
-        var type_meta = try dough.allocator.create(TypeUnionMeta);
-        type_meta.name = own_name;
-        type_meta.types = own_types;
-
-        return Type{ .TypeUnion = type_meta };
+        return TypeUnionMeta.makeTypeUnion(name, types);
     }
 
     pub fn deinit(self: Type) void {
@@ -91,6 +118,7 @@ pub const Type = union(enum) {
         return switch (self) {
             .Void => false, // nothing can be assigned to void
             .Null => value_type == .Null,
+            .Error => value_type == .Error,
             .Bool => value_type == .Bool,
             .Number => value_type == .Number,
             .String => value_type == .String,
@@ -100,7 +128,7 @@ pub const Type = union(enum) {
                 break :TypeUnion_case switch (value_type) {
                     .Void, .Function, .Module => false,
 
-                    .Null, .Bool, .Number, .String => containsType(union_type.types, value_type),
+                    .Null, .Error, .Bool, .Number, .String => containsType(union_type.types, value_type),
 
                     .TypeUnion => |value_union| containsAllTypes(union_type.types, value_union.types),
                 };
@@ -119,6 +147,7 @@ pub const Type = union(enum) {
         switch (self) {
             .Void => try out_stream.print("Void", .{}),
             .Null => try out_stream.print("Null", .{}),
+            .Error => try out_stream.print("Error", .{}),
             .Bool => try out_stream.print("Bool", .{}),
             .Number => try out_stream.print("Number", .{}),
             .String => try out_stream.print("String", .{}),
@@ -146,6 +175,7 @@ pub const Type = union(enum) {
         return switch (self) {
             .Void => "Void",
             .Null => "Null",
+            .Error => "Error",
             .Bool => "Bool",
             .Number => "Number",
             .String => "String",

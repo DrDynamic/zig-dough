@@ -72,6 +72,7 @@ class TestRunner {
 
   int passed = 0;
   int failed = 0;
+  int skiped = 0;
   int expectations = 0;
 
   TestRunner(this.interpreterOption);
@@ -115,7 +116,7 @@ class TestRunner {
 
     await Future.wait(tests);
 
-    if (failed == 0) {
+    if (failed == 0 && skiped == 0) {
       print(
         "All ${term.green(passed)} tests passed "
         "($expectations expectations).",
@@ -123,6 +124,7 @@ class TestRunner {
     } else {
       print(
         "${term.green(passed)} tests passed. "
+        "${term.yellow(skiped)} tests skiped. "
         "${term.red(failed)} tests failed.",
       );
     }
@@ -131,6 +133,11 @@ class TestRunner {
   Future<void> executeTest(Test test) async {
     var isTest = await test.parse();
     if (!isTest) return;
+
+    if (test.shouldSkip) {
+      skiped += 1;
+      return;
+    }
 
     expectations += test.expectations;
     await test.run(interpreterOption);
@@ -158,6 +165,7 @@ class ExpectedOutput {
 
 class Test {
   final _nonTestPattern = RegExp(r"// nontest");
+  final _skipTestPattern = RegExp(r"// skip");
   final _expectedOutputPattern = RegExp(r"// expect: ?(.*)");
   final _expectedCompileErrorPattern = RegExp(r"// expect compile error: (.+)");
   final _errorLinePattern = RegExp(r"// \[line (\d+)\] (Error.*)");
@@ -175,6 +183,8 @@ class Test {
 
   int expectations = 0;
 
+  bool shouldSkip = false;
+
   /// The list of failure message lines.
   final failures = <String>[];
 
@@ -191,6 +201,13 @@ class Test {
       if (match != null) {
         logVerbose("  This is not a test. (Nontest pattern found)");
         return false;
+      }
+
+      match = _skipTestPattern.firstMatch(line);
+      if (match != null) {
+        logVerbose("  This test should be skipped. (Skip pattern found)");
+        shouldSkip = true;
+        return true;
       }
 
       match = _expectedOutputPattern.firstMatch(line);

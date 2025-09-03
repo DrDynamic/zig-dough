@@ -1,0 +1,3 @@
+// Assignment in if condition.
+var a = false;
+if (a = true) print(a); // expect compile error: Error at 'true': condition can not contain assignments.

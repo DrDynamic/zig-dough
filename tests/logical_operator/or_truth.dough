@@ -1,3 +1,4 @@
+// skip: both sides of an 'or' need to evaluate to bool. So we need functions to test this!
 // False and null are false.
 print(false or "ok"); // expect: ok
 print(null or "ok"); // expect: ok

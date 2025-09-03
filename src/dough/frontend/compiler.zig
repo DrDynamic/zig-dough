@@ -101,7 +101,7 @@ pub const FunctionCompiler = struct {
                 if (prop.token) |token| {
                     self.errAt(&token, "Variable not initialized", .{});
                 } else {
-                    self.err("Variable not initialized", .{});
+                    self.err("Variable '{?s}' not initialized", .{prop.identifier});
                 }
             }
 
@@ -171,9 +171,11 @@ pub const FunctionCompiler = struct {
                     if (!value_type.equals(var_type)) {
                         self.err("mixing types is not allowed", .{});
                     }
-                } else {
-                    self.err("variable not initialized", .{});
                 }
+            }
+
+            if (props.type == null) {
+                self.err("Variable not initialized", .{});
             }
 
             self.emitOpCode(.GetSlot);
@@ -305,13 +307,14 @@ pub const FunctionCompiler = struct {
     }
 };
 
-const SharedContext = struct {
+const StatementContext = struct {
     type: ?values.Type = null,
+    hasAssignment: bool = false,
 };
 
 const CompilationContext = struct {
     can_assign: bool = false,
-    shared: *SharedContext = undefined,
+    statement_context: *StatementContext = undefined,
 };
 
 pub const ModuleCompiler = struct {
@@ -345,6 +348,7 @@ pub const ModuleCompiler = struct {
         .Semicolon = .{},
         .Slash = .{ .prefix = null, .infix = binary, .precedence = .Factor },
         .Star = .{ .prefix = null, .infix = binary, .precedence = .Factor },
+        .VerticalLine = .{},
         // One or two character tokens.
         .Bang = .{ .prefix = unary },
         .BangEqual = .{ .prefix = null, .infix = binary, .precedence = .Equality },
@@ -523,7 +527,9 @@ pub const ModuleCompiler = struct {
         if (self.match(.Equal)) {
             props.isWritten = true;
 
-            var context = SharedContext{};
+            var context = StatementContext{
+                .hasAssignment = true,
+            };
             self.expression(&context);
 
             if (props.type) |prop_type| {
@@ -642,26 +648,70 @@ pub const ModuleCompiler = struct {
 
     fn ifStatement(self: *ModuleCompiler) void {
         self.consume(.LeftParen, "Expect '(' after 'if'.", .{});
-        var context = SharedContext{};
+        var context = StatementContext{};
+
         self.expression(&context);
 
+        if (context.hasAssignment) {
+            self.current_compiler.?.err("condition can not contain assignments.", .{});
+        }
+
+        var needsThenCapture = false;
+        var needsElseCapture = false;
         if (context.type) |condition_type| {
-            if (condition_type != .Bool) {
-                self.current_compiler.?.err("condition must evaluate to a Bool.", .{});
+            switch (condition_type) {
+                .Bool => {
+                    needsThenCapture = false;
+                    needsElseCapture = false;
+                },
+                .TypeUnion => {
+                    if (context.type.?.satisfiesShape(.Null)) {
+                        needsThenCapture = true;
+                        needsElseCapture = false;
+
+                        // TODO: add check (is not null or jump if null)
+                    } else {
+                        self.current_compiler.?.err("invalid condition type. Must evaluate to Bool, or Nullable", .{});
+                    }
+                },
+                else => {
+                    self.current_compiler.?.err("invalid condition type. Must evaluate to Bool, or Nullable", .{});
+                },
             }
         } else {
-            self.current_compiler.?.err("conditoon has an unknown type.", .{});
+            self.current_compiler.?.err("could not infere type of condition", .{});
         }
 
         self.consume(.RightParen, "Expect ')' after condition.", .{});
 
         const jump_to_else = self.current_compiler.?.emitJump(.JumpIfFalse);
 
-        // Pop value from condition
-        self.current_compiler.?.emitOpCode(.Pop);
+        if (needsThenCapture) {
+            var capture_type = values.Type.makeVoid();
+            if (context.type != null and context.type.? == .TypeUnion) {
+                capture_type = context.type.?.TypeUnion.copyWithoutType(.Null) catch |e| cb: {
+                    self.current_compiler.?.err("Unexpectd error occured: {s}\n", .{@errorName(e)});
+                    break :cb .Void;
+                };
+            }
+            self.expressionCapture(capture_type, "expect payload capture when if condition does not evaluate to Bool.");
 
-        // the then block
-        self.statement();
+            // the then block
+            self.statement();
+
+            // Pop captured value from condition
+            self.current_compiler.?.references.pop() catch |e| {
+                self.current_compiler.?.err("Unexpectd error occured: {s}\n", .{@errorName(e)});
+            };
+
+            self.current_compiler.?.emitOpCode(.Pop);
+        } else {
+            // Pop value from condition
+            self.current_compiler.?.emitOpCode(.Pop);
+
+            // the then block
+            self.statement();
+        }
 
         // jump out of if when then block was executed
         const jump_behind_if = self.current_compiler.?.emitJump(.Jump);
@@ -669,14 +719,46 @@ pub const ModuleCompiler = struct {
         self.current_compiler.?.patchJump(jump_to_else);
 
         // When then block is not executed:
-        // Pop value from condition
-        self.current_compiler.?.emitOpCode(.Pop);
 
-        if (self.match(.Else)) {
-            self.statement();
+        if (needsElseCapture) {
+            if (self.match(.Else)) {
+                self.expressionCapture(.Error, "expect payload capture on else when is condition evaluates to error union.");
+
+                self.statement();
+
+                // Pop captured value from condition
+                self.current_compiler.?.references.pop() catch |e| {
+                    self.current_compiler.?.err("Unexpectd error occured: {s}\n", .{@errorName(e)});
+                };
+                self.current_compiler.?.emitOpCode(.Pop);
+            }
+        } else {
+            // Pop value from condition
+            self.current_compiler.?.emitOpCode(.Pop);
+
+            if (self.match(.Else)) {
+                self.statement();
+            }
         }
 
         self.current_compiler.?.patchJump(jump_behind_if);
+    }
+
+    fn expressionCapture(self: *ModuleCompiler, capture_type: values.Type, comptime message: []const u8) void {
+        self.consume(.VerticalLine, message, .{});
+        self.consume(.Identifier, "capture needs a name", .{});
+
+        const token = self.scanner.previous;
+        const maybe_addr = self.current_compiler.?.declareIdentifier(token.lexeme, true, token);
+        if (maybe_addr) |addr| {
+            var props: *SlotProperties = &self.current_compiler.?.references.properties.items[addr];
+
+            props.isDeclared = true;
+            props.isWritten = true;
+            props.type = capture_type;
+        }
+
+        self.consume(.VerticalLine, "capture needs to be surounded by '|'", .{});
     }
 
     fn returnStatement(self: *ModuleCompiler) void {
@@ -696,8 +778,8 @@ pub const ModuleCompiler = struct {
         self.current_compiler.?.emitByte(@intFromEnum(OpCode.Pop));
     }
 
-    fn expression(self: *ModuleCompiler, shared_context: ?*SharedContext) void {
-        self.parsePrecedence(.Assignment, shared_context);
+    fn expression(self: *ModuleCompiler, statement_context: ?*StatementContext) void {
+        self.parsePrecedence(.Assignment, statement_context);
     }
 
     fn expressionList(self: *ModuleCompiler, endToken: TokenType, comptime too_many_error: []const u8) u8 {
@@ -723,32 +805,32 @@ pub const ModuleCompiler = struct {
     fn literal(self: *ModuleCompiler, context: CompilationContext) void {
         switch (self.scanner.previous.token_type.?) {
             .Null => {
-                if (context.shared.type) |value_type| {
+                if (context.statement_context.type) |value_type| {
                     if (value_type != .Null) {
                         self.current_compiler.?.err("mixing types is not allowed", .{});
                     }
                 } else {
-                    context.shared.type = values.Type.makeNull();
+                    context.statement_context.type = values.Type.makeNull();
                 }
                 self.current_compiler.?.emitOpCode(.PushNull);
             },
             .True => {
-                if (context.shared.type) |value_type| {
+                if (context.statement_context.type) |value_type| {
                     if (value_type != .Bool) {
                         self.current_compiler.?.err("mixing types is not allowed", .{});
                     }
                 } else {
-                    context.shared.type = values.Type.makeBool();
+                    context.statement_context.type = values.Type.makeBool();
                 }
                 self.current_compiler.?.emitOpCode(.PushTrue);
             },
             .False => {
-                if (context.shared.type) |value_type| {
+                if (context.statement_context.type) |value_type| {
                     if (value_type != .Bool) {
                         self.current_compiler.?.err("mixing types is not allowed", .{});
                     }
                 } else {
-                    context.shared.type = values.Type.makeBool();
+                    context.statement_context.type = values.Type.makeBool();
                 }
                 self.current_compiler.?.emitOpCode(.PushFalse);
             },
@@ -756,18 +838,18 @@ pub const ModuleCompiler = struct {
         }
     }
 
-    fn grouping(self: *ModuleCompiler, _: CompilationContext) void {
-        self.expression(null);
+    fn grouping(self: *ModuleCompiler, context: CompilationContext) void {
+        self.expression(context.statement_context);
         self.consume(.RightParen, "Expect ')' after expression", .{});
     }
 
     fn number(self: *ModuleCompiler, context: CompilationContext) void {
-        if (context.shared.type) |value_type| {
+        if (context.statement_context.type) |value_type| {
             if (value_type != .Number) {
                 self.current_compiler.?.err("mixing types is not allowed", .{});
             }
         } else {
-            context.shared.type = values.Type.makeNumber();
+            context.statement_context.type = values.Type.makeNumber();
         }
 
         if (std.fmt.parseFloat(f64, self.scanner.previous.lexeme.?)) |value| {
@@ -785,19 +867,19 @@ pub const ModuleCompiler = struct {
     fn unary(self: *ModuleCompiler, context: CompilationContext) void {
         const operatorType = self.scanner.previous.token_type.?;
 
-        self.parsePrecedence(.Unary, context.shared);
+        self.parsePrecedence(.Unary, context.statement_context);
 
         switch (operatorType) {
             .Bang => {
                 self.current_compiler.?.emitOpCode(.LogicalNot);
-                context.shared.type = values.Type.makeBool();
+                context.statement_context.type = values.Type.makeBool();
             },
             .Minus => {
-                if (context.shared.type) |value_type| {
-                    if (value_type != .Number) {
-                        self.current_compiler.?.err("Operand must be a number.", .{});
-                    }
-                }
+                self.current_compiler.?.assertType(
+                    .Number,
+                    context.statement_context.type,
+                    "Operand must be a number.",
+                );
                 self.current_compiler.?.emitOpCode(.Negate);
             },
             else => return,
@@ -808,7 +890,7 @@ pub const ModuleCompiler = struct {
         const operator_type = self.scanner.previous.token_type.?;
         const rule = self.parse_rules.getPtrConst(operator_type);
 
-        self.parsePrecedence(@enumFromInt(@intFromEnum(rule.precedence) + 1), context.shared);
+        self.parsePrecedence(@enumFromInt(@intFromEnum(rule.precedence) + 1), context.statement_context);
 
         switch (operator_type) {
             .BangEqual => self.current_compiler.?.emitOpCode(.NotEqual),
@@ -817,7 +899,7 @@ pub const ModuleCompiler = struct {
             .Greater => {
                 self.current_compiler.?.assertType(
                     .Number,
-                    context.shared.type,
+                    context.statement_context.type,
                     "Unsupported operand types: must both be numbers",
                 );
                 self.current_compiler.?.emitOpCode(.Greater);
@@ -825,7 +907,7 @@ pub const ModuleCompiler = struct {
             .GreaterEqual => {
                 self.current_compiler.?.assertType(
                     .Number,
-                    context.shared.type,
+                    context.statement_context.type,
                     "Unsupported operand types: must both be numbers",
                 );
                 self.current_compiler.?.emitOpCode(.GreaterEqual);
@@ -833,7 +915,7 @@ pub const ModuleCompiler = struct {
             .Less => {
                 self.current_compiler.?.assertType(
                     .Number,
-                    context.shared.type,
+                    context.statement_context.type,
                     "Unsupported operand types: must both be numbers",
                 );
                 self.current_compiler.?.emitOpCode(.Less);
@@ -841,14 +923,14 @@ pub const ModuleCompiler = struct {
             .LessEqual => {
                 self.current_compiler.?.assertType(
                     .Number,
-                    context.shared.type,
+                    context.statement_context.type,
                     "Unsupported operand types: must both be numbers",
                 );
                 self.current_compiler.?.emitOpCode(.LessEqual);
             },
 
             .Plus => {
-                if (context.shared.type) |value_type| {
+                if (context.statement_context.type) |value_type| {
                     if (value_type == .String) {
                         self.current_compiler.?.emitOpCode(.ConcatString);
                     } else if (value_type == .Number) {
@@ -861,7 +943,7 @@ pub const ModuleCompiler = struct {
             .Minus => {
                 self.current_compiler.?.assertType(
                     .Number,
-                    context.shared.type,
+                    context.statement_context.type,
                     "Unsupported operand types: must both be numbers",
                 );
                 self.current_compiler.?.emitOpCode(.Subtract);
@@ -869,7 +951,7 @@ pub const ModuleCompiler = struct {
             .Star => {
                 self.current_compiler.?.assertType(
                     .Number,
-                    context.shared.type,
+                    context.statement_context.type,
                     "Unsupported operand types: must both be numbers",
                 );
                 self.current_compiler.?.emitOpCode(.Multiply);
@@ -877,7 +959,7 @@ pub const ModuleCompiler = struct {
             .Slash => {
                 self.current_compiler.?.assertType(
                     .Number,
-                    context.shared.type,
+                    context.statement_context.type,
                     "Unsupported operand types: must both be numbers",
                 );
                 self.current_compiler.?.emitOpCode(.Divide);
@@ -893,11 +975,11 @@ pub const ModuleCompiler = struct {
 
         self.current_compiler.?.assertType(
             .Bool,
-            context.shared.type,
+            context.statement_context.type,
             "expressions of logical operators have to evaluate to Bool",
         );
 
-        var new_context = SharedContext{};
+        var new_context = StatementContext{};
         self.parsePrecedence(.And, &new_context);
 
         self.current_compiler.?.assertType(
@@ -916,11 +998,11 @@ pub const ModuleCompiler = struct {
 
         self.current_compiler.?.assertType(
             .Bool,
-            context.shared.type,
+            context.statement_context.type,
             "expressions of logical operators have to evaluate to Bool",
         );
 
-        var new_context = SharedContext{};
+        var new_context = StatementContext{};
         self.parsePrecedence(.Or, &new_context);
 
         self.current_compiler.?.assertType(
@@ -941,7 +1023,7 @@ pub const ModuleCompiler = struct {
         self.consume(.RightBrace, "Expect '}}' after block.", .{});
     }
 
-    fn parsePrecedence(self: *ModuleCompiler, precedence: Precedence, shared_context: ?*SharedContext) void {
+    fn parsePrecedence(self: *ModuleCompiler, precedence: Precedence, statement_context: ?*StatementContext) void {
         self.advance();
         const parse_rule: *const ParseRule = self.parse_rules.getPtrConst(self.scanner.previous.token_type.?);
         const prefix_rule: *const ParseFn = parse_rule.prefix orelse {
@@ -953,11 +1035,11 @@ pub const ModuleCompiler = struct {
         var context = CompilationContext{
             .can_assign = @intFromEnum(precedence) <= @intFromEnum(Precedence.Assignment),
         };
-        if (shared_context) |assured| {
-            context.shared = assured;
+        if (statement_context) |assured| {
+            context.statement_context = assured;
         } else {
-            var shared = SharedContext{};
-            context.shared = &shared;
+            var new_statement_context = StatementContext{};
+            context.statement_context = &new_statement_context;
         }
 
         // Compile the prefix
@@ -983,12 +1065,13 @@ pub const ModuleCompiler = struct {
 
         if (context.can_assign and self.match(TokenType.Equal)) {
             // TODO: check access intent (can write ?)
-            self.expression(context.shared);
-            self.current_compiler.?.writeIdentifier(name.lexeme.?, context.shared.type);
+            context.statement_context.hasAssignment = true;
+            self.expression(context.statement_context);
+            self.current_compiler.?.writeIdentifier(name.lexeme.?, context.statement_context.type);
         } else {
-            const maybe_var_type = self.current_compiler.?.readIdentifier(name.lexeme.?, context.shared.type);
+            const maybe_var_type = self.current_compiler.?.readIdentifier(name.lexeme.?, context.statement_context.type);
             if (maybe_var_type) |var_type| {
-                context.shared.type = var_type;
+                context.statement_context.type = var_type;
             }
         }
     }
@@ -999,12 +1082,12 @@ pub const ModuleCompiler = struct {
     }
 
     fn string(self: *ModuleCompiler, context: CompilationContext) void {
-        if (context.shared.type) |value_type| {
+        if (context.statement_context.type) |value_type| {
             if (value_type != .String) {
                 self.current_compiler.?.err("mixing types is not allowed", .{});
             }
         } else {
-            context.shared.type = values.Type.makeString();
+            context.statement_context.type = values.Type.makeString();
         }
 
         const chars = self.scanner.previous.lexeme.?[0..self.scanner.previous.lexeme.?.len];

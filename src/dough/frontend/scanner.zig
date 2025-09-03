@@ -84,6 +84,7 @@ pub const Scanner = struct {
             ';' => self.makeToken(.Semicolon),
             '/' => self.makeToken(.Slash),
             '*' => self.makeToken(.Star),
+            '|' => self.makeToken(.VerticalLine),
 
             // One or two character tokens.
             '!' => if (self.match('=')) self.makeToken(.BangEqual) else self.makeToken(.Bang),

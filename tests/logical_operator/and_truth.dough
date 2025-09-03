@@ -1,3 +1,4 @@
+// skip: both sides of an 'and' need to evaluate to bool. So we need functions to test this! 
 // False and null are false.
 print(false and "bad"); // expect: false
 print(null and "bad"); // expect: null
