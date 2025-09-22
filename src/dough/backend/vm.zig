@@ -10,10 +10,9 @@ const SlotAddress = types.SlotAddress;
 const ConstantAddress = types.ConstantAddress;
 const OpCode = dough.backend.OpCode;
 
-const values = @import("../values/values.zig");
-const Value = values.Value;
+const Value = dough.values.Value;
 
-const objects = values.objects;
+const objects = dough.values.objects;
 const DoughClosure = objects.DoughClosure;
 const DoughExecutable = objects.DoughExecutable;
 const DoughModule = objects.DoughModule;
@@ -332,7 +331,7 @@ pub const VirtualMachine = struct {
                     self.push(result);
                 },
                 else => {
-                    self.runtimeError("Can not call {?s}", .{std.enums.tagName(values.objects.ObjType, callee.toObject().obj_type)});
+                    self.runtimeError("Can not call {?s}", .{std.enums.tagName(objects.ObjType, callee.toObject().obj_type)});
                     return InterpretError.RuntimeError;
                 },
             }

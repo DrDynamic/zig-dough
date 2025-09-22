@@ -8,6 +8,17 @@ const DoughFunction = @import("../values/objects.zig").DoughFunction;
 
 const OPCODE_NAME_FROMAT = "{s: >20}";
 
+pub fn dumpCode(code: []u8) void {
+    for (0.., code) |index, byte| {
+        if (index % 8 == 0) {
+            std.debug.print("\n{d:0>3} | ", .{index});
+        }
+
+        std.debug.print(" {X:0>2}", .{byte});
+    }
+    std.debug.print("\n", .{});
+}
+
 pub fn disassemble_function(function: *DoughFunction) void {
     std.debug.print("== <script> ==\n", .{}); // TODO: read name from function
 
@@ -99,6 +110,7 @@ fn slotAddressInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize 
 
 fn constantAddressInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
     const bytes: [3]u8 = chunk.code.items[offset..][1..4].*;
+
     const address: u24 = @bitCast(bytes);
 
     const value = chunk.constants.items[address];

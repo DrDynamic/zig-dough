@@ -346,6 +346,15 @@ pub const GarbageColletingAllocator = struct {
                 const closure = object.as(objects.DoughClosure);
                 self.markObject(closure.function.asObject());
             },
+            .ErrorSet => {
+                const error_list = object.as(objects.DoughErrorSet);
+                var iterator = error_list.items.iterator();
+
+                while (iterator.next()) |entry| {
+                    self.markObject(entry.value_ptr.*.asObject());
+                }
+            },
+            .Error => {},
             .Function => {
                 const function = object.as(objects.DoughFunction);
                 self.markArray(function.chunk.constants.items);

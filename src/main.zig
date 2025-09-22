@@ -3,6 +3,8 @@ pub fn main() !void {
     defer _ = gpa.deinit();
 
     try dough.init(gpa.allocator());
+    //    dough.config.debug_dump_code = true;
+    //    dough.config.debug_print_code = true;
 
     defer dough.deinit();
 
@@ -36,7 +38,7 @@ fn runFile(path: []const u8) !void {
     defer dough.allocator.free(source);
 
     var n = [_]*DoughNativeFunction{undefined};
-    n[0] = try DoughNativeFunction.init("print", natives.print);
+    n[0] = DoughNativeFunction.init("print", natives.print);
     try dough.tmpObjects.append(n[0].asObject());
 
     const module = try dough.compiler.compile(source, &n);

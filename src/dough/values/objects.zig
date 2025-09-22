@@ -15,6 +15,9 @@ pub const ObjType = enum {
     Module,
     NativeFunction,
     String,
+
+    ErrorSet,
+    Error,
 };
 
 pub const NativeFn = fn (usize, []Value) Value;
@@ -23,8 +26,8 @@ pub const DoughNativeFunction = struct {
     name: []const u8,
     function: *const NativeFn,
 
-    pub fn init(name: []const u8, function: NativeFn) !*DoughNativeFunction {
-        const obj = try DoughObject.init(DoughNativeFunction, ObjType.NativeFunction);
+    pub fn init(name: []const u8, function: NativeFn) *DoughNativeFunction {
+        const obj = DoughObject.init(DoughNativeFunction, ObjType.NativeFunction);
         const native = obj.as(DoughNativeFunction);
         native.* = .{
             .obj = obj.*,
@@ -66,8 +69,11 @@ pub const DoughObject = struct {
     nextGray: ?*DoughObject,
     is_marked: bool,
 
-    pub fn init(comptime T: type, obj_type: ObjType) !*DoughObject {
-        const ptr = try dough.garbage_collector.allocator().create(T);
+    pub fn init(comptime T: type, obj_type: ObjType) *DoughObject {
+        const ptr = dough.garbage_collector.allocator().create(T) catch {
+            @panic("failed create Object");
+        };
+
         ptr.obj = DoughObject{
             .obj_type = obj_type,
 
@@ -91,10 +97,12 @@ pub const DoughObject = struct {
 
     pub fn deinit(self: *DoughObject) void {
         switch (self.obj_type) {
+            .Closure => self.as(DoughClosure).deinit(),
+            .ErrorSet => self.as(DoughErrorSet).deinit(),
+            .Error => self.as(DoughError).deinit(),
+            .Function => self.as(DoughFunction).deinit(),
             .Module => self.as(DoughModule).deinit(),
             .NativeFunction => self.as(DoughNativeFunction).deinit(),
-            .Closure => self.as(DoughClosure).deinit(),
-            .Function => self.as(DoughFunction).deinit(),
             .String => self.as(DoughString).deinit(),
         }
     }
@@ -111,27 +119,37 @@ pub const DoughObject = struct {
 
     pub fn format(self: *DoughObject, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
         switch (self.obj_type) {
+            .Closure => try self.as(DoughClosure).format(fmt, options, out_stream),
+            .ErrorSet => try self.as(DoughErrorSet).format(fmt, options, out_stream),
+            .Error => try self.as(DoughError).format(fmt, options, out_stream),
+            .Function => try self.as(DoughFunction).format(fmt, options, out_stream),
             .Module => try self.as(DoughModule).format(fmt, options, out_stream),
             .NativeFunction => try self.as(DoughNativeFunction).format(fmt, options, out_stream),
-            .Closure => try self.as(DoughClosure).format(fmt, options, out_stream),
-            .Function => try self.as(DoughFunction).format(fmt, options, out_stream),
             .String => try self.as(DoughString).format(fmt, options, out_stream),
         }
     }
 
     pub fn toString(self: *DoughObject) *DoughString {
         return switch (self.obj_type) {
+            .Closure => self.as(DoughClosure).toString(),
+            .ErrorSet => self.as(DoughErrorSet).toString(),
+            .Error => self.as(DoughError).toString(),
+            .Function => self.as(DoughFunction).toString(),
             .Module => self.as(DoughModule).toString(),
             .NativeFunction => self.as(DoughNativeFunction).toString(),
-            .Closure => self.as(DoughClosure).toString(),
-            .Function => self.as(DoughFunction).toString(),
             .String => self.as(DoughString),
         };
     }
 
     pub fn equals(self: *DoughObject, other: Value) bool {
         return switch (self.obj_type) {
-            .Module, .NativeFunction, .Closure, .Function => self == other.toObject(),
+            .Closure,
+            .Function,
+            .ErrorSet,
+            .Error,
+            .Module,
+            .NativeFunction,
+            => self == other.toObject(),
             .String => self.as(DoughString).equals(other),
         };
     }
@@ -154,9 +172,7 @@ pub const DoughModule = struct {
     function: *DoughFunction,
 
     pub fn init(function: *DoughFunction) *DoughModule {
-        const obj = DoughObject.init(DoughModule, ObjType.Module) catch {
-            @panic("failed to create DoughModule!");
-        };
+        const obj = DoughObject.init(DoughModule, ObjType.Module);
         const module = obj.as(DoughModule);
         module.* = .{
             .obj = obj.*,
@@ -194,9 +210,7 @@ pub const DoughClosure = struct {
     function: *DoughFunction,
 
     pub fn init(function: *DoughFunction) *DoughClosure {
-        const obj = DoughObject.init(DoughClosure, ObjType.Closure) catch {
-            @panic("failed to create DoughClosure");
-        };
+        const obj = DoughObject.init(DoughClosure, ObjType.Closure);
         const closure = obj.as(DoughClosure);
         closure.* = .{
             .obj = obj.*,
@@ -233,9 +247,7 @@ pub const DoughFunction = struct {
     name: ?[]const u8 = null,
 
     pub fn init() *DoughFunction {
-        const obj = DoughObject.init(DoughFunction, .Function) catch {
-            @panic("failed to create DoughFunction");
-        };
+        const obj = DoughObject.init(DoughFunction, .Function);
         const function = obj.as(DoughFunction);
         function.* = .{
             .obj = obj.*,
@@ -284,9 +296,7 @@ pub const DoughString = struct {
             dough.allocator.free(bytes);
             return interned;
         } else {
-            const obj = DoughObject.init(DoughString, .String) catch {
-                @panic("failed to create DoughString!");
-            };
+            const obj = DoughObject.init(DoughString, .String);
             const string = obj.as(DoughString);
 
             string.* = .{
@@ -346,5 +356,148 @@ pub const DoughString = struct {
         }
 
         return std.mem.eql(u8, self.bytes, other.toObject().as(DoughString).bytes);
+    }
+};
+
+pub const DoughError = struct {
+    obj: DoughObject,
+    name: []const u8,
+    error_set: *DoughErrorSet,
+
+    pub fn init(name: []const u8, error_set: *DoughErrorSet) *DoughError {
+        const obj = DoughObject.init(DoughError, .Error);
+
+        const buffer = dough.allocator.alloc(u8, name.len) catch {
+            @panic("failed to create ErrorList");
+        };
+        @memcpy(buffer, name);
+
+        const error_list_item = obj.as(DoughError);
+        error_list_item.* = .{
+            .obj = obj.*,
+            .name = buffer,
+            .error_set = error_set,
+        };
+        return error_list_item;
+    }
+
+    pub fn deinit(self: *DoughError) void {
+        dough.allocator.free(self.name);
+        dough.garbage_collector.allocator().destroy(self);
+    }
+
+    pub inline fn asObject(self: *DoughError) *DoughObject {
+        return &self.obj;
+    }
+
+    pub fn print(self: *DoughError) void {
+        std.debug.print("{}", .{self});
+    }
+
+    pub fn format(self: DoughError, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+        _ = fmt;
+        _ = options;
+
+        try out_stream.print("{s}", .{self.name});
+    }
+
+    pub fn toString(self: *DoughError) *DoughString {
+        const bytes = std.fmt.allocPrint(dough.allocator, "{}", .{self}) catch @panic("failed to create string!");
+        return DoughString.init(bytes);
+    }
+
+    pub inline fn toType(self: *DoughError) dough.values.Type {
+        return dough.values.Type.makeTypeObject(self.asObject());
+    }
+
+    pub fn equals(self: *DoughError, other: Value) bool {
+        if (!other.isObject()) {
+            return false;
+        }
+
+        if (!other.toObject().is(.ErrorListItem)) {
+            return false;
+        }
+
+        return self == other.toObject().as(DoughError);
+    }
+};
+
+pub const DoughErrorSet = struct {
+    obj: DoughObject,
+    name: []const u8,
+    // items: []*DoughError,
+    items: std.StringHashMap(*DoughError),
+
+    pub fn init(name: []const u8) *DoughErrorSet {
+        const obj = DoughObject.init(DoughErrorSet, .ErrorSet);
+
+        const name_buffer = dough.allocator.alloc(u8, name.len) catch {
+            @panic("failed to create ErrorList");
+        };
+        @memcpy(name_buffer, name);
+
+        const error_list = obj.as(DoughErrorSet);
+        error_list.* = .{
+            .obj = obj.*,
+            .name = name_buffer,
+            .items = std.StringHashMap(*DoughError).init(dough.allocator),
+        };
+
+        return error_list;
+    }
+
+    pub fn setItems(self: *DoughErrorSet, items: []*DoughError) void {
+        for (items) |dough_error| {
+            self.items.put(dough_error.name, dough_error) catch {
+                @panic("allocation failed!");
+            };
+        }
+    }
+
+    pub fn getError(self: *DoughErrorSet, name: []const u8) ?*DoughError {
+        return self.items.get(name);
+    }
+
+    pub fn deinit(self: *DoughErrorSet) void {
+        dough.allocator.free(self.name);
+        self.items.deinit();
+
+        dough.garbage_collector.allocator().destroy(self);
+    }
+
+    pub inline fn asObject(self: *DoughErrorSet) *DoughObject {
+        return &self.obj;
+    }
+
+    pub inline fn toType(self: *DoughErrorSet) dough.values.Type {
+        return dough.values.Type.makeTypeObject(self.asObject());
+    }
+
+    pub fn print(self: *DoughErrorSet) void {
+        std.debug.print("{}", .{self});
+    }
+
+    pub fn format(self: DoughErrorSet, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+        _ = fmt;
+        _ = options;
+
+        try out_stream.print("{s}", .{self.name});
+    }
+
+    pub fn toString(self: *DoughErrorSet) *DoughString {
+        return DoughString.copy(self.name);
+    }
+
+    pub fn equals(self: *DoughErrorSet, other: Value) bool {
+        if (!other.isObject()) {
+            return false;
+        }
+
+        if (!other.toObject().is(.ErrorList)) {
+            return false;
+        }
+
+        return self == other.toObject().as(DoughErrorSet);
     }
 };

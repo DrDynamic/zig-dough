@@ -1,15 +1,36 @@
-var a:?Number = 42;
+"AsDf.
 
-if(a) |assured_number| {
-    print(assured_number); // expect: 42
-}else {
-    print("not a number");
+error IoError {
+    FileNotFound,
+    PermissionDenied,
+};
+
+var result:!Number = IoError.PermissionDenied;
+result  = 42;
+
+
+if(result) |assured_result| {
+    print(assured_result); // expect: 42
+}else |assured_error|{
+    print(assured_error);
 }
 
-a = null;
+//var rename = IoError;
 
-if(a) |assured_number| {
-    print(assured_number);
-}else {
-    print("a is null"); // expect: a is null
+result = IoError.FileNotFound;
+
+if(result) |assured_result| {
+    print(assured_result);
+}else |assured_error|{
+    print(assured_error); // expect: IoError.FileNotFound
 }
+
+var r2:IoError!String or Null = "";
+
+
+
+var a: Number or String or Null = null;
+
+var b: String or Null = "A";
+
+a = b;

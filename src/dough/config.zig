@@ -3,6 +3,7 @@ const dough = @import("dough");
 
 // debugging flags
 pub var debug_print_tokens = false;
+pub var debug_dump_code = false;
 pub var debug_print_code = false;
 pub var debug_trace_execution = false;
 

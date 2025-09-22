@@ -36,6 +36,7 @@ pub const TokenType = enum {
     // Keywords.
     Const,
     Else,
+    Error,
     False,
     For,
     Function,
@@ -48,7 +49,7 @@ pub const TokenType = enum {
     While,
     // Special tokens
     Synthetic,
-    Error,
+    ScannerError,
     Eof,
 };
 

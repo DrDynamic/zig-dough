@@ -2,7 +2,7 @@ pub fn compileError(token: *const Token, comptime message: []const u8, args: any
     console.outMutex.lock();
     defer console.outMutex.unlock();
 
-    if (token.token_type == TokenType.Error) {
+    if (token.token_type == TokenType.ScannerError) {
         console.printErrorUnflushed("[line {d}] Error: ", .{token.line});
         console.printErrorUnflushed(message, args);
         console.printErrorUnflushed("\n", .{});

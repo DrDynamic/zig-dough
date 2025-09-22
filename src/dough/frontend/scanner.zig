@@ -118,7 +118,7 @@ pub const Scanner = struct {
     }
 
     fn makeError(self: *Scanner, message: []const u8) void {
-        self.next.token_type = TokenType.Error;
+        self.next.token_type = TokenType.ScannerError;
         self.next.lexeme = message;
         self.next.line = self._line;
     }
@@ -234,7 +234,16 @@ pub const Scanner = struct {
         const tokenType = switch (self._tokenStart[0]) {
             'a' => self.matchIdentifier("nd", 1, 2, .LogicalAnd),
             'c' => self.matchIdentifier("onst", 1, 4, .Const),
-            'e' => self.matchIdentifier("lse", 1, 3, .Else),
+            'e' => |_| e_case: {
+                if (self._currentChar - self._tokenStart > 1) {
+                    break :e_case switch (self._tokenStart[1]) {
+                        'l' => self.matchIdentifier("se", 2, 2, .Else),
+                        'r' => self.matchIdentifier("ror", 2, 3, .Error),
+                        else => .Identifier,
+                    };
+                }
+                break :e_case .Identifier;
+            },
             'f' => |_| f_case: {
                 if (self._currentChar - self._tokenStart > 1) {
                     break :f_case switch (self._tokenStart[1]) {

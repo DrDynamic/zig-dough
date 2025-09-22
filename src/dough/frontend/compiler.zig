@@ -133,6 +133,14 @@ pub const FunctionCompiler = struct {
         };
     }
 
+    pub fn getType(self: *FunctionCompiler, type_identifier: []const u8) ?values.Type {
+        const maybe_props = self.types.getProperties(type_identifier);
+        if (maybe_props) |props| {
+            return props.type;
+        }
+        return null;
+    }
+
     pub fn declareIdentifier(self: *FunctionCompiler, identifier: ?[]const u8, readonly: bool, token: ?Token) ?types.SlotAddress {
         if (identifier) |safeAnIdentifierAndNotNull| {
             const props = self.references.getProperties(safeAnIdentifierAndNotNull);
@@ -367,6 +375,7 @@ pub const ModuleCompiler = struct {
         // Keywords.
         .Const = .{},
         .Else = .{},
+        .Error = .{},
         .False = .{ .prefix = literal },
         .For = .{},
         .Function = .{},
@@ -380,7 +389,7 @@ pub const ModuleCompiler = struct {
 
         // Special tokens
         .Synthetic = .{},
-        .Error = .{},
+        .ScannerError = .{},
         .Eof = .{},
     }),
 
@@ -469,6 +478,10 @@ pub const ModuleCompiler = struct {
 
         const function = self.current_compiler.?.function;
 
+        if (dough.config.debug_dump_code) {
+            backend.debug.dumpCode(function.chunk.code.items);
+        }
+
         if (dough.config.debug_print_code) {
             // TODO: set module name / function name
             backend.debug.disassemble_function(function);
@@ -499,6 +512,8 @@ pub const ModuleCompiler = struct {
             if (maybe_address) |address| {
                 self.varDeclaration(address);
             }
+        } else if (self.match(.Error)) {
+            self.ErrorDeclaration();
         } else {
             self.statement();
         }
@@ -515,6 +530,63 @@ pub const ModuleCompiler = struct {
         _ = self.match(.Semicolon);
 
         _ = self.current_compiler.?.declareType(type_identifier.lexeme.?, type_definition);
+    }
+
+    fn ErrorDeclaration(self: *ModuleCompiler) void {
+        self.consume(.Identifier, "expect identifier when declaring error", .{});
+        const name = self.scanner.previous;
+
+        self.consume(.LeftBrace, "expect '{{' when declaring an error", .{});
+
+        const error_set = objects.DoughErrorSet.init(name.lexeme.?);
+        dough.tmpObjects.append(error_set.asObject()) catch unreachable;
+
+        var items: [255]*objects.DoughError = undefined;
+        var arg_count: u8 = 0;
+        while (!self.check(.RightBrace)) {
+            if (arg_count == 255) {
+                self.current_compiler.?.err("Can't have more than 255 identifiers", .{});
+            }
+
+            self.consume(.Identifier, "error enum can only hold identifierts", .{});
+            items[arg_count] = objects.DoughError.init(self.scanner.previous.lexeme.?, error_set);
+
+            // secure the ListItems from beeing garbage collected
+            dough.tmpObjects.append(items[arg_count].asObject()) catch unreachable;
+
+            arg_count += 1;
+
+            if (!self.match(TokenType.Comma)) {
+                break;
+            }
+        }
+
+        error_set.setItems(items[0..arg_count]);
+
+        self.consume(.RightBrace, "expect '}}' when declaring an error", .{});
+
+        const addr = self.current_compiler.?.addConstant(error_set.asObject().asValue());
+        self.current_compiler.?.emitOpCode(.GetConstant);
+        self.current_compiler.?.emitConstantAddress(addr);
+        const maybe_slot_address = self.current_compiler.?.declareIdentifier(name.lexeme, true, name);
+
+        if (maybe_slot_address) |slot_address| {
+            const props = &self.current_compiler.?.references.properties.items[slot_address];
+            props.type = error_set.toType();
+            props.isDeclared = true;
+        }
+
+        _ = self.current_compiler.?.declareType(error_set.name, error_set.toType());
+
+        // Garbage collector can reference ListItems now through constants
+        for (0..arg_count) |_| {
+            _ = dough.tmpObjects.pop();
+        }
+
+        // pop the error_set
+        _ = dough.tmpObjects.pop();
+
+        _ = self.match(.Semicolon);
     }
 
     fn varDeclaration(self: *ModuleCompiler, address: types.SlotAddress) void {
@@ -550,68 +622,95 @@ pub const ModuleCompiler = struct {
     }
 
     fn typeDefinition(self: *ModuleCompiler, type_name: ?Token) values.Type {
-        var optional_token: ?Token = null;
-        var t: values.Type = undefined;
         if (self.match(.QuestionMark)) {
-            optional_token = self.scanner.previous;
-
-            t = self.singleType();
-
-            var _types = [_]values.Type{
-                t,
+            var nullable_types = [_]values.Type{
                 values.Type.makeNull(),
+                self.singleType(),
             };
 
-            t = values.Type.makeTypeUnion(
-                if (type_name) |tkn| tkn.lexeme else null,
-                _types[0..],
-            ) catch {
-                self.current_compiler.?.err("allocation failed", .{});
-                return values.Type.makeVoid();
+            // is Nullable
+            const nullable = values.Type.makeTypeUnion(if (type_name) |tkn| tkn.lexeme.? else null, nullable_types[0..]) catch |e| cb: {
+                self.current_compiler.?.err("{s}", .{@errorName(e)});
+                break :cb .Void;
             };
-        } else {
-            t = self.singleType();
+
+            if (self.scanner.current.token_type == .LogicalOr) {
+                self.current_compiler.?.errAtCurrent("nullables can only be applied to single literals.", .{});
+            }
+            return nullable;
         }
 
-        if (self.scanner.current.token_type == .LogicalOr) {
-            var union_type_list = std.ArrayList(values.Type).init(dough.allocator);
-            if (optional_token) |token| {
-                self.current_compiler.?.errAt(&token, "Can not use optional shorthand in type union (if this should be nullable add 'or Null').", .{});
-                return values.Type.makeVoid();
-            }
+        var type_list = std.ArrayList(values.Type).init(dough.allocator);
+        defer type_list.deinit();
 
-            union_type_list.append(t) catch {
-                self.current_compiler.?.err("allocation failed", .{});
-                return values.Type.makeVoid();
-            };
+        if (self.scanner.current.token_type.? == .Bang or self.scanner.next.token_type.? == .Bang) {
+            // is Error Union
+            if (self.match(.Bang)) {
+                type_list.append(values.Type.makeAnyError()) catch |e| {
+                    self.current_compiler.?.err("{s}", .{@errorName(e)});
+                };
+            } else {
+                self.consume(.Identifier, "expect name of ErrorSet or nothing before '!'", .{});
 
-            while (self.scanner.current.token_type == .LogicalOr) {
-                self.scanner.scanToken();
+                if (self.current_compiler.?.getType(self.scanner.previous.lexeme.?)) |error_type| {
+                    if (error_type == .TypeObject and error_type.TypeObject.obj_type != .ErrorSet) {
+                        self.current_compiler.?.err("expect name of ErrorSet or nothing before '!'", .{});
+                        return .Void;
+                    }
 
-                if (self.match(.QuestionMark)) {
-                    self.current_compiler.?.errAt(&self.scanner.previous, "Can not use optional shorthand in type union (if this should be nullable add 'or Null').", .{});
-                    return values.Type.makeVoid();
+                    if (error_type != .AnyError and error_type != .TypeObject) {
+                        self.current_compiler.?.err("expect name of ErrorSet or nothing before '!'", .{});
+                        return .Void;
+                    }
+
+                    type_list.append(error_type) catch |e| {
+                        self.current_compiler.?.err("{s}", .{@errorName(e)});
+                    };
                 }
 
-                union_type_list.append(self.singleType()) catch {
-                    self.current_compiler.?.err("allocation failed", .{});
-                    return values.Type.makeVoid();
-                };
+                self.consume(.Bang, "expect '!' after ErrorSet", .{});
+            }
+        }
+
+        type_list.append(self.singleType()) catch {
+            self.current_compiler.?.err("allocation failed", .{});
+            return values.Type.makeVoid();
+        };
+
+        while (self.match(.LogicalOr)) {
+            if (self.match(.QuestionMark)) {
+                self.current_compiler.?.errAt(&self.scanner.previous, "Can not use optional shorthand in type union (if this should be nullable add 'or Null').", .{});
+                return values.Type.makeVoid();
+            }
+            if (self.match(.Bang)) {
+                self.current_compiler.?.errAt(&self.scanner.previous, "Can not use error in type union (errors have to be declared first).", .{});
+                return values.Type.makeVoid();
             }
 
-            var type_name_chars: ?[]const u8 = null;
-            if (type_name) |assured_name| {
-                type_name_chars = assured_name.lexeme.?;
-            }
-
-            t = values.Type.makeTypeUnion(type_name_chars, union_type_list.items) catch {
+            type_list.append(self.singleType()) catch {
                 self.current_compiler.?.err("allocation failed", .{});
                 return values.Type.makeVoid();
             };
-            union_type_list.deinit();
         }
 
-        return t;
+        return switch (type_list.items.len) {
+            0 => {
+                self.current_compiler.?.err("expect type definition after ':'", .{});
+                return .Void;
+            },
+            1 => {
+                return type_list.items[0];
+            },
+            else => {
+                return values.Type.makeTypeUnion(
+                    if (type_name) |tkn| tkn.lexeme.? else null,
+                    type_list.items,
+                ) catch |e| cb: {
+                    self.current_compiler.?.err("{s}", .{@errorName(e)});
+                    break :cb .Void;
+                };
+            },
+        };
     }
 
     fn singleType(self: *ModuleCompiler) values.Type {
@@ -656,26 +755,56 @@ pub const ModuleCompiler = struct {
             self.current_compiler.?.err("condition can not contain assignments.", .{});
         }
 
-        var needsThenCapture = false;
-        var needsElseCapture = false;
+        var needs_then_capture = false;
+        var then_type: values.Type = undefined;
+
+        var needs_else_capture = false;
+        var else_type: values.Type = undefined;
+
         if (context.type) |condition_type| {
             switch (condition_type) {
                 .Bool => {
-                    needsThenCapture = false;
-                    needsElseCapture = false;
+                    then_type = .Void;
+                    else_type = .Void;
+
+                    needs_then_capture = false;
+                    needs_else_capture = false;
                 },
                 .TypeUnion => {
-                    if (context.type.?.satisfiesShape(.Null)) {
-                        needsThenCapture = true;
-                        needsElseCapture = false;
+                    const is_nullable = context.type.?.satisfiesShape(.Null);
+                    const is_error_union = context.type.? == .TypeUnion and context.type.?.TypeUnion.isErrorUnion();
+
+                    if (is_nullable and is_error_union) {
+                        self.current_compiler.?.err("Use type switch for values that can contain error or null.", .{});
+                    } else if (is_nullable) {
+                        then_type = context.type.?.TypeUnion.copyWithoutType(.Null) catch |e| cb: {
+                            self.current_compiler.?.err("Unexpectd error occured: {s}\n", .{@errorName(e)});
+                            break :cb .Void;
+                        };
+                        else_type = .Void;
+
+                        needs_then_capture = true;
+                        needs_else_capture = false;
 
                         // TODO: add check (is not null or jump if null)
+                    } else if (is_error_union) {
+                        then_type = context.type.?.TypeUnion.copyWithoutErrorSets() catch |e| cb: {
+                            self.current_compiler.?.err("Unexpectd error occured: {s}", .{@errorName(e)});
+                            break :cb .Void;
+                        };
+                        else_type = context.type.?.TypeUnion.copyOnlyErrorSets() catch |e| cb: {
+                            self.current_compiler.?.err("Unexpected error occured: {s}", .{@errorName(e)});
+                            break :cb .Void;
+                        };
+
+                        needs_then_capture = true;
+                        needs_else_capture = true;
                     } else {
-                        self.current_compiler.?.err("invalid condition type. Must evaluate to Bool, or Nullable", .{});
+                        self.current_compiler.?.err("invalid condition type. Must evaluate to Bool, Nullable or ErrorUnion", .{});
                     }
                 },
                 else => {
-                    self.current_compiler.?.err("invalid condition type. Must evaluate to Bool, or Nullable", .{});
+                    self.current_compiler.?.err("invalid condition type. Must evaluate to Bool, Nullable or ErrorUnion", .{});
                 },
             }
         } else {
@@ -686,15 +815,8 @@ pub const ModuleCompiler = struct {
 
         const jump_to_else = self.current_compiler.?.emitJump(.JumpIfFalse);
 
-        if (needsThenCapture) {
-            var capture_type = values.Type.makeVoid();
-            if (context.type != null and context.type.? == .TypeUnion) {
-                capture_type = context.type.?.TypeUnion.copyWithoutType(.Null) catch |e| cb: {
-                    self.current_compiler.?.err("Unexpectd error occured: {s}\n", .{@errorName(e)});
-                    break :cb .Void;
-                };
-            }
-            self.expressionCapture(capture_type, "expect payload capture when if condition does not evaluate to Bool.");
+        if (needs_then_capture) {
+            self.expressionCapture(then_type, "expect payload capture when if condition does not evaluate to Bool.");
 
             // the then block
             self.statement();
@@ -720,9 +842,9 @@ pub const ModuleCompiler = struct {
 
         // When then block is not executed:
 
-        if (needsElseCapture) {
+        if (needs_else_capture) {
             if (self.match(.Else)) {
-                self.expressionCapture(.Error, "expect payload capture on else when is condition evaluates to error union.");
+                self.expressionCapture(else_type, "expect payload capture on else when is condition evaluates to error union.");
 
                 self.statement();
 
@@ -1064,16 +1186,47 @@ pub const ModuleCompiler = struct {
         const name = self.scanner.previous;
 
         if (context.can_assign and self.match(TokenType.Equal)) {
-            // TODO: check access intent (can write ?)
             context.statement_context.hasAssignment = true;
             self.expression(context.statement_context);
             self.current_compiler.?.writeIdentifier(name.lexeme.?, context.statement_context.type);
         } else {
-            const maybe_var_type = self.current_compiler.?.readIdentifier(name.lexeme.?, context.statement_context.type);
-            if (maybe_var_type) |var_type| {
-                context.statement_context.type = var_type;
+            if (self.errorFromSet(context.statement_context.hasAssignment)) |error_type| {
+                context.statement_context.type = error_type;
+            } else {
+                const maybe_var_type = self.current_compiler.?.readIdentifier(name.lexeme.?, context.statement_context.type);
+                if (maybe_var_type) |var_type| {
+                    context.statement_context.type = var_type;
+                }
             }
         }
+    }
+
+    fn errorFromSet(self: *ModuleCompiler, has_assignment: bool) ?values.Type {
+        const name = self.scanner.previous;
+
+        const maybe_props = self.current_compiler.?.references.getProperties(name.lexeme.?);
+        if (maybe_props) |props| {
+            if (props.type != null and props.type.?.isTypeObject(.ErrorSet)) {
+                if (self.match(.Dot)) {
+                    const error_set = props.type.?.asObject(objects.DoughErrorSet);
+
+                    self.consume(.Identifier, "expect identifier wehn accessing ErrorSet.", .{});
+
+                    const maybe_error = error_set.getError(self.scanner.previous.lexeme.?);
+                    if (maybe_error) |dough_error| {
+                        const const_address = self.current_compiler.?.addConstant(dough_error.asObject().asValue());
+                        self.current_compiler.?.emitOpCode(.GetConstant);
+                        self.current_compiler.?.emitConstantAddress(const_address);
+                        return dough_error.toType();
+                    } else {
+                        self.current_compiler.?.err("Unknown identifier.", .{});
+                    }
+                } else if (has_assignment) {
+                    self.current_compiler.?.err("Can not assign ErrorSet.", .{});
+                }
+            }
+        }
+        return null;
     }
 
     fn stringValue(_: *ModuleCompiler, source: []const u8) values.Value {
@@ -1109,7 +1262,7 @@ pub const ModuleCompiler = struct {
 
         while (true) {
             scanner.scanToken();
-            if (scanner.current.token_type != TokenType.Error) break;
+            if (scanner.current.token_type != TokenType.ScannerError) break;
 
             self.current_compiler.?.errAtCurrent("{?s}", .{scanner.current.lexeme});
         }
