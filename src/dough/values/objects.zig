@@ -395,10 +395,12 @@ pub const DoughError = struct {
     }
 
     pub fn format(self: DoughError, comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
-        _ = fmt;
         _ = options;
-
-        try out_stream.print("{s}", .{self.name});
+        if (std.mem.eql(u8, fmt, "type")) {
+            try out_stream.print("{}", .{self.error_set});
+        } else {
+            try out_stream.print("{s}", .{self.name});
+        }
     }
 
     pub fn toString(self: *DoughError) *DoughString {

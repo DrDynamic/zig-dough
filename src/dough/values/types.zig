@@ -224,8 +224,8 @@ pub const Type = union(enum) {
             .TypeObject => |object| {
                 return switch (object.obj_type) {
                     .ErrorSet => {
-                        if (value_type == .TypeObject and value_type.TypeObject.obj_type == .ErrorSet) {
-                            return object == value_type.TypeObject;
+                        if (value_type == .TypeObject and value_type.TypeObject.obj_type == .Error) {
+                            return object.as(objects.DoughErrorSet) == value_type.TypeObject.as(objects.DoughError).error_set;
                         }
                         return false;
                     },
@@ -241,8 +241,6 @@ pub const Type = union(enum) {
         options: std.fmt.FormatOptions,
         out_stream: anytype,
     ) !void {
-        _ = options;
-
         switch (self) {
             .AnyError => try out_stream.print("AnyError", .{}),
             .Void => try out_stream.print("Void", .{}),
@@ -267,8 +265,9 @@ pub const Type = union(enum) {
                     try out_stream.print("{}", .{t});
                 }
             },
-            .TypeObject => {
-                try out_stream.print("{s}", .{self.getName() orelse "???"});
+            .TypeObject => |type_object| {
+                try type_object.format(fmt, options, out_stream);
+                //                try out_stream.print("{s}", .{self.getName() orelse "???"});
             },
         }
     }

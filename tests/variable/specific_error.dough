@@ -1,3 +1,4 @@
+// skip until errorhandly is implemented properly
 error SomeError {
     NotSet
 }

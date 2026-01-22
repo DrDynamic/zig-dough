@@ -1,0 +1,35 @@
+// skip until errorhandly is implemented properly
+error IoError {
+    FileNotFound,
+    PermissionDenied,
+};
+
+var result:!Number = IoError.PermissionDenied;
+result  = 42;
+
+
+if(result) |assured_result| {
+    print(assured_result); // expect: 42
+}else |assured_error|{
+    print(assured_error);
+}
+
+//var rename = IoError;
+
+result = IoError.FileNotFound;
+
+if(result) |assured_result| {
+    print(assured_result);
+}else |assured_error|{
+    print(assured_error); // expect: IoError.FileNotFound
+}
+
+var r2:IoError!String or Null = "";
+
+
+
+var a: Number or String or Null = null;
+
+var b: String or Null = "A";
+
+a = b;

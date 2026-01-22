@@ -205,7 +205,7 @@ pub const FunctionCompiler = struct {
             if (maybe_value_type) |value_type| {
                 if (props.type) |prop_type| {
                     if (!prop_type.satisfiesShape(value_type)) {
-                        self.err("can not assign {} to {}", .{ value_type, prop_type });
+                        self.err("can not assign {type} to {type}", .{ value_type, prop_type });
                     }
                 } else {
                     props.type = value_type;

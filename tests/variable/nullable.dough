@@ -1,0 +1,7 @@
+var test:?String = null;
+
+print(test); // expect: null
+
+test = "Lorem";
+
+print(test); // expect: Lorem
