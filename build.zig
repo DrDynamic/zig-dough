@@ -28,6 +28,32 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const alpha_script = b.createModule(.{
+        .root_source_file = b.path("src/alpha_script/alpha_script.zig"),
+    });
+    alpha_script.addImport("as", alpha_script);
+
+    const as_mod = b.createModule(.{
+        .root_source_file = b.path("src/alpha_script/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    as_mod.addImport("as", alpha_script);
+
+    // This creates another `std.Build.Step.Compile`, but this one builds an executable
+    // rather than a static library.
+    const as_exe = b.addExecutable(.{
+        .name = "as",
+        .root_module = as_mod,
+    });
+
+    // This declares intent for the executable to be installed into the
+    // standard location when the user invokes the "install" step (the default
+    // step when running `zig build`).
+    b.installArtifact(as_exe);
+
+    ////////////////// legacy //////////////////
+
     const dough = b.createModule(.{
         .root_source_file = b.path("src/dough/dough.zig"),
     });
@@ -79,7 +105,7 @@ pub fn build(b: *std.Build) void {
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
     // such a dependency.
-    const run_cmd = b.addRunArtifact(exe);
+    const run_cmd = b.addRunArtifact(as_exe);
 
     // By making the run step depend on the install step, it will be run from the
     // installation directory rather than directly from within the cache directory.
