@@ -1,9 +1,8 @@
 const std = @import("std");
 
-const dough = @import("dough");
-const config = dough.config;
-const Token = dough.frontend.Token;
-const TokenType = dough.frontend.TokenType;
+const as = @import("as");
+const Token = as.frontend.Token;
+const TokenType = as.frontend.TokenType;
 
 pub const Scanner = struct {
     previous: Token = .{
@@ -34,7 +33,7 @@ pub const Scanner = struct {
         };
 
         scanner.scanToken();
-        if (config.debug_print_tokens) {
+        if (false) {
             scanner.debugPrint();
 
             scanner._tokenStart = @ptrCast(source);
@@ -46,7 +45,7 @@ pub const Scanner = struct {
 
     pub fn debugPrint(self: *Scanner) void {
         var i: u32 = 0;
-        while (self.current.token_type != TokenType.Eof) : (i += 1) {
+        while (self.current.token_type != TokenType.eof) : (i += 1) {
             self.scanToken();
             self.current.debugPrint();
             if (i > 50) break;
@@ -58,7 +57,7 @@ pub const Scanner = struct {
         self.current = self.next;
 
         self.skipWhitespace();
-        if (self.current.token_type == TokenType.Eof) return;
+        if (self.current.token_type == TokenType.eof) return;
         if (self.isAtEnd()) {
             self.makeToken(TokenType.Eof);
             self.next.lexeme = null;
@@ -69,28 +68,28 @@ pub const Scanner = struct {
         const c = self.advance();
         switch (c) {
             // Single-character tokens.
-            '(' => self.makeToken(.LeftParen),
-            ')' => self.makeToken(.RightParen),
-            '{' => self.makeToken(.LeftBrace),
-            '}' => self.makeToken(.RightBrace),
-            '[' => self.makeToken(.LeftBracket),
-            ']' => self.makeToken(.RightBracket),
-            ':' => self.makeToken(.Colon),
-            ',' => self.makeToken(.Comma),
-            '.' => self.makeToken(.Dot),
-            '-' => self.makeToken(.Minus),
-            '+' => self.makeToken(.Plus),
-            '?' => self.makeToken(.QuestionMark),
-            ';' => self.makeToken(.Semicolon),
-            '/' => self.makeToken(.Slash),
-            '*' => self.makeToken(.Star),
-            '|' => self.makeToken(.VerticalLine),
+            '(' => self.makeToken(.left_paren),
+            ')' => self.makeToken(.right_paren),
+            '{' => self.makeToken(.left_brace),
+            '}' => self.makeToken(.right_brace),
+            '[' => self.makeToken(.left_bracket),
+            ']' => self.makeToken(.right_bracket),
+            ':' => self.makeToken(.colon),
+            ',' => self.makeToken(.comma),
+            '.' => self.makeToken(.dot),
+            '-' => self.makeToken(.minus),
+            '+' => self.makeToken(.plus),
+            '?' => self.makeToken(.question_mark),
+            ';' => self.makeToken(.semicolon),
+            '/' => self.makeToken(.slash),
+            '*' => self.makeToken(.star),
+            '|' => self.makeToken(.vertical_line),
 
             // One or two character tokens.
-            '!' => if (self.match('=')) self.makeToken(.BangEqual) else self.makeToken(.Bang),
-            '=' => if (self.match('=')) self.makeToken(.EqualEqual) else self.makeToken(.Equal),
-            '>' => if (self.match('=')) self.makeToken(.GreaterEqual) else self.makeToken(.Greater),
-            '<' => if (self.match('=')) self.makeToken(.LessEqual) else self.makeToken(.Less),
+            '!' => if (self.match('=')) self.makeToken(.bang_equal) else self.makeToken(.bang),
+            '=' => if (self.match('=')) self.makeToken(.equal_equal) else self.makeToken(.equal),
+            '>' => if (self.match('=')) self.makeToken(.greater_equal) else self.makeToken(.greater),
+            '<' => if (self.match('=')) self.makeToken(.less_equal) else self.makeToken(.less),
 
             '"' => {
                 self.makeString('"');
@@ -200,7 +199,7 @@ pub const Scanner = struct {
             }
             _ = self.advance();
         }
-        self.makeToken(TokenType.String);
+        self.makeToken(TokenType.string);
 
         if (self.isAtEnd()) {
             self.makeError("Unterminated string.");
@@ -219,7 +218,7 @@ pub const Scanner = struct {
                 break;
             }
         }
-        self.makeToken(TokenType.Number);
+        self.makeToken(TokenType.number);
     }
 
     fn isIdentifierChar(_: Scanner, char: u8) bool {
@@ -232,13 +231,13 @@ pub const Scanner = struct {
         }
 
         const tokenType = switch (self._tokenStart[0]) {
-            'a' => self.matchIdentifier("nd", 1, 2, .LogicalAnd),
-            'c' => self.matchIdentifier("onst", 1, 4, .Const),
+            'a' => self.matchIdentifier("nd", 1, 2, .logical_and),
+            'c' => self.matchIdentifier("onst", 1, 4, .const_),
             'e' => |_| e_case: {
                 if (self._currentChar - self._tokenStart > 1) {
                     break :e_case switch (self._tokenStart[1]) {
-                        'l' => self.matchIdentifier("se", 2, 2, .Else),
-                        'r' => self.matchIdentifier("ror", 2, 3, .Error),
+                        'l' => self.matchIdentifier("se", 2, 2, .else_),
+                        'r' => self.matchIdentifier("ror", 2, 3, .error_),
                         else => .Identifier,
                     };
                 }
@@ -247,31 +246,31 @@ pub const Scanner = struct {
             'f' => |_| f_case: {
                 if (self._currentChar - self._tokenStart > 1) {
                     break :f_case switch (self._tokenStart[1]) {
-                        'a' => self.matchIdentifier("lse", 2, 3, .False),
-                        'o' => self.matchIdentifier("r", 2, 1, .For),
-                        'u' => self.matchIdentifier("nction", 2, 6, .Function),
-                        else => .Identifier,
+                        'a' => self.matchIdentifier("lse", 2, 3, .false_),
+                        'o' => self.matchIdentifier("r", 2, 1, .for_),
+                        'u' => self.matchIdentifier("nction", 2, 6, .function_),
+                        else => .identifier,
                     };
                 }
-                break :f_case .Identifier;
+                break :f_case .identifier;
             },
-            'i' => self.matchIdentifier("f", 1, 1, .If),
-            'n' => self.matchIdentifier("ull", 1, 3, .Null),
-            'o' => self.matchIdentifier("r", 1, 1, .LogicalOr),
-            'r' => self.matchIdentifier("eturn", 1, 5, .Return),
+            'i' => self.matchIdentifier("f", 1, 1, .if_),
+            'n' => self.matchIdentifier("ull", 1, 3, .null_),
+            'o' => self.matchIdentifier("r", 1, 1, .logical_or),
+            'r' => self.matchIdentifier("eturn", 1, 5, .return_),
             't' => |_| t_case: {
                 if (self._currentChar - self._tokenStart > 1) {
                     break :t_case switch (self._tokenStart[1]) {
-                        'r' => self.matchIdentifier("ue", 2, 2, .True),
-                        'y' => self.matchIdentifier("pe", 2, 2, .Type),
-                        else => .Identifier,
+                        'r' => self.matchIdentifier("ue", 2, 2, .true_),
+                        'y' => self.matchIdentifier("pe", 2, 2, .type_),
+                        else => .identifier,
                     };
                 }
-                break :t_case .Identifier;
+                break :t_case .identifier;
             },
 
-            'v' => self.matchIdentifier("ar", 1, 2, .Var),
-            'w' => self.matchIdentifier("hile", 1, 4, .While),
+            'v' => self.matchIdentifier("ar", 1, 2, .var_),
+            'w' => self.matchIdentifier("hile", 1, 4, .while_),
             else => .Identifier,
         };
         self.makeToken(tokenType);
@@ -281,7 +280,7 @@ pub const Scanner = struct {
         if (self._currentChar - self._tokenStart == start + length and std.mem.eql(u8, self._tokenStart[start..(start + length)], rest)) {
             return tokenType;
         }
-        return .Identifier;
+        return .identifier;
     }
 };
 
@@ -329,47 +328,47 @@ test "Scanns all tokens" {
     );
 
     const tokenTypes = [_]TokenType{
-        TokenType.LeftParen,
-        TokenType.RightParen,
-        TokenType.LeftBrace,
-        TokenType.RightBrace,
-        TokenType.LeftBracket,
-        TokenType.RightBracket,
-        TokenType.Comma,
-        TokenType.Dot,
-        TokenType.Minus,
-        TokenType.Plus,
-        TokenType.Semicolon,
-        TokenType.Slash,
-        TokenType.Star,
+        TokenType.left_paren,
+        TokenType.right_paren,
+        TokenType.left_brace,
+        TokenType.right_brace,
+        TokenType.left_bracket,
+        TokenType.right_bracket,
+        TokenType.comma,
+        TokenType.dot,
+        TokenType.minus,
+        TokenType.plus,
+        TokenType.semicolon,
+        TokenType.slash,
+        TokenType.star,
         // One or two character tokens.
-        TokenType.Bang,
-        TokenType.BangEqual,
-        TokenType.Equal,
-        TokenType.EqualEqual,
-        TokenType.Greater,
-        TokenType.GreaterEqual,
-        TokenType.Less,
-        TokenType.LessEqual,
-        TokenType.LogicalAnd,
-        TokenType.LogicalOr,
+        TokenType.bang,
+        TokenType.bang_equal,
+        TokenType.equal,
+        TokenType.equal_equal,
+        TokenType.greater,
+        TokenType.greater_equal,
+        TokenType.less,
+        TokenType.less_equal,
+        TokenType.logical_and,
+        TokenType.logical_or,
         // Literals.
-        TokenType.Identifier,
-        TokenType.String,
-        TokenType.Number,
+        TokenType.identifier,
+        TokenType.string,
+        TokenType.number,
         // Keywords.
-        TokenType.Const,
-        TokenType.Else,
-        TokenType.False,
-        TokenType.For,
-        TokenType.Function,
-        TokenType.If,
-        TokenType.Null,
-        TokenType.Return,
-        TokenType.True,
-        TokenType.Var,
-        TokenType.While,
-        TokenType.Eof,
+        TokenType.const_,
+        TokenType.else_,
+        TokenType.false_,
+        TokenType.for_,
+        TokenType.function_,
+        TokenType.if_,
+        TokenType.null_,
+        TokenType.return_,
+        TokenType.true_,
+        TokenType.var_,
+        TokenType.while_,
+        TokenType.eof,
     };
 
     for (tokenTypes, 1..) |tokenType, line| {
@@ -389,14 +388,14 @@ test "supports everything above ascii as identifiers" {
     );
 
     scanner.scanToken();
-    try std.testing.expectEqual(scanner.current.token_type, TokenType.Identifier);
+    try std.testing.expectEqual(scanner.current.token_type, TokenType.identifier);
     try std.testing.expectEqualStrings("🥟", scanner.current.lexeme.?);
 
     scanner.scanToken();
-    try std.testing.expectEqual(scanner.current.token_type, TokenType.String);
+    try std.testing.expectEqual(scanner.current.token_type, TokenType.string);
     try std.testing.expectEqualStrings("🍕", scanner.current.lexeme.?);
 
     scanner.scanToken();
-    try std.testing.expect(scanner.current.token_type == TokenType.Identifier);
+    try std.testing.expect(scanner.current.token_type == TokenType.identifier);
     try std.testing.expectEqualStrings(scanner.current.lexeme.?, &std.unicode.utf8EncodeComptime('🍩'));
 }

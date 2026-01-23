@@ -1,4 +1,4 @@
-pub const TypeIndex = u32;
+pub const TypeId = u32;
 
 pub const TypeTag = enum(u8) {
     unresolved,
@@ -14,7 +14,7 @@ pub const Type = struct {
     tag: TypeTag,
 
     data: union {
-        pointer_to: TypeIndex,
+        pointer_to: TypeId,
     },
 };
 

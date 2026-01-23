@@ -123,7 +123,7 @@ pub const Parser = struct {
     }
 
     fn primary(self: *Parser) !ast.NodeId {
-        switch (true) {
+        return switch (true) {
             self.match(.null_) => self.ast.addNode(.{
                 .tag = .null_literal,
             }),
@@ -135,7 +135,22 @@ pub const Parser = struct {
                 .tag = .bool_literal,
                 .data = .{ .bool_value = false },
             }),
-        }
+            self.match(.number) => |_| number_case: {
+                if (std.mem.indexOfScalar(u8, self.scanner.previous.lexeme, '.')) {
+                    const val = try std.fmt.parseFloat(f64, self.scanner.previous.lexeme.?);
+                    break :number_case self.ast.addNode(.{
+                        .tag = .float_literal,
+                        .data = .{ .float_value = val },
+                    });
+                } else {
+                    const val = try std.fmt.parseInt(i64, self.scanner.previous.lexeme.?, 10);
+                    break :number_case self.ast.addNode(.{
+                        .tag = .int_literl,
+                        .data = .{ .int_value = val },
+                    });
+                }
+            },
+        };
     }
 
     // string table

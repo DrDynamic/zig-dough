@@ -10,7 +10,8 @@ const ScannerReader = struct {
     pub fn init(scanner: Scanner) ScannerReader {
         return .{ .scanner = scanner };
     }
-    fn advance(self: *ScannerReader) void {
+
+    pub fn advance(self: *ScannerReader) void {
         var scanner = &self.scanner;
 
         while (true) {
@@ -21,7 +22,7 @@ const ScannerReader = struct {
         }
     }
 
-    fn consume(self: *ScannerReader, token_type: TokenType, comptime message: []const u8, args: anytype) void {
+    pub fn consume(self: *ScannerReader, token_type: TokenType, comptime message: []const u8, args: anytype) void {
         if (self.check(token_type)) {
             self.advance();
         } else {
@@ -29,7 +30,7 @@ const ScannerReader = struct {
         }
     }
 
-    fn match(self: *ScannerReader, token_type: TokenType) bool {
+    pub fn match(self: *ScannerReader, token_type: TokenType) bool {
         if (!self.check(token_type)) {
             return false;
         }
@@ -37,7 +38,7 @@ const ScannerReader = struct {
         return true;
     }
 
-    fn check(self: ScannerReader, token_type: TokenType) bool {
+    pub fn check(self: ScannerReader, token_type: TokenType) bool {
         return (self.scanner.current.token_type.? == token_type);
     }
 };
@@ -47,5 +48,11 @@ pub const AstBuilder = struct {
 
     pub fn build(self: *AstBuilder, source: []const u8) !void {
         self.reader = ScannerReader.init(Scanner.init(source));
+
+        while (!self.match(TokenType.Eof)) {
+            self.declaration();
+        }
     }
+
+    fn declaration() void {}
 };
