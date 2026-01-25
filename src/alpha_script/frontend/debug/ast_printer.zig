@@ -1,10 +1,12 @@
 pub const ASTPrinter = struct {
     ast: *const AST,
+    type_pool: *const TypePool,
     writer: std.fs.File.Writer,
 
-    pub fn printAST(ast_: *const AST, writer: std.fs.File.Writer) !void {
+    pub fn printAST(ast_: *const AST, type_pool: *const TypePool, writer: std.fs.File.Writer) !void {
         var printer = ASTPrinter{
             .ast = ast_,
+            .type_pool = type_pool,
             .writer = writer,
         };
 
@@ -16,13 +18,15 @@ pub const ASTPrinter = struct {
 
     fn printNode(self: ASTPrinter, node_idx: ast.NodeId, prefix: []const u8, is_last: bool) error{ OutOfMemory, NoSpaceLeft, DiskQuota, FileTooBig, InputOutput, DeviceBusy, InvalidArgument, AccessDenied, BrokenPipe, SystemResources, OperationAborted, NotOpenForWriting, LockViolation, WouldBlock, ConnectionResetByPeer, ProcessNotFound, NoDevice, Unexpected }!void {
         const node = self.ast.nodes.items[node_idx];
+        const node_type = self.type_pool.types.items[node.resolved_type_id];
 
         // 1. Zeichne den aktuellen Zweig
-        try self.writer.print("{s}{s}{s}", .{
+        try self.writer.print("{s}{s}{s}[{s}]", .{
             prefix,
             if (is_last) "└── " else "├── ",
             //            node_idx,
             @tagName(node.tag),
+            @tagName(node_type.tag),
         });
 
         // 2. Spezifische Daten je nach Typ ausgeben
@@ -111,5 +115,5 @@ const std = @import("std");
 const as = @import("as");
 const ast = as.frontend.ast;
 const AST = as.frontend.AST;
-
+const TypePool = as.frontend.TypePool;
 const BinaryOpData = ast.BinaryOpData;

@@ -29,7 +29,7 @@ pub fn main() !void {
     }
 
     const stdout = std.io.getStdOut().writer();
-    try as.frontend.debug.ASTPrinter.printAST(&ast, stdout);
+    try as.frontend.debug.ASTPrinter.printAST(&ast, &type_pool, stdout);
 }
 
 const std = @import("std");

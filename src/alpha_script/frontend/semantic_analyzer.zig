@@ -26,7 +26,7 @@ pub const SemanticAnalyzer = struct {
     }
 
     pub fn analyze(self: *SemanticAnalyzer, node_id: ast.NodeId) Error!TypeId {
-        var node = self.ast.nodes.items[node_id];
+        var node = &self.ast.nodes.items[node_id];
 
         const resolved_type: TypeId = switch (node.tag) {
             // literals
