@@ -18,10 +18,10 @@ pub const ASTPrinter = struct {
         const node = self.ast.nodes.items[node_idx];
 
         // 1. Zeichne den aktuellen Zweig
-        try self.writer.print("{s}{s}[{d}]{s}", .{
+        try self.writer.print("{s}{s}{s}", .{
             prefix,
             if (is_last) "└── " else "├── ",
-            node_idx,
+            //            node_idx,
             @tagName(node.tag),
         });
 
