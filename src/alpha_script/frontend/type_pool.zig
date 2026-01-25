@@ -38,13 +38,21 @@ pub const TypePool = struct {
             .extra_data = ArrayList(u32).init(allocatior),
         };
 
-        try pool.types.append(.{ .tag = .unresolved });
-        try pool.types.append(.{ .tag = .void });
-        try pool.types.append(.{ .tag = .null });
-        try pool.types.append(.{ .tag = .bool });
-        try pool.types.append(.{ .tag = .number });
-        try pool.types.append(.{ .tag = .string });
-        try pool.types.append(.{ .tag = .module });
+        try pool.types.append(.{ .tag = .unresolved, .data = undefined });
+        try pool.types.append(.{ .tag = .void, .data = undefined });
+        try pool.types.append(.{ .tag = .null, .data = undefined });
+        try pool.types.append(.{ .tag = .bool, .data = undefined });
+        try pool.types.append(.{ .tag = .int, .data = undefined });
+        try pool.types.append(.{ .tag = .float, .data = undefined });
+        try pool.types.append(.{ .tag = .string, .data = undefined });
+        try pool.types.append(.{ .tag = .module, .data = undefined });
+
+        return pool;
+    }
+
+    pub fn deinit(self: *TypePool) void {
+        self.types.deinit();
+        self.extra_data.deinit();
     }
 };
 

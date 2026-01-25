@@ -67,6 +67,7 @@ pub const Parser = struct {
 
         const extra_id = try self.ast.addExtra(ast.VarDeclarationData{
             .name_id = name_id,
+            .explicit_type = TypePool.UNRESOLVED,
             .init_value = assignment_node_id,
         });
 

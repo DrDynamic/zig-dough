@@ -13,8 +13,7 @@ pub const Token = token.Token;
 pub const Parser = @import("parser.zig").Parser;
 
 pub const ast = @import("ast.zig");
-pub const StringIndex = ast.StringIndex;
-pub const NodeIndex = ast.NodeIndex;
+pub const NodeInd = ast.NodeId;
 pub const NodeType = ast.NodeType;
 pub const Node = ast.Node;
 pub const AST = ast.AST;
@@ -24,3 +23,9 @@ pub const TypeId = type_pool.TypeId;
 pub const TypeTag = type_pool.TypeTag;
 pub const Type = type_pool.Type;
 pub const TypePool = type_pool.TypePool;
+
+const scope = @import("scope.zig");
+pub const Symbol = scope.Symbol;
+pub const SymbolTable = scope.SymbolTable;
+
+pub const SemanticAnalyzer = @import("semantic_analyzer.zig").SemanticAnalyzer;

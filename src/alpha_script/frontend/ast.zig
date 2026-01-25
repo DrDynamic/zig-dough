@@ -5,16 +5,18 @@ pub const NodeType = enum(u8) {
     comptime_uninitialized,
 
     // literals
+    literal_void,
     literal_null,
     literal_bool,
     literal_int,
     literal_float,
     literal_string,
 
-    identifier_expr,
-
     // declarations
     declaration_var,
+
+    // access
+    identifier_expr,
 
     // binary operations
     binary_add,
@@ -31,6 +33,7 @@ pub const NodeType = enum(u8) {
 
 pub const VarDeclarationData = struct {
     name_id: StringId,
+    explicit_type: TypeId,
     init_value: NodeId,
 };
 
@@ -60,14 +63,16 @@ pub const AST = struct {
     extra_data: ArrayList(u32),
     string_table: StringTable,
 
-    pub fn init(allocator: Allocator) AST {
-        return .{
+    pub fn init(allocator: Allocator) !AST {
+        const ast: AST = .{
             .allocator = allocator,
             .roots = ArrayList(NodeId).init(allocator),
             .nodes = ArrayList(Node).init(allocator),
             .extra_data = ArrayList(u32).init(allocator),
             .string_table = StringTable.init(allocator),
         };
+
+        return ast;
     }
 
     pub fn deinit(self: *AST) void {
