@@ -1,27 +1,47 @@
 pub const NodeId = u32;
 
 pub const NodeType = enum(u8) {
+    // nodes needed ad compiletime (should not bleed into runtime!)
+    comptime_uninitialized,
+
     // literals
-    null_literal,
-    bool_literal,
-    int_literl,
-    float_literal,
-    string_literal,
+    literal_null,
+    literal_bool,
+    literal_int,
+    literal_float,
+    literal_string,
 
     identifier_expr,
 
     // declarations
-    var_declaration,
+    declaration_var,
+
+    // binary operations
+    binary_add,
+    binary_sub,
+    binary_mul,
+    binary_div,
+    binary_equal,
+    binary_not_equal,
+    binary_less,
+    binary_less_equal,
+    binary_greater,
+    binary_greater_equal,
 };
 
 pub const VarDeclarationData = struct {
     name_id: StringId,
-    init_value: ?NodeId,
+    init_value: NodeId,
+};
+
+pub const BinaryOpData = struct {
+    lhs: NodeId,
+    rhs: NodeId,
 };
 
 pub const Node = struct {
     tag: NodeType,
-    resolved_type_idx: TypeIndex,
+    resolved_type_id: TypeId,
 
     data: union {
         bool_value: bool,
@@ -35,6 +55,7 @@ pub const Node = struct {
 pub const AST = struct {
     allocator: Allocator,
 
+    roots: ArrayList(NodeId),
     nodes: ArrayList(Node),
     extra_data: ArrayList(u32),
     string_table: StringTable,
@@ -42,6 +63,7 @@ pub const AST = struct {
     pub fn init(allocator: Allocator) AST {
         return .{
             .allocator = allocator,
+            .roots = ArrayList(NodeId).init(allocator),
             .nodes = ArrayList(Node).init(allocator),
             .extra_data = ArrayList(u32).init(allocator),
             .string_table = StringTable.init(allocator),
@@ -49,15 +71,24 @@ pub const AST = struct {
     }
 
     pub fn deinit(self: *AST) void {
+        self.roots.deinit();
         self.nodes.deinit();
         self.extra_data.deinit();
         self.string_table.deinit();
     }
 
+    pub fn addRoot(self: *AST, node_id: NodeId) !void {
+        try self.roots.append(node_id);
+    }
+
+    pub fn getRoots(self: AST) []const NodeId {
+        return self.roots.items;
+    }
+
     pub fn addNode(self: *AST, node: Node) !NodeId {
         const id = self.nodes.items.len;
-        self.nodes.append(node);
-        return id;
+        try self.nodes.append(node);
+        return @intCast(id);
     }
 
     /// Stores each field of data as a separate element in self.extra_data
@@ -71,6 +102,15 @@ pub const AST = struct {
         }
         return start_idx;
     }
+
+    pub fn getExtra(self: AST, index: u32, comptime T: type) T {
+        const fields = std.meta.fields(T);
+        var result: T = undefined;
+        inline for (fields, 0..) |field, i| {
+            @field(result, field.name) = @intCast(self.extra_data.items[index + i]);
+        }
+        return result;
+    }
 };
 
 const std = @import("std");
@@ -79,6 +119,6 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
 const as = @import("as");
-const TypeIndex = as.frontend.TypeIndex;
+const TypeId = as.frontend.TypeId;
 const StringId = as.common.StringId;
 const StringTable = as.common.StringTable;

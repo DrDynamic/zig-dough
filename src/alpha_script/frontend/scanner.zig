@@ -3,49 +3,85 @@ const std = @import("std");
 const as = @import("as");
 const Token = as.frontend.Token;
 const TokenType = as.frontend.TokenType;
-
+//    refactoring note:
+//     change to tokenstorage
+//     const TokenStorage = struct {
+//       tags: []TokenType,
+//       line_numbers: []u32,
+//       starts: []u32,
+//       lengths: []u32,
+//     };
+//
+//
+// iterator pattern for tokens:
+//  (peek /neyxt / etc)
 pub const Scanner = struct {
     previous: Token = .{
-        .token_type = null,
+        .tag = null,
         .lexeme = null,
         .line = 0,
     },
     current: Token = .{
-        .token_type = null,
+        .tag = null,
         .lexeme = null,
         .line = 0,
     },
     next: Token = .{
-        .token_type = null,
+        .tag = null,
         .lexeme = null,
         .line = 0,
     },
 
+    _source: []const u8 = undefined,
     _tokenStart: [*]const u8 = undefined,
     _currentChar: [*:0]const u8 = undefined,
     _line: usize = 0,
 
     pub fn init(source: []const u8) Scanner {
         var scanner = Scanner{
+            ._source = source,
             ._tokenStart = @ptrCast(source),
             ._currentChar = @ptrCast(source),
             ._line = 1,
         };
 
-        scanner.scanToken();
+        scanner.scanToken(); // into next
+        scanner.scanToken(); // into current
+
         if (false) {
             scanner.debugPrint();
-
-            scanner._tokenStart = @ptrCast(source);
-            scanner._currentChar = @ptrCast(source);
-            scanner._line = 1;
+            scanner.reset();
         }
         return scanner;
     }
 
+    pub fn reset(self: *Scanner) void {
+        self._tokenStart = @ptrCast(self._source);
+        self._currentChar = @ptrCast(self._source);
+        self._line = 1;
+
+        self.previous = .{
+            .tag = null,
+            .lexeme = null,
+            .line = 0,
+        };
+        self.current = .{
+            .tag = null,
+            .lexeme = null,
+            .line = 0,
+        };
+        self.next = .{
+            .tag = null,
+            .lexeme = null,
+            .line = 0,
+        };
+        self.scanToken(); // into next
+        self.scanToken(); // into current
+    }
+
     pub fn debugPrint(self: *Scanner) void {
         var i: u32 = 0;
-        while (self.current.token_type != TokenType.eof) : (i += 1) {
+        while (self.current.tag != TokenType.eof) : (i += 1) {
             self.scanToken();
             self.current.debugPrint();
             if (i > 50) break;
@@ -57,9 +93,9 @@ pub const Scanner = struct {
         self.current = self.next;
 
         self.skipWhitespace();
-        if (self.current.token_type == TokenType.eof) return;
+        if (self.current.tag == TokenType.eof) return;
         if (self.isAtEnd()) {
-            self.makeToken(TokenType.Eof);
+            self.makeToken(TokenType.eof);
             self.next.lexeme = null;
             return;
         }
@@ -111,13 +147,13 @@ pub const Scanner = struct {
     fn makeToken(self: *Scanner, tokenType: TokenType) void {
         const tokenLen: usize = self._currentChar - self._tokenStart;
 
-        self.next.token_type = tokenType;
+        self.next.tag = tokenType;
         self.next.lexeme = self._tokenStart[0..tokenLen];
         self.next.line = self._line;
     }
 
     fn makeError(self: *Scanner, message: []const u8) void {
-        self.next.token_type = TokenType.ScannerError;
+        self.next.tag = TokenType.scanner_error;
         self.next.lexeme = message;
         self.next.line = self._line;
     }
@@ -238,10 +274,10 @@ pub const Scanner = struct {
                     break :e_case switch (self._tokenStart[1]) {
                         'l' => self.matchIdentifier("se", 2, 2, .else_),
                         'r' => self.matchIdentifier("ror", 2, 3, .error_),
-                        else => .Identifier,
+                        else => .identifier,
                     };
                 }
-                break :e_case .Identifier;
+                break :e_case .identifier;
             },
             'f' => |_| f_case: {
                 if (self._currentChar - self._tokenStart > 1) {
@@ -271,7 +307,7 @@ pub const Scanner = struct {
 
             'v' => self.matchIdentifier("ar", 1, 2, .var_),
             'w' => self.matchIdentifier("hile", 1, 4, .while_),
-            else => .Identifier,
+            else => .identifier,
         };
         self.makeToken(tokenType);
     }
@@ -375,7 +411,7 @@ test "Scanns all tokens" {
         scanner.scanToken();
         //        std.debug.print("Expect {d}:{?s} but got ", .{ line, std.enums.tagName(TokenType, tokenType) });
         //        scanner.current.debugPrint();
-        try std.testing.expectEqual(tokenType, scanner.current.token_type);
+        try std.testing.expectEqual(tokenType, scanner.current.tag);
         try std.testing.expectEqual(line, scanner.current.line);
     }
 }
@@ -388,14 +424,14 @@ test "supports everything above ascii as identifiers" {
     );
 
     scanner.scanToken();
-    try std.testing.expectEqual(scanner.current.token_type, TokenType.identifier);
+    try std.testing.expectEqual(scanner.current.tag, TokenType.identifier);
     try std.testing.expectEqualStrings("🥟", scanner.current.lexeme.?);
 
     scanner.scanToken();
-    try std.testing.expectEqual(scanner.current.token_type, TokenType.string);
+    try std.testing.expectEqual(scanner.current.tag, TokenType.string);
     try std.testing.expectEqualStrings("🍕", scanner.current.lexeme.?);
 
     scanner.scanToken();
-    try std.testing.expect(scanner.current.token_type == TokenType.identifier);
+    try std.testing.expect(scanner.current.tag == TokenType.identifier);
     try std.testing.expectEqualStrings(scanner.current.lexeme.?, &std.unicode.utf8EncodeComptime('🍩'));
 }

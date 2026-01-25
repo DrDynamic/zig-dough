@@ -3,63 +3,88 @@ pub const Parser = struct {
     scanner: Scanner,
     ast: *AST,
 
-    pub fn init(scanner: Scanner, ast: *AST, allocator: Allocator) Parser {
+    pub fn init(scanner: Scanner, ast_: *AST, allocator: Allocator) Parser {
         return .{
             .scanner = scanner,
-            .ast = ast,
-            .allocatior = allocator,
+            .ast = ast_,
+            .allocator = allocator,
         };
     }
 
-    pub fn parse(self: *Parser) void {
-        while (!self.match(.Eof)) {
-            self.declaration();
+    pub fn parse(self: *Parser) !void {
+        while (!self.match(.eof)) {
+            try self.ast.addRoot(try self.declaration());
         }
     }
 
-    fn decleration(self: Parser) !ast.NodeId {
-        if (self.match(.Var)) {
-            return self.varDeclaration();
+    fn declaration(self: *Parser) !ast.NodeId {
+        if (self.match(.var_)) {
+            return try self.varDeclaration();
         }
+        return try self.statement();
     }
 
-    fn varDeclaration(self: Parser) !ast.NodeId {
-        const name_id = self.parseIdentifier() catch |err| switch (err) {
+    fn varDeclaration(self: *Parser) !ast.NodeId {
+        const name_id: StringId = self.parseIdentifier() catch |err| switch (err) {
             error.TokenMissMatch => {
                 // TODO report error
-                return;
+                return error.ParserError;
             },
-            else => err,
+            else => {
+                return err;
+            },
         };
 
-        var type_id = TypePool.UNRESOLVED;
-        if (self.match(.Colon)) {
+        var type_id: ?TypeId = TypePool.UNRESOLVED;
+        if (self.match(.colon)) {
             // TODO parse type
+            _ = self.consume(.identifier) catch |err| switch (err) {
+                error.TokenMissMatch => {
+                    // TODO report error
+                    return error.ParserError;
+                },
+                else => {
+                    return err;
+                },
+            };
             type_id = null;
         }
 
-        var assignment_node_id: ?ast.NodeId = null;
-        if (self.match(.Equal)) {
+        var assignment_node_id: ast.NodeId = undefined;
+        if (self.match(.equal)) {
             // TODO parse assignment
-            assignment_node_id = null;
+            assignment_node_id = try self.expression();
+        } else {
+            // TODO: make singleton?
+            assignment_node_id = try self.ast.addNode(.{
+                .tag = .comptime_uninitialized,
+                .resolved_type_id = TypePool.UNRESOLVED,
+                .data = undefined,
+            });
         }
 
-        _ = self.match(.Semicolon);
+        _ = self.match(.semicolon);
 
         const extra_id = try self.ast.addExtra(ast.VarDeclarationData{
             .name_id = name_id,
             .init_value = assignment_node_id,
         });
 
-        return self.ast.addNode(.{
-            .tag = .var_declaration,
-            .extra_id = extra_id,
+        return try self.ast.addNode(.{
+            .tag = .declaration_var,
+            .resolved_type_id = TypePool.UNRESOLVED,
+            .data = .{ .extra_id = extra_id },
         });
+    }
+
+    // statements
+    fn statement(self: *Parser) !ast.NodeId {
+        return try self.expression();
     }
 
     // expressions
     fn expression(self: *Parser) !ast.NodeId {
-        return self.assignment();
+        return try self.assignment();
     }
 
     fn assignment(self: *Parser) !ast.NodeId {
@@ -70,85 +95,177 @@ pub const Parser = struct {
     }
 
     fn ternary(self: *Parser) !ast.NodeId {
-        const condition = self.or_();
+        const condition = try self.or_();
         // TODO implement ternary
         return condition;
     }
 
     fn or_(self: *Parser) !ast.NodeId {
-        const lhs = self.and_();
+        const lhs = try self.and_();
         // TODO implement or
         return lhs;
     }
 
     fn and_(self: *Parser) !ast.NodeId {
-        const lhs = self.equality();
+        const lhs = try self.equality();
         // TODO implement and
         return lhs;
     }
 
     fn equality(self: *Parser) !ast.NodeId {
-        const lhs = self.comparsion();
-        // TODO implement equality
+        var lhs = try self.comparsion();
+        search_equality: while (true) {
+            const tag: ast.NodeType = switch (self.scanner.current.tag.?) {
+                .equal_equal => .binary_equal,
+                .bang_equal => .binary_not_equal,
+                else => break :search_equality,
+            };
+            _ = try self.advance();
+
+            const rhs: ast.NodeId = try self.comparsion();
+            const extra_id = try self.ast.addExtra(ast.BinaryOpData{
+                .lhs = lhs,
+                .rhs = rhs,
+            });
+
+            lhs = try self.ast.addNode(.{
+                .tag = tag,
+                .resolved_type_id = TypePool.UNRESOLVED,
+                .data = .{ .extra_id = extra_id },
+            });
+        }
         return lhs;
     }
 
     fn comparsion(self: *Parser) !ast.NodeId {
-        const lhs = self.term();
-        // TODO implement comparsion
+        var lhs = try self.term();
+
+        search_comparsion: while (true) {
+            const tag: ast.NodeType = switch (self.scanner.current.tag.?) {
+                .greater => .binary_greater,
+                .greater_equal => .binary_greater_equal,
+                .less => .binary_less,
+                .less_equal => .binary_less_equal,
+                else => break :search_comparsion,
+            };
+            _ = try self.advance();
+
+            const rhs: ast.NodeId = try self.term();
+            const extra_id = try self.ast.addExtra(ast.BinaryOpData{
+                .lhs = lhs,
+                .rhs = rhs,
+            });
+
+            lhs = try self.ast.addNode(.{
+                .tag = tag,
+                .resolved_type_id = TypePool.UNRESOLVED,
+                .data = .{ .extra_id = extra_id },
+            });
+        }
+
         return lhs;
     }
 
     fn term(self: *Parser) !ast.NodeId {
-        const lhs = self.factor();
-        // TODO implement term
+        var lhs = try self.factor();
+        search_term: while (true) {
+            const tag: ast.NodeType = switch (self.scanner.current.tag.?) {
+                .plus => .binary_add,
+                .minus => .binary_sub,
+                else => break :search_term,
+            };
+            _ = try self.advance();
+
+            const rhs: ast.NodeId = try self.factor();
+            const extra_id = try self.ast.addExtra(ast.BinaryOpData{
+                .lhs = lhs,
+                .rhs = rhs,
+            });
+
+            lhs = try self.ast.addNode(.{
+                .tag = tag,
+                .resolved_type_id = TypePool.UNRESOLVED,
+                .data = .{ .extra_id = extra_id },
+            });
+        }
         return lhs;
     }
 
     fn factor(self: *Parser) !ast.NodeId {
-        const lhs = self.unary();
-        // TODO implement factor
+        var lhs = try self.unary();
+        search_factor: while (true) {
+            const tag: ast.NodeType = switch (self.scanner.current.tag.?) {
+                .star => .binary_mul,
+                .slash => .binary_div,
+                else => break :search_factor,
+            };
+            _ = try self.advance();
+
+            const rhs: ast.NodeId = try self.unary();
+            const extra_id = try self.ast.addExtra(ast.BinaryOpData{
+                .lhs = lhs,
+                .rhs = rhs,
+            });
+
+            lhs = try self.ast.addNode(.{
+                .tag = tag,
+                .resolved_type_id = TypePool.UNRESOLVED,
+                .data = .{ .extra_id = extra_id },
+            });
+        }
         return lhs;
     }
 
     fn unary(self: *Parser) !ast.NodeId {
         // TODO implement unary
-        return self.call();
+        return try self.call();
     }
 
     fn call(self: *Parser) !ast.NodeId {
-        const callee = self.primary();
+        const callee = try self.primary();
         // TODO implement call
         return callee;
     }
 
     fn primary(self: *Parser) !ast.NodeId {
-        return switch (true) {
-            self.match(.null_) => self.ast.addNode(.{
-                .tag = .null_literal,
+        const token = try self.advance();
+        return switch (token.tag.?) {
+            .null_ => try self.ast.addNode(.{
+                .tag = .literal_null,
+                .resolved_type_id = TypePool.NULL,
+                .data = undefined,
             }),
-            self.match(.true_) => self.ast.addNode(.{
-                .tag = .bool_literal,
+            .true_ => try self.ast.addNode(.{
+                .tag = .literal_bool,
+                .resolved_type_id = TypePool.BOOL,
                 .data = .{ .bool_value = true },
             }),
-            self.match(.false_) => self.ast.addNode(.{
-                .tag = .bool_literal,
+            .false_ => try self.ast.addNode(.{
+                .tag = .literal_bool,
+                .resolved_type_id = TypePool.BOOL,
                 .data = .{ .bool_value = false },
             }),
-            self.match(.number) => |_| number_case: {
-                if (std.mem.indexOfScalar(u8, self.scanner.previous.lexeme, '.')) {
+            .number => |_| number_case: {
+                if (std.mem.indexOfScalar(u8, self.scanner.previous.lexeme.?, '.') != null) {
                     const val = try std.fmt.parseFloat(f64, self.scanner.previous.lexeme.?);
-                    break :number_case self.ast.addNode(.{
-                        .tag = .float_literal,
+                    break :number_case try self.ast.addNode(.{
+                        .tag = .literal_float,
+                        .resolved_type_id = TypePool.FLOAT,
                         .data = .{ .float_value = val },
                     });
                 } else {
                     const val = try std.fmt.parseInt(i64, self.scanner.previous.lexeme.?, 10);
                     break :number_case self.ast.addNode(.{
-                        .tag = .int_literl,
+                        .tag = .literal_int,
+                        .resolved_type_id = TypePool.INT,
                         .data = .{ .int_value = val },
                     });
                 }
+            },
+            else => |tag| {
+                std.debug.print("unexpected token in primary(): {s}\n", .{@tagName(tag)});
+                // TODO report error
+                return error.ParserError;
             },
         };
     }
@@ -156,7 +273,7 @@ pub const Parser = struct {
     // string table
     pub fn parseIdentifier(self: *Parser) !StringId {
         const token = try self.consume(.identifier);
-        return self.ast.string_table.add(token.lexeme);
+        return self.ast.string_table.add(token.lexeme.?);
     }
 
     // scanner interactions
@@ -165,7 +282,7 @@ pub const Parser = struct {
 
         while (true) {
             scanner.scanToken();
-            if (scanner.current.token_type != TokenType.ScannerError) break;
+            if (scanner.current.tag != TokenType.scanner_error) break;
 
             return error.ScannerError;
         }
@@ -185,7 +302,7 @@ pub const Parser = struct {
         if (!self.check(token_type)) {
             return false;
         }
-        _ = self.advance();
+        _ = self.advance() catch {};
         return true;
     }
 

@@ -5,7 +5,8 @@ pub const TypeTag = enum(u8) {
     void,
     null,
     bool,
-    number,
+    int,
+    float,
     string,
     module,
 };
@@ -26,9 +27,10 @@ pub const TypePool = struct {
     pub const VOID = 1;
     pub const NULL = 2;
     pub const BOOL = 3;
-    pub const NUMBER = 4;
-    pub const STRING = 5;
-    pub const MODULE = 6;
+    pub const INT = 4;
+    pub const FLOAT = 5;
+    pub const STRING = 6;
+    pub const MODULE = 7;
 
     pub fn init(allocatior: Allocator) !TypePool {
         var pool = TypePool{

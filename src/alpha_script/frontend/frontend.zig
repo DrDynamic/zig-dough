@@ -1,3 +1,7 @@
+// Debugging
+pub const debug = @import("debug/debug.zig");
+pub const AstPrinter = debug.ASTPrinter;
+
 // Lexing (Sourcecode -> Tokens)
 pub const Scanner = @import("scanner.zig").Scanner;
 
