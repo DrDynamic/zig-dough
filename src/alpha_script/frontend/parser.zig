@@ -116,7 +116,7 @@ pub const Parser = struct {
     fn equality(self: *Parser) !ast.NodeId {
         var lhs = try self.comparsion();
         search_equality: while (true) {
-            const tag: ast.NodeType = switch (self.scanner.current.tag.?) {
+            const tag: ast.NodeType = switch (self.scanner.current().tag) {
                 .equal_equal => .binary_equal,
                 .bang_equal => .binary_not_equal,
                 else => break :search_equality,
@@ -142,7 +142,7 @@ pub const Parser = struct {
         var lhs = try self.term();
 
         search_comparsion: while (true) {
-            const tag: ast.NodeType = switch (self.scanner.current.tag.?) {
+            const tag: ast.NodeType = switch (self.scanner.current().tag) {
                 .greater => .binary_greater,
                 .greater_equal => .binary_greater_equal,
                 .less => .binary_less,
@@ -170,7 +170,7 @@ pub const Parser = struct {
     fn term(self: *Parser) !ast.NodeId {
         var lhs = try self.factor();
         search_term: while (true) {
-            const tag: ast.NodeType = switch (self.scanner.current.tag.?) {
+            const tag: ast.NodeType = switch (self.scanner.current().tag) {
                 .plus => .binary_add,
                 .minus => .binary_sub,
                 else => break :search_term,
@@ -195,7 +195,7 @@ pub const Parser = struct {
     fn factor(self: *Parser) !ast.NodeId {
         var lhs = try self.unary();
         search_factor: while (true) {
-            const tag: ast.NodeType = switch (self.scanner.current.tag.?) {
+            const tag: ast.NodeType = switch (self.scanner.current().tag) {
                 .star => .binary_mul,
                 .slash => .binary_div,
                 else => break :search_factor,
@@ -230,7 +230,7 @@ pub const Parser = struct {
 
     fn primary(self: *Parser) !ast.NodeId {
         const token = try self.advance();
-        return switch (token.tag.?) {
+        return switch (token.tag) {
             .null_ => try self.ast.addNode(.{
                 .tag = .literal_null,
                 .resolved_type_id = TypePool.NULL,
@@ -247,15 +247,16 @@ pub const Parser = struct {
                 .data = .{ .bool_value = false },
             }),
             .number => |_| number_case: {
-                if (std.mem.indexOfScalar(u8, self.scanner.previous.lexeme.?, '.') != null) {
-                    const val = try std.fmt.parseFloat(f64, self.scanner.previous.lexeme.?);
+                const lexeme = self.scanner.getLexeme(self.scanner.previous());
+                if (std.mem.indexOfScalar(u8, lexeme, '.') != null) {
+                    const val = try std.fmt.parseFloat(f64, lexeme);
                     break :number_case try self.ast.addNode(.{
                         .tag = .literal_float,
                         .resolved_type_id = TypePool.FLOAT,
                         .data = .{ .float_value = val },
                     });
                 } else {
-                    const val = try std.fmt.parseInt(i64, self.scanner.previous.lexeme.?, 10);
+                    const val = try std.fmt.parseInt(i64, lexeme, 10);
                     break :number_case self.ast.addNode(.{
                         .tag = .literal_int,
                         .resolved_type_id = TypePool.INT,
@@ -274,7 +275,8 @@ pub const Parser = struct {
     // string table
     pub fn parseIdentifier(self: *Parser) !StringId {
         const token = try self.consume(.identifier);
-        return self.ast.string_table.add(token.lexeme.?);
+        const lexeme = self.scanner.getLexeme(token);
+        return self.ast.string_table.add(lexeme);
     }
 
     // scanner interactions
@@ -282,13 +284,13 @@ pub const Parser = struct {
         var scanner = &self.scanner;
 
         while (true) {
-            scanner.scanToken();
-            if (scanner.current.tag != TokenType.scanner_error) break;
+            scanner.advance();
+            if (scanner.current().tag != TokenType.scanner_error) break;
 
             return error.ScannerError;
         }
 
-        return scanner.previous;
+        return scanner.previous();
     }
 
     pub fn consume(self: *Parser, token_type: TokenType) !Token {
@@ -308,7 +310,7 @@ pub const Parser = struct {
     }
 
     pub fn check(self: Parser, token_type: TokenType) bool {
-        return (self.scanner.current.tag.? == token_type);
+        return (self.scanner.current().tag == token_type);
     }
 };
 

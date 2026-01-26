@@ -1,7 +1,14 @@
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
 
-    const source = "var x: i32 = 1 + 2 * 3 > 4;var y: bool = true == false;";
+    const source =
+        \\ var x: i32 = 1 + 2 * 3 > 4.5;
+        \\ var y: bool = true == false;
+        \\ /* Multi
+        \\line */
+        \\ // var s = "Lorem Ipsum ";
+        \\ // eof
+    ;
     var scanner = as.frontend.Scanner.init(source);
 
     as.frontend.debug.TokenPrinter.printTokens(&scanner, std.io.getStdOut().writer()) catch |err| {
