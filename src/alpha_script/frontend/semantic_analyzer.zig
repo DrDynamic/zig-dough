@@ -46,13 +46,14 @@ pub const SemanticAnalyzer = struct {
             .binary_sub,
             .binary_mul,
             .binary_div,
+            => try self.analyzeBinaryMath(node_id),
             .binary_equal,
             .binary_not_equal,
             .binary_less,
             .binary_less_equal,
             .binary_greater,
             .binary_greater_equal,
-            => try self.analyzeBinaryOp(node_id),
+            => try self.analyzeBinaryCompare(node_id),
             else => {
                 return error.UnhandledNodeType;
             },
@@ -87,7 +88,29 @@ pub const SemanticAnalyzer = struct {
         return TypePool.VOID;
     }
 
-    fn analyzeBinaryOp(self: *SemanticAnalyzer, node_id: ast.NodeId) Error!TypeId {
+    fn analyzeBinaryCompare(self: *SemanticAnalyzer, node_id: ast.NodeId) Error!TypeId {
+        const node = self.ast.nodes.items[node_id];
+        const data = self.ast.getExtra(node.data.extra_id, ast.BinaryOpData);
+
+        const left_type = try self.analyze(data.lhs);
+        const right_type = try self.analyze(data.rhs);
+
+        // TOD what can be compared to what?
+        if (left_type == right_type) {
+            return TypePool.BOOL;
+        }
+
+        if ((left_type == TypePool.INT and right_type == TypePool.FLOAT) or
+            (left_type == TypePool.FLOAT and right_type == TypePool.INT))
+        {
+            // Implicitly promote int to float
+            return TypePool.BOOL;
+        }
+        // For simplicity, assume binary operations return the same type as operands
+        return error.IncompatibleTypes;
+    }
+
+    fn analyzeBinaryMath(self: *SemanticAnalyzer, node_id: ast.NodeId) Error!TypeId {
         const node = self.ast.nodes.items[node_id];
         const data = self.ast.getExtra(node.data.extra_id, ast.BinaryOpData);
 
