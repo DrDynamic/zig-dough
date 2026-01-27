@@ -2,11 +2,13 @@ pub const Parser = struct {
     allocator: Allocator,
     scanner: Scanner,
     ast: *AST,
+    error_reporter: *const ErrorReporter,
 
-    pub fn init(scanner: Scanner, ast_: *AST, allocator: Allocator) Parser {
+    pub fn init(scanner: Scanner, ast_: *AST, error_reporter: *const ErrorReporter, allocator: Allocator) Parser {
         return .{
             .scanner = scanner,
             .ast = ast_,
+            .error_reporter = error_reporter,
             .allocator = allocator,
         };
     }
@@ -43,9 +45,6 @@ pub const Parser = struct {
                 error.TokenMissMatch => {
                     // TODO report error
                     return error.ParserError;
-                },
-                else => {
-                    return err;
                 },
             };
             type_id = null;
@@ -309,11 +308,13 @@ pub const Parser = struct {
         var scanner = &self.scanner;
 
         while (true) {
-            try scanner.advance();
-            //            if (scanner.current().tag != TokenType.scanner_error) break;
-            // TODO advance the scanner until we find a valid token (eof is valid too, so no check is needed for that). report all scanner errors on the way
-            break;
-            //            return error.ScannerError;
+            const did_advance = scanner.advance();
+
+            if (did_advance) {
+                break;
+            } else |scanner_error| {
+                self.error_reporter.reportScannerError(scanner_error, self.scanner.peek());
+            }
         }
 
         return scanner.previous();
@@ -344,6 +345,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const as = @import("as");
+const ErrorReporter = as.frontend.ErrorReporter;
 const Scanner = as.frontend.Scanner;
 const TokenType = as.frontend.TokenType;
 const Token = as.frontend.Token;

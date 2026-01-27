@@ -29,3 +29,5 @@ pub const Symbol = scope.Symbol;
 pub const SymbolTable = scope.SymbolTable;
 
 pub const SemanticAnalyzer = @import("semantic_analyzer.zig").SemanticAnalyzer;
+
+pub const ErrorReporter = @import("error_reporter.zig").ErrorReporter;

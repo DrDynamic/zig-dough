@@ -4,13 +4,15 @@ pub fn main() !void {
     const source =
         \\ var x: i32 = 1 + 2 * 3 > 4.5;
         \\ var y: bool = true == false;
+        \\ var z = @
         \\ /* Multi
         \\line */
         \\ var s = "Lorem Ipsum ";
-        \\ var t = "a" + 2;
+        \\ //var t = "a" + 2;
         \\ // eof
     ;
     var scanner = try as.frontend.Scanner.init(source);
+    const error_reporter = as.frontend.ErrorReporter.init(source, "test_string");
 
     as.frontend.debug.TokenPrinter.printTokens(&scanner, std.io.getStdOut().writer()) catch |err| {
         std.debug.print("Error printing tokens: {}\n", .{err});
@@ -21,7 +23,12 @@ pub fn main() !void {
 
     var ast = try as.frontend.AST.init(allocator);
 
-    var parser = as.frontend.Parser.init(scanner, &ast, allocator);
+    var parser = as.frontend.Parser.init(
+        scanner,
+        &ast,
+        &error_reporter,
+        allocator,
+    );
     defer ast.deinit();
 
     try parser.parse();
@@ -29,7 +36,12 @@ pub fn main() !void {
     var type_pool = try as.frontend.TypePool.init(allocator);
     defer type_pool.deinit();
 
-    var semantic_analyzer = try as.frontend.SemanticAnalyzer.init(allocator, &ast, &type_pool);
+    var semantic_analyzer = try as.frontend.SemanticAnalyzer.init(
+        allocator,
+        &ast,
+        &type_pool,
+        &error_reporter,
+    );
     defer semantic_analyzer.deinit();
 
     for (ast.getRoots()) |root_node_id| {

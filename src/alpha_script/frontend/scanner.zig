@@ -4,12 +4,12 @@ const as = @import("as");
 const Token = as.frontend.Token;
 const TokenType = as.frontend.TokenType;
 
-pub const Error = error{
-    UnexpectedCharacter,
-    UnterminatedString,
-};
-
 pub const Scanner = struct {
+    pub const Error = error{
+        UnexpectedCharacter,
+        UnterminatedString,
+    };
+
     source: []const u8,
     pos: usize,
     window: [3]Token,
@@ -61,8 +61,9 @@ pub const Scanner = struct {
     }
 
     pub fn advance(self: *Scanner) Error!void {
+        const token = try self.nextToken();
         self.window_index = (self.window_index + 1) % 3;
-        self.window[(self.window_index + 2) % 3] = try self.nextToken();
+        self.window[(self.window_index + 2) % 3] = token;
     }
 
     pub fn getLexeme(self: *const Scanner, token: Token) []const u8 {

@@ -10,13 +10,15 @@ pub const SemanticAnalyzer = struct {
     allocator: std.mem.Allocator,
     ast: *AST,
     type_pool: *TypePool,
+    error_reporter: *const ErrorReporter,
     symbol_table: SymbolTable,
 
-    pub fn init(allocator: std.mem.Allocator, ast_: *AST, type_pool: *TypePool) !SemanticAnalyzer {
+    pub fn init(allocator: std.mem.Allocator, ast_: *AST, type_pool: *TypePool, error_reporter: *const ErrorReporter) !SemanticAnalyzer {
         return .{
             .allocator = allocator,
             .ast = ast_,
             .type_pool = type_pool,
+            .error_reporter = error_reporter,
             .symbol_table = try SymbolTable.init(allocator),
         };
     }
@@ -138,6 +140,8 @@ pub const SemanticAnalyzer = struct {
 const std = @import("std");
 const as = @import("as");
 const ast = as.frontend.ast;
+
+const ErrorReporter = as.frontend.ErrorReporter;
 
 const AST = as.frontend.AST;
 const TypePool = as.frontend.TypePool;
