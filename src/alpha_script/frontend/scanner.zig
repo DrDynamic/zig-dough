@@ -3,18 +3,11 @@ const std = @import("std");
 const as = @import("as");
 const Token = as.frontend.Token;
 const TokenType = as.frontend.TokenType;
-//    refactoring note:
-//     change to tokenstorage
-//     const TokenStorage = struct {
-//       tags: []TokenType,
-//       line_numbers: []u32,
-//       starts: []u32,
-//       lengths: []u32,
-//     };
-//
-//
-// iterator pattern for tokens:
-//  (peek /neyxt / etc)
+
+pub const Error = error{
+    UnexpectedCharacter,
+    UnterminatedString,
+};
 
 pub const Scanner = struct {
     source: []const u8,
@@ -22,7 +15,7 @@ pub const Scanner = struct {
     window: [3]Token,
     window_index: usize,
 
-    pub fn init(source: []const u8) Scanner {
+    pub fn init(source: []const u8) Error!Scanner {
         var scanner = Scanner{
             .source = source,
             .pos = 0,
@@ -35,13 +28,13 @@ pub const Scanner = struct {
         };
 
         // initialize the scanner
-        scanner.advance(); // fill peek()
-        scanner.advance(); // fill current()
+        try scanner.advance(); // fill peek()
+        try scanner.advance(); // fill current()
 
         return scanner;
     }
 
-    pub fn reset(self: *Scanner) void {
+    pub fn reset(self: *Scanner) Error!void {
         self.pos = 0;
         self.window = .{
             .{ .tag = .comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
@@ -51,8 +44,8 @@ pub const Scanner = struct {
         self.window_index = 0;
 
         // initialize the scanner
-        self.advance(); // fill peek()
-        self.advance(); // fill current()
+        try self.advance(); // fill peek()
+        try self.advance(); // fill current()
     }
 
     pub fn peek(self: *const Scanner) Token {
@@ -67,16 +60,16 @@ pub const Scanner = struct {
         return self.window[self.window_index % 3];
     }
 
-    pub fn advance(self: *Scanner) void {
+    pub fn advance(self: *Scanner) Error!void {
         self.window_index = (self.window_index + 1) % 3;
-        self.window[(self.window_index + 2) % 3] = self.nextToken();
+        self.window[(self.window_index + 2) % 3] = try self.nextToken();
     }
 
     pub fn getLexeme(self: *const Scanner, token: Token) []const u8 {
         return self.source[token.location.start..token.location.end];
     }
 
-    fn nextToken(self: *Scanner) Token {
+    fn nextToken(self: *Scanner) Error!Token {
         self.skipWhitespaceAndComments();
 
         if (self.isAtEnd()) {
@@ -139,32 +132,20 @@ pub const Scanner = struct {
                 if (self.isIdentifierChar(c)) {
                     break :else_case self.makeIdentifier();
                 } else {
-                    break :else_case .{
-                        .tag = .error_,
-                        .location = .{
-                            .start = start,
-                            .end = start + 1,
-                        },
-                    };
+                    return Error.UnexpectedCharacter;
                 }
             },
         };
     }
 
-    fn makeString(self: *Scanner, stringChar: u8) Token {
+    fn makeString(self: *Scanner, stringChar: u8) !Token {
         const token_start = self.pos;
         while (!self.matchChar(stringChar) and !self.isAtEnd()) {
             self.pos += 1;
         }
 
         if (self.isAtEnd() and self.source[self.pos - 1] != stringChar) {
-            return .{
-                .tag = .error_,
-                .location = .{
-                    .start = token_start,
-                    .end = self.pos,
-                },
-            };
+            return Error.UnterminatedString;
         }
 
         return .{

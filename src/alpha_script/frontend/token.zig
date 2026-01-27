@@ -50,7 +50,6 @@ pub const TokenType = enum {
     while_,
     // Special tokens
     synthetic,
-    scanner_error,
     eof,
 };
 

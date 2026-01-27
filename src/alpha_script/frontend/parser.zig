@@ -284,10 +284,11 @@ pub const Parser = struct {
         var scanner = &self.scanner;
 
         while (true) {
-            scanner.advance();
-            if (scanner.current().tag != TokenType.scanner_error) break;
-
-            return error.ScannerError;
+            try scanner.advance();
+            //            if (scanner.current().tag != TokenType.scanner_error) break;
+            // TODO advance the scanner until we find a valid token (eof is valid too, so no check is needed for that). report all scanner errors on the way
+            break;
+            //            return error.ScannerError;
         }
 
         return scanner.previous();

@@ -8,7 +8,7 @@ pub const TokenPrinter = struct {
             try TokenPrinter.printToken(scanner.current(), scanner, writer);
             //            try TokenPrinter.printToken(scanner.peek(), scanner, writer);
             try writer.print("\n", .{});
-            scanner.advance();
+            try scanner.advance();
         }
     }
 

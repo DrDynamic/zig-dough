@@ -9,13 +9,13 @@ pub fn main() !void {
         \\ // var s = "Lorem Ipsum ";
         \\ // eof
     ;
-    var scanner = as.frontend.Scanner.init(source);
+    var scanner = try as.frontend.Scanner.init(source);
 
     as.frontend.debug.TokenPrinter.printTokens(&scanner, std.io.getStdOut().writer()) catch |err| {
         std.debug.print("Error printing tokens: {}\n", .{err});
         return err;
     };
-    scanner.reset();
+    try scanner.reset();
     std.debug.print("\n----------\nAST\n", .{});
 
     var ast = try as.frontend.AST.init(allocator);
