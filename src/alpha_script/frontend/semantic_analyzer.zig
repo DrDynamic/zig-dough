@@ -37,6 +37,9 @@ pub const SemanticAnalyzer = struct {
             .literal_float => TypePool.FLOAT,
             .literal_string => TypePool.STRING,
 
+            // objects
+            .object_string => TypePool.STRING,
+
             // declarations
             .declaration_var => try self.analyzeDeclarationVar(node_id),
             // access

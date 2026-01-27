@@ -12,6 +12,9 @@ pub const NodeType = enum(u8) {
     literal_float,
     literal_string,
 
+    // objects
+    object_string,
+
     // declarations
     declaration_var,
 
@@ -44,6 +47,7 @@ pub const BinaryOpData = struct {
 
 pub const Node = struct {
     tag: NodeType,
+    token_position: usize,
     resolved_type_id: TypeId,
 
     data: union {

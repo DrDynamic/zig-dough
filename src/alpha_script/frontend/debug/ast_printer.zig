@@ -43,6 +43,8 @@ pub const ASTPrinter = struct {
                 const str = self.ast.string_table.get(node.data.string_id);
                 try self.writer.print(": \"{s}\"\n", .{str});
             },
+            // TODO print the actual string
+            .object_string => try self.writer.print(": string\n", .{}),
             .binary_add,
             .binary_sub,
             .binary_mul,
@@ -87,6 +89,7 @@ pub const ASTPrinter = struct {
             .literal_string,
             .identifier_expr,
             => {}, // Blätter haben keine Kinder
+            .object_string => {},
 
             .binary_add,
             .binary_sub,

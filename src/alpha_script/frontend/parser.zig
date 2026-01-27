@@ -34,6 +34,7 @@ pub const Parser = struct {
                 return err;
             },
         };
+        const identifier_token = self.scanner.previous();
 
         var type_id: ?TypeId = TypePool.UNRESOLVED;
         if (self.match(.colon)) {
@@ -58,6 +59,7 @@ pub const Parser = struct {
             // TODO: make singleton?
             assignment_node_id = try self.ast.addNode(.{
                 .tag = .comptime_uninitialized,
+                .token_position = identifier_token.location.start,
                 .resolved_type_id = TypePool.UNRESOLVED,
                 .data = undefined,
             });
@@ -73,6 +75,7 @@ pub const Parser = struct {
 
         return try self.ast.addNode(.{
             .tag = .declaration_var,
+            .token_position = identifier_token.location.start,
             .resolved_type_id = TypePool.UNRESOLVED,
             .data = .{ .extra_id = extra_id },
         });
@@ -116,7 +119,8 @@ pub const Parser = struct {
     fn equality(self: *Parser) !ast.NodeId {
         var lhs = try self.comparsion();
         search_equality: while (true) {
-            const tag: ast.NodeType = switch (self.scanner.current().tag) {
+            const token = self.scanner.current();
+            const tag: ast.NodeType = switch (token.tag) {
                 .equal_equal => .binary_equal,
                 .bang_equal => .binary_not_equal,
                 else => break :search_equality,
@@ -131,6 +135,7 @@ pub const Parser = struct {
 
             lhs = try self.ast.addNode(.{
                 .tag = tag,
+                .token_position = token.location.start,
                 .resolved_type_id = TypePool.UNRESOLVED,
                 .data = .{ .extra_id = extra_id },
             });
@@ -142,7 +147,8 @@ pub const Parser = struct {
         var lhs = try self.term();
 
         search_comparsion: while (true) {
-            const tag: ast.NodeType = switch (self.scanner.current().tag) {
+            const token = self.scanner.current();
+            const tag: ast.NodeType = switch (token.tag) {
                 .greater => .binary_greater,
                 .greater_equal => .binary_greater_equal,
                 .less => .binary_less,
@@ -159,6 +165,7 @@ pub const Parser = struct {
 
             lhs = try self.ast.addNode(.{
                 .tag = tag,
+                .token_position = token.location.start,
                 .resolved_type_id = TypePool.UNRESOLVED,
                 .data = .{ .extra_id = extra_id },
             });
@@ -170,7 +177,8 @@ pub const Parser = struct {
     fn term(self: *Parser) !ast.NodeId {
         var lhs = try self.factor();
         search_term: while (true) {
-            const tag: ast.NodeType = switch (self.scanner.current().tag) {
+            const token = self.scanner.current();
+            const tag: ast.NodeType = switch (token.tag) {
                 .plus => .binary_add,
                 .minus => .binary_sub,
                 else => break :search_term,
@@ -185,6 +193,7 @@ pub const Parser = struct {
 
             lhs = try self.ast.addNode(.{
                 .tag = tag,
+                .token_position = token.location.start,
                 .resolved_type_id = TypePool.UNRESOLVED,
                 .data = .{ .extra_id = extra_id },
             });
@@ -195,7 +204,8 @@ pub const Parser = struct {
     fn factor(self: *Parser) !ast.NodeId {
         var lhs = try self.unary();
         search_factor: while (true) {
-            const tag: ast.NodeType = switch (self.scanner.current().tag) {
+            const token = self.scanner.current();
+            const tag: ast.NodeType = switch (token.tag) {
                 .star => .binary_mul,
                 .slash => .binary_div,
                 else => break :search_factor,
@@ -210,6 +220,7 @@ pub const Parser = struct {
 
             lhs = try self.ast.addNode(.{
                 .tag = tag,
+                .token_position = token.location.start,
                 .resolved_type_id = TypePool.UNRESOLVED,
                 .data = .{ .extra_id = extra_id },
             });
@@ -233,16 +244,19 @@ pub const Parser = struct {
         return switch (token.tag) {
             .null_ => try self.ast.addNode(.{
                 .tag = .literal_null,
+                .token_position = token.location.start,
                 .resolved_type_id = TypePool.NULL,
                 .data = undefined,
             }),
             .true_ => try self.ast.addNode(.{
                 .tag = .literal_bool,
+                .token_position = token.location.start,
                 .resolved_type_id = TypePool.BOOL,
                 .data = .{ .bool_value = true },
             }),
             .false_ => try self.ast.addNode(.{
                 .tag = .literal_bool,
+                .token_position = token.location.start,
                 .resolved_type_id = TypePool.BOOL,
                 .data = .{ .bool_value = false },
             }),
@@ -252,6 +266,7 @@ pub const Parser = struct {
                     const val = try std.fmt.parseFloat(f64, lexeme);
                     break :number_case try self.ast.addNode(.{
                         .tag = .literal_float,
+                        .token_position = token.location.start,
                         .resolved_type_id = TypePool.FLOAT,
                         .data = .{ .float_value = val },
                     });
@@ -259,10 +274,20 @@ pub const Parser = struct {
                     const val = try std.fmt.parseInt(i64, lexeme, 10);
                     break :number_case self.ast.addNode(.{
                         .tag = .literal_int,
+                        .token_position = token.location.start,
                         .resolved_type_id = TypePool.INT,
                         .data = .{ .int_value = val },
                     });
                 }
+            },
+            .string => |_| string_case: {
+                // TODO safe string literal in extra
+                break :string_case try self.ast.addNode(.{
+                    .tag = .object_string,
+                    .token_position = token.location.start,
+                    .resolved_type_id = TypePool.STRING,
+                    .data = undefined,
+                });
             },
             else => |tag| {
                 std.debug.print("unexpected token in primary(): {s}\n", .{@tagName(tag)});

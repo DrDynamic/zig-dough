@@ -6,7 +6,8 @@ pub fn main() !void {
         \\ var y: bool = true == false;
         \\ /* Multi
         \\line */
-        \\ // var s = "Lorem Ipsum ";
+        \\ var s = "Lorem Ipsum ";
+        \\ var t = "a" + 2;
         \\ // eof
     ;
     var scanner = try as.frontend.Scanner.init(source);
