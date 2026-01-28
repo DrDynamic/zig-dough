@@ -128,7 +128,7 @@ pub const ErrorReporter = struct {
 const std = @import("std");
 const as = @import("as");
 
-const Terminal = as.frontend.terminal.Terminal;
+const Terminal = as.common.Terminal;
 
 const Scanner = as.frontend.Scanner;
 const Token = as.frontend.Token;

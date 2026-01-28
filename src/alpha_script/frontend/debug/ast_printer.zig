@@ -1,13 +1,17 @@
+const branch_options: Terminal.PrintOptions = .{
+    .styles = &.{.bold},
+};
+
 pub const ASTPrinter = struct {
     ast: *const AST,
     type_pool: *const TypePool,
-    writer: std.fs.File.Writer,
+    terminal: *const Terminal,
 
-    pub fn printAST(ast_: *const AST, type_pool: *const TypePool, writer: std.fs.File.Writer) !void {
+    pub fn printAST(ast_: *const AST, type_pool: *const TypePool, terminal: *const Terminal) !void {
         var printer = ASTPrinter{
             .ast = ast_,
             .type_pool = type_pool,
-            .writer = writer,
+            .terminal = terminal,
         };
 
         const roots = ast_.getRoots();
@@ -16,41 +20,46 @@ pub const ASTPrinter = struct {
         }
     }
 
-    fn printNode(self: ASTPrinter, node_idx: ast.NodeId, prefix: []const u8, is_last: bool) error{ OutOfMemory, NoSpaceLeft, DiskQuota, FileTooBig, InputOutput, DeviceBusy, InvalidArgument, AccessDenied, BrokenPipe, SystemResources, OperationAborted, NotOpenForWriting, LockViolation, WouldBlock, ConnectionResetByPeer, ProcessNotFound, NoDevice, Unexpected }!void {
+    fn printNode(self: ASTPrinter, node_idx: ast.NodeId, prefix: []const u8, is_last: bool) std.fmt.AllocPrintError!void {
         const node = self.ast.nodes.items[node_idx];
         const node_type = self.type_pool.types.items[node.resolved_type_id];
 
-        // 1. Zeichne den aktuellen Zweig
-        try self.writer.print("{s}{s}{s}[{s}]", .{
+        // 1. draw the branch
+        self.terminal.print("{s}{s}", .{
             prefix,
-            if (is_last) "└── " else "├── ",
-            //            node_idx,
-            @tagName(node.tag),
-            @tagName(node_type.tag),
+            if (is_last) "└──" else "├──",
         });
+
+        self.terminal.printWithOptions("[{s}] ", .{
+            @tagName(node_type.tag),
+        }, .{ .styles = &.{.bold} });
+
+        self.terminal.printWithOptions("{s}", .{
+            @tagName(node.tag),
+        }, .{ .styles = &.{} });
 
         // 2. Spezifische Daten je nach Typ ausgeben
         switch (node.tag) {
-            .comptime_uninitialized => try self.writer.print(": -", .{}),
-            .literal_void => try self.writer.print(": void\n", .{}),
-            .literal_null => try self.writer.print(": null\n", .{}),
-            .literal_int => try self.writer.print(": {d}\n", .{node.data.int_value}),
-            .literal_float => try self.writer.print(": {d:.4}\n", .{node.data.float_value}),
-            .literal_bool => try self.writer.print(": {}\n", .{node.data.bool_value}),
+            .comptime_uninitialized => self.terminal.print(": -", .{}),
+            .literal_void => self.terminal.print(": void\n", .{}),
+            .literal_null => self.terminal.print(": null\n", .{}),
+            .literal_int => self.terminal.print(": {d}\n", .{node.data.int_value}),
+            .literal_float => self.terminal.print(": {d:.4}\n", .{node.data.float_value}),
+            .literal_bool => self.terminal.print(": {}\n", .{node.data.bool_value}),
             .literal_string,
             .identifier_expr,
             => {
                 const str = self.ast.string_table.get(node.data.string_id);
-                try self.writer.print(": \"{s}\"\n", .{str});
+                self.terminal.print(": \"{s}\"\n", .{str});
             },
             // TODO print the actual string
-            .object_string => try self.writer.print(": string\n", .{}),
+            .object_string => self.terminal.print(": string\n", .{}),
             .binary_add,
             .binary_sub,
             .binary_mul,
             .binary_div,
             => {
-                try self.writer.print("\n", .{});
+                self.terminal.print("\n", .{});
             },
             .binary_equal,
             .binary_not_equal,
@@ -59,12 +68,12 @@ pub const ASTPrinter = struct {
             .binary_greater,
             .binary_greater_equal,
             => {
-                try self.writer.print("\n", .{});
+                self.terminal.print("\n", .{});
             },
             .declaration_var => {
                 const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationData);
                 const name = self.ast.string_table.get(data.name_id);
-                try self.writer.print(" (name: {s}, init_value: {d})\n", .{ name, data.init_value });
+                self.terminal.print(" (name: {s}, init_value: {d})\n", .{ name, data.init_value });
             },
         }
 
@@ -120,3 +129,4 @@ const ast = as.frontend.ast;
 const AST = as.frontend.AST;
 const TypePool = as.frontend.TypePool;
 const BinaryOpData = ast.BinaryOpData;
+const Terminal = as.common.Terminal;

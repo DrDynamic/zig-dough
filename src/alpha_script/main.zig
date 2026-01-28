@@ -12,9 +12,10 @@ pub fn main() !void {
         \\
     ;
 
-    const terminal = as.frontend.terminal.Terminal.init(std.io.getStdErr());
+    const stdout_terminal = as.common.Terminal.init(std.io.getStdOut());
+    const stderr_terminal = as.common.Terminal.init(std.io.getStdErr());
 
-    const error_reporter = as.frontend.ErrorReporter.init(source, "test_string", &terminal);
+    const error_reporter = as.frontend.ErrorReporter.init(source, "test_string", &stderr_terminal);
 
     var scanner = try as.frontend.Scanner.init(source, &error_reporter);
 
@@ -52,8 +53,7 @@ pub fn main() !void {
         _ = try semantic_analyzer.analyze(root_node_id);
     }
 
-    const stdout = std.io.getStdOut().writer();
-    try as.frontend.debug.ASTPrinter.printAST(&ast, &type_pool, stdout);
+    try as.frontend.debug.ASTPrinter.printAST(&ast, &type_pool, &stdout_terminal);
 }
 
 const std = @import("std");
