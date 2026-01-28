@@ -4,15 +4,17 @@ pub fn main() !void {
     const source =
         \\ var x: i32 = 1 + 2 * 3 > 4.5;
         \\ var y: bool = true == false;
-        \\ var z = @
+        \\ var z = @broken.call()
         \\ /* Multi
         \\line */
         \\ var s = "Lorem Ipsum ";
         \\ //var t = "a" + 2;
         \\ // eof
     ;
-    var scanner = try as.frontend.Scanner.init(source);
+
     const error_reporter = as.frontend.ErrorReporter.init(source, "test_string");
+
+    var scanner = try as.frontend.Scanner.init(source, &error_reporter);
 
     as.frontend.debug.TokenPrinter.printTokens(&scanner, std.io.getStdOut().writer()) catch |err| {
         std.debug.print("Error printing tokens: {}\n", .{err});
@@ -31,7 +33,7 @@ pub fn main() !void {
     );
     defer ast.deinit();
 
-    try parser.parse();
+    parser.parse() catch {};
 
     var type_pool = try as.frontend.TypePool.init(allocator);
     defer type_pool.deinit();

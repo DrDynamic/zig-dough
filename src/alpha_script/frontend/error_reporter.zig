@@ -28,27 +28,30 @@ pub const ErrorReporter = struct {
         };
     }
 
-    pub fn reportScannerError(self: *const ErrorReporter, err: Scanner.Error, token: Token) void {
+    pub fn reportScannerError(self: *const ErrorReporter, err: Scanner.Error, token_start: usize, token_end: usize) void {
+        const location = self.calculateLocation(token_start);
+
         switch (err) {
-            Scanner.Error.UnexpectedCharacter => self.reportByToken(token, .unexpected_character), // TODO token could not be parsed! Guess the token? or add a "undefined_token" type?
-            Scanner.Error.UnterminatedString => self.reportByToken(token, .unterminated_string),
+            Scanner.Error.UnexpectedCharacter => self.printError(location, "unexpected character"),
+            Scanner.Error.UnterminatedString => self.printError(location, "unterminated string"),
         }
+        self.printMarkedSource(location, token_end - token_start);
     }
 
     pub fn reportByToken(self: *const ErrorReporter, token: Token, errorType: ErrorType) void {
         const location = self.calculateLocation(token.location.start);
-
+        const width = token.location.end - token.location.start;
         switch (errorType) {
-            .unexpected_character => self.reportError(location, "unexpected character"),
-            .unterminated_string => self.reportError(location, "unterminated string"),
-            .expected_identifier => self.reportError(location, "expected an identifier"),
-            .incompatible_types => self.reportError(location, "incompatiblwe types"),
+            .unexpected_character => self.reportError(location, width, "unexpected character"),
+            .unterminated_string => self.reportError(location, width, "unterminated string"),
+            .expected_identifier => self.reportError(location, width, "expected an identifier"),
+            .incompatible_types => self.reportError(location, width, "incompatiblwe types"),
         }
     }
 
-    fn reportError(self: *const ErrorReporter, location: SourceLocation, message: []const u8) void {
+    fn reportError(self: *const ErrorReporter, location: SourceLocation, width: usize, message: []const u8) void {
         self.printError(location, message);
-        self.printMarkedSource(location);
+        self.printMarkedSource(location, width);
     }
 
     fn calculateLocation(self: *const ErrorReporter, token_position: usize) SourceLocation {
@@ -78,7 +81,7 @@ pub const ErrorReporter = struct {
         return location;
     }
 
-    fn printMarkedSource(self: *const ErrorReporter, location: SourceLocation) void {
+    fn printMarkedSource(self: *const ErrorReporter, location: SourceLocation, width: usize) void {
         // print source
         const source_line = self.source[location.line_start..location.line_end];
         self.print("{s}\n", .{source_line});
@@ -86,6 +89,7 @@ pub const ErrorReporter = struct {
         // print caret (^)
         for (0..location.column - 1) |_| self.print(" ", .{});
         self.print("{s}", .{"^"});
+        for (0..width - 1) |_| self.print("~", .{});
     }
 
     fn printError(self: *const ErrorReporter, location: SourceLocation, message: []const u8) void {

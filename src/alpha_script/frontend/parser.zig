@@ -312,8 +312,9 @@ pub const Parser = struct {
 
             if (did_advance) {
                 break;
-            } else |scanner_error| {
-                self.error_reporter.reportScannerError(scanner_error, self.scanner.peek());
+            } else |_| {
+                //TODO remember error
+                //                self.error_reporter.reportScannerError(scanner_error, self.scanner.peek());
             }
         }
 

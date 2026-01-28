@@ -1,22 +1,18 @@
-const std = @import("std");
-
-const as = @import("as");
-const Token = as.frontend.Token;
-const TokenType = as.frontend.TokenType;
-
 pub const Scanner = struct {
     pub const Error = error{
         UnexpectedCharacter,
         UnterminatedString,
     };
+    error_reporter: *const ErrorReporter,
 
     source: []const u8,
     pos: usize,
     window: [3]Token,
     window_index: usize,
 
-    pub fn init(source: []const u8) Error!Scanner {
+    pub fn init(source: []const u8, error_reporter: *const ErrorReporter) Error!Scanner {
         var scanner = Scanner{
+            .error_reporter = error_reporter,
             .source = source,
             .pos = 0,
             .window = .{
@@ -133,6 +129,8 @@ pub const Scanner = struct {
                 if (self.isIdentifierChar(c)) {
                     break :else_case self.makeIdentifier();
                 } else {
+                    self.error_reporter.reportScannerError(Error.UnexpectedCharacter, start, start + 1);
+                    // TODO collect character to the next whitespace
                     return Error.UnexpectedCharacter;
                 }
             },
@@ -146,6 +144,7 @@ pub const Scanner = struct {
         }
 
         if (self.isAtEnd() and self.source[self.pos - 1] != stringChar) {
+            self.error_reporter.reportScannerError(Error.UnterminatedString, token_start, self.pos - 1);
             return Error.UnterminatedString;
         }
 
@@ -296,6 +295,13 @@ pub const Scanner = struct {
         return (std.ascii.isAlphanumeric(char) or char == '_' or !std.ascii.isAscii(char));
     }
 };
+
+const std = @import("std");
+
+const as = @import("as");
+const ErrorReporter = as.frontend.ErrorReporter;
+const Token = as.frontend.Token;
+const TokenType = as.frontend.TokenType;
 
 test "Scanns all tokens" {
     var scanner = Scanner.init(
