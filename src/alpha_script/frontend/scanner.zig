@@ -129,7 +129,15 @@ pub const Scanner = struct {
                 if (self.isIdentifierChar(c)) {
                     break :else_case self.makeIdentifier();
                 } else {
-                    self.error_reporter.reportScannerError(Error.UnexpectedCharacter, start, start + 1);
+                    // collect all character to the next whitespace
+                    while (!self.isAtEnd()) {
+                        const uc = self.source[self.pos];
+                        if (std.ascii.isWhitespace(uc)) break;
+                        self.pos += 1;
+                    }
+
+                    self.error_reporter.reportScannerError(Error.UnexpectedCharacter, start, self.pos);
+
                     // TODO collect character to the next whitespace
                     return Error.UnexpectedCharacter;
                 }

@@ -10,6 +10,19 @@ pub const ErrorType = enum {
     incompatible_types,
 };
 
+const location_label_options: Terminal.PrintOptions = .{
+    .styles = &.{Terminal.Style.bold},
+};
+
+const error_label_options: Terminal.PrintOptions = .{
+    .color = .{ .ansi = .red },
+    .styles = &.{.bold},
+};
+
+const marker_options: Terminal.PrintOptions = .{
+    .color = .{ .ansi = .green },
+};
+
 const SourceLocation = struct {
     line: usize,
     column: usize,
@@ -18,11 +31,13 @@ const SourceLocation = struct {
 };
 
 pub const ErrorReporter = struct {
+    terminal: *const Terminal,
     source: []const u8,
     file_name: []const u8,
 
-    pub fn init(source: []const u8, file_name: []const u8) ErrorReporter {
+    pub fn init(source: []const u8, file_name: []const u8, terminal: *const Terminal) ErrorReporter {
         return .{
+            .terminal = terminal,
             .source = source,
             .file_name = file_name,
         };
@@ -86,25 +101,34 @@ pub const ErrorReporter = struct {
         const source_line = self.source[location.line_start..location.line_end];
         self.print("{s}\n", .{source_line});
 
-        // print caret (^)
+        // print marker (^~~~)
+        self.terminal.setStyle(marker_options);
         for (0..location.column - 1) |_| self.print(" ", .{});
         self.print("{s}", .{"^"});
         for (0..width - 1) |_| self.print("~", .{});
+        self.print("\n", .{});
+        self.terminal.setStyle(Terminal.reset_options);
     }
 
     fn printError(self: *const ErrorReporter, location: SourceLocation, message: []const u8) void {
-        self.print("{s}:{d}:{d}: {s}\n", .{ self.file_name, location.line, location.column, message });
+        self.terminal.setStyle(location_label_options);
+        self.print("{s}:{d}:{d} ", .{ self.file_name, location.line, location.column });
+        self.terminal.setStyle(error_label_options);
+        self.print("error: ", .{});
+        self.terminal.setStyle(location_label_options);
+        self.print("{s}\n", .{message});
+        self.terminal.setStyle(Terminal.reset_options);
     }
 
-    fn print(_: *const ErrorReporter, comptime fmt: []const u8, args: anytype) void {
-        // TODO switchout debug printer
-        std.debug.print(fmt, args);
+    fn print(self: *const ErrorReporter, comptime fmt: []const u8, args: anytype) void {
+        self.terminal.print(fmt, args);
     }
 };
 
 const std = @import("std");
 const as = @import("as");
 
-const Scanner = as.frontend.Scanner;
+const Terminal = as.frontend.terminal.Terminal;
 
+const Scanner = as.frontend.Scanner;
 const Token = as.frontend.Token;

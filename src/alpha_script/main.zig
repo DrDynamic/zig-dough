@@ -8,11 +8,13 @@ pub fn main() !void {
         \\ /* Multi
         \\line */
         \\ var s = "Lorem Ipsum ";
-        \\ //var t = "a" + 2;
-        \\ // eof
+        \\ var t = "a + 2;
+        \\
     ;
 
-    const error_reporter = as.frontend.ErrorReporter.init(source, "test_string");
+    const terminal = as.frontend.terminal.Terminal.init(std.io.getStdErr());
+
+    const error_reporter = as.frontend.ErrorReporter.init(source, "test_string", &terminal);
 
     var scanner = try as.frontend.Scanner.init(source, &error_reporter);
 
