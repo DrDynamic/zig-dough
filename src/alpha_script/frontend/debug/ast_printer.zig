@@ -47,7 +47,6 @@ pub const ASTPrinter = struct {
             .literal_int => self.terminal.print(": {d}\n", .{node.data.int_value}),
             .literal_float => self.terminal.print(": {d:.4}\n", .{node.data.float_value}),
             .literal_bool => self.terminal.print(": {}\n", .{node.data.bool_value}),
-            .literal_string,
             .identifier_expr,
             => {
                 const str = self.ast.string_table.get(node.data.string_id);
@@ -72,7 +71,7 @@ pub const ASTPrinter = struct {
                 self.terminal.print("\n", .{});
             },
             .declaration_var => {
-                const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationData);
+                const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationExtra);
                 const name = self.ast.string_table.get(data.name_id);
                 self.terminal.print(" (name: {s}, init_value: {d})\n", .{ name, data.init_value });
             },
@@ -96,7 +95,6 @@ pub const ASTPrinter = struct {
             .literal_int,
             .literal_float,
             .literal_bool,
-            .literal_string,
             .identifier_expr,
             => {}, // Blätter haben keine Kinder
             .object_string => {},
@@ -112,12 +110,12 @@ pub const ASTPrinter = struct {
             .binary_greater,
             .binary_greater_equal,
             => {
-                const extra = self.ast.getExtra(node.data.extra_id, BinaryOpData);
+                const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
                 try self.printNode(extra.lhs, prefix, false);
                 try self.printNode(extra.rhs, prefix, true);
             },
             .declaration_var => {
-                const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationData);
+                const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationExtra);
                 try self.printNode(data.init_value, prefix, true);
             },
         }
@@ -129,5 +127,5 @@ const as = @import("as");
 const ast = as.frontend.ast;
 const AST = as.frontend.AST;
 const TypePool = as.frontend.TypePool;
-const BinaryOpData = ast.BinaryOpData;
+const BinaryOpExtra = ast.BinaryOpExtra;
 const Terminal = as.common.Terminal;

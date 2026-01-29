@@ -132,3 +132,4 @@ const Terminal = as.common.Terminal;
 
 const Scanner = as.frontend.Scanner;
 const Token = as.frontend.Token;
+const Node = as.frontend.Node;

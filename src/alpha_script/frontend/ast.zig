@@ -10,7 +10,6 @@ pub const NodeType = enum(u8) {
     literal_bool,
     literal_int,
     literal_float,
-    literal_string,
 
     // objects
     object_string,
@@ -34,13 +33,13 @@ pub const NodeType = enum(u8) {
     binary_greater_equal,
 };
 
-pub const VarDeclarationData = struct {
+pub const VarDeclarationExtra = struct {
     name_id: StringId,
     explicit_type: TypeId,
     init_value: NodeId,
 };
 
-pub const BinaryOpData = struct {
+pub const BinaryOpExtra = struct {
     lhs: NodeId,
     rhs: NodeId,
 };

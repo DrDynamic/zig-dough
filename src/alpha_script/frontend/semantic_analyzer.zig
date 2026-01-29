@@ -37,7 +37,6 @@ pub const SemanticAnalyzer = struct {
             .literal_bool => TypePool.BOOL,
             .literal_int => TypePool.INT,
             .literal_float => TypePool.FLOAT,
-            .literal_string => TypePool.STRING,
 
             // objects
             .object_string => TypePool.STRING,
@@ -60,6 +59,7 @@ pub const SemanticAnalyzer = struct {
             .binary_greater_equal,
             => try self.analyzeBinaryCompare(node_id),
             else => {
+                std.debug.print("Unhandled node: {s}\n", .{@tagName(node.tag)});
                 return error.UnhandledNodeType;
             },
         };
@@ -70,7 +70,7 @@ pub const SemanticAnalyzer = struct {
 
     fn analyzeDeclarationVar(self: *SemanticAnalyzer, node_id: ast.NodeId) Error!TypeId {
         const node = self.ast.nodes.items[node_id];
-        const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationData);
+        const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationExtra);
 
         // Analyze the initializer
         const inferred_type = try self.analyze(data.init_value);
@@ -80,6 +80,8 @@ pub const SemanticAnalyzer = struct {
                 // TODO add implicit casts (type promotions)
                 return error.TypeMismatch;
             }
+        } else {
+            // TODO is there is no explicit type, there needs to be an initializer
         }
 
         // add variable to symbol table
@@ -95,7 +97,7 @@ pub const SemanticAnalyzer = struct {
 
     fn analyzeBinaryCompare(self: *SemanticAnalyzer, node_id: ast.NodeId) Error!TypeId {
         const node = self.ast.nodes.items[node_id];
-        const data = self.ast.getExtra(node.data.extra_id, ast.BinaryOpData);
+        const data = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
 
         const left_type = try self.analyze(data.lhs);
         const right_type = try self.analyze(data.rhs);
@@ -117,7 +119,7 @@ pub const SemanticAnalyzer = struct {
 
     fn analyzeBinaryMath(self: *SemanticAnalyzer, node_id: ast.NodeId) Error!TypeId {
         const node = self.ast.nodes.items[node_id];
-        const data = self.ast.getExtra(node.data.extra_id, ast.BinaryOpData);
+        const data = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
 
         const left_type = try self.analyze(data.lhs);
         const right_type = try self.analyze(data.rhs);

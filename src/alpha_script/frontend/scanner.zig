@@ -72,6 +72,15 @@ pub const Scanner = struct {
         return self.source[token.location.start..token.location.end];
     }
 
+    pub fn scanPosition(self: *Scanner, lexeme_start: isize) !Token {
+        const currentPosition = self.pos;
+        self.pos = lexeme_start;
+        const token = self.nextToken();
+        self.pos = currentPosition;
+
+        return token;
+    }
+
     fn nextToken(self: *Scanner) Error!Token {
         self.skipWhitespaceAndComments();
 

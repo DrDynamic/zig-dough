@@ -3,12 +3,14 @@ pub fn main() !void {
 
     const source =
         \\ var x: i32 = 1 + 2 * 3 > 4.5;
+        \\ var a = 1*2+3;
+        \\ //var uninitialized;
         \\ var y: bool = true == false;
-        \\ var z = @broken.call()
+        \\ //var z = @broken.call()
         \\ /* Multi
         \\line */
         \\ var s = "Lorem Ipsum ";
-        \\ var t = "a + 2;
+        \\ //var t = "a + 2;
         \\
     ;
 
@@ -24,7 +26,7 @@ pub fn main() !void {
         return err;
     };
     try scanner.reset();
-    std.debug.print("\n----------\nAST\n", .{});
+    std.debug.print("\n----------\n", .{});
 
     var ast = try as.frontend.AST.init(allocator);
 

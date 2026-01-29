@@ -47,10 +47,8 @@ pub const Parser = struct {
 
         var type_id: ?TypeId = TypePool.UNRESOLVED;
         if (try self.match(.colon)) {
-            // TODO parse type
             _ = self.consume(.identifier) catch |err| switch (err) {
                 error.TokenMissMatch => {
-                    // TODO report error
                     self.error_reporter.reportByToken(self.scanner.current(), ErrorType.expected_identifier);
                     return error.ParserError;
                 },
@@ -58,6 +56,8 @@ pub const Parser = struct {
                     return err;
                 },
             };
+
+            // TODO parse Type
             type_id = null;
         }
 
@@ -77,7 +77,7 @@ pub const Parser = struct {
 
         _ = try self.match(.semicolon);
 
-        const extra_id = try self.ast.addExtra(ast.VarDeclarationData{
+        const extra_id = try self.ast.addExtra(ast.VarDeclarationExtra{
             .name_id = name_id,
             .explicit_type = TypePool.UNRESOLVED,
             .init_value = assignment_node_id,
@@ -138,7 +138,7 @@ pub const Parser = struct {
             _ = try self.advance();
 
             const rhs: ast.NodeId = try self.comparsion();
-            const extra_id = try self.ast.addExtra(ast.BinaryOpData{
+            const extra_id = try self.ast.addExtra(ast.BinaryOpExtra{
                 .lhs = lhs,
                 .rhs = rhs,
             });
@@ -168,7 +168,7 @@ pub const Parser = struct {
             _ = try self.advance();
 
             const rhs: ast.NodeId = try self.term();
-            const extra_id = try self.ast.addExtra(ast.BinaryOpData{
+            const extra_id = try self.ast.addExtra(ast.BinaryOpExtra{
                 .lhs = lhs,
                 .rhs = rhs,
             });
@@ -196,7 +196,7 @@ pub const Parser = struct {
             _ = try self.advance();
 
             const rhs: ast.NodeId = try self.factor();
-            const extra_id = try self.ast.addExtra(ast.BinaryOpData{
+            const extra_id = try self.ast.addExtra(ast.BinaryOpExtra{
                 .lhs = lhs,
                 .rhs = rhs,
             });
@@ -223,7 +223,7 @@ pub const Parser = struct {
             _ = try self.advance();
 
             const rhs: ast.NodeId = try self.unary();
-            const extra_id = try self.ast.addExtra(ast.BinaryOpData{
+            const extra_id = try self.ast.addExtra(ast.BinaryOpExtra{
                 .lhs = lhs,
                 .rhs = rhs,
             });
