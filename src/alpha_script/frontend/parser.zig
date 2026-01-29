@@ -14,13 +14,19 @@ pub const Parser = struct {
     }
 
     pub fn parse(self: *Parser) !void {
-        while (!self.match(.eof)) {
-            try self.ast.addRoot(try self.declaration());
+        while (!self.check(.eof)) {
+            const maybe_node_id = self.declaration();
+            if (maybe_node_id) |node_id| {
+                try self.ast.addRoot(node_id);
+            } else |_| {
+                // this statement is broken.
+                self.ast.invalidate();
+            }
         }
     }
 
     fn declaration(self: *Parser) !ast.NodeId {
-        if (self.match(.var_)) {
+        if (try self.match(.var_)) {
             return try self.varDeclaration();
         }
         return try self.statement();
@@ -30,6 +36,7 @@ pub const Parser = struct {
         const name_id: StringId = self.parseIdentifier() catch |err| switch (err) {
             error.TokenMissMatch => {
                 // TODO report error
+                self.error_reporter.reportByToken(self.scanner.current(), ErrorType.expected_identifier);
                 return error.ParserError;
             },
             else => {
@@ -39,19 +46,23 @@ pub const Parser = struct {
         const identifier_token = self.scanner.previous();
 
         var type_id: ?TypeId = TypePool.UNRESOLVED;
-        if (self.match(.colon)) {
+        if (try self.match(.colon)) {
             // TODO parse type
             _ = self.consume(.identifier) catch |err| switch (err) {
                 error.TokenMissMatch => {
                     // TODO report error
+                    self.error_reporter.reportByToken(self.scanner.current(), ErrorType.expected_identifier);
                     return error.ParserError;
+                },
+                else => {
+                    return err;
                 },
             };
             type_id = null;
         }
 
         var assignment_node_id: ast.NodeId = undefined;
-        if (self.match(.equal)) {
+        if (try self.match(.equal)) {
             // TODO parse assignment
             assignment_node_id = try self.expression();
         } else {
@@ -64,7 +75,7 @@ pub const Parser = struct {
             });
         }
 
-        _ = self.match(.semicolon);
+        _ = try self.match(.semicolon);
 
         const extra_id = try self.ast.addExtra(ast.VarDeclarationData{
             .name_id = name_id,
@@ -289,7 +300,7 @@ pub const Parser = struct {
                 });
             },
             else => |tag| {
-                std.debug.print("unexpected token in primary(): {s}\n", .{@tagName(tag)});
+                std.debug.print("unexpected token in primary(): {s} '{s}'\n", .{ @tagName(tag), self.scanner.getLexeme(token) });
                 // TODO report error
                 return error.ParserError;
             },
@@ -307,16 +318,18 @@ pub const Parser = struct {
     pub fn advance(self: *Parser) !Token {
         var scanner = &self.scanner;
 
-        while (true) {
-            const did_advance = scanner.advance();
-
-            if (did_advance) {
+        scanner.advance() catch {
+            // read tokens until the scanner finds a valid one
+            // (we dont need to check for the end because at least eof is valid)
+            while (true) {
+                // if advance failes, the token read into scanner.next() could not be read.
+                // so we need to advance two times, in order to jump over the failed token
+                scanner.advance() catch continue;
+                scanner.advance() catch continue;
                 break;
-            } else |_| {
-                //TODO remember error
-                //                self.error_reporter.reportScannerError(scanner_error, self.scanner.peek());
             }
-        }
+            return error.ScannerError;
+        };
 
         return scanner.previous();
     }
@@ -329,11 +342,11 @@ pub const Parser = struct {
         }
     }
 
-    pub fn match(self: *Parser, token_type: TokenType) bool {
+    pub fn match(self: *Parser, token_type: TokenType) !bool {
         if (!self.check(token_type)) {
             return false;
         }
-        _ = self.advance() catch {};
+        _ = try self.advance();
         return true;
     }
 
@@ -352,7 +365,7 @@ const TokenType = as.frontend.TokenType;
 const Token = as.frontend.Token;
 const TypeId = as.frontend.TypeId;
 const TypePool = as.frontend.TypePool;
-
+const ErrorType = as.frontend.ErrorType;
 const ast = as.frontend.ast;
 const AST = as.frontend.AST;
 

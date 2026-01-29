@@ -66,6 +66,7 @@ pub const AST = struct {
     nodes: ArrayList(Node),
     extra_data: ArrayList(u32),
     string_table: StringTable,
+    is_valid: bool,
 
     pub fn init(allocator: Allocator) !AST {
         const ast: AST = .{
@@ -74,6 +75,7 @@ pub const AST = struct {
             .nodes = ArrayList(Node).init(allocator),
             .extra_data = ArrayList(u32).init(allocator),
             .string_table = StringTable.init(allocator),
+            .is_valid = true,
         };
 
         return ast;
@@ -84,6 +86,10 @@ pub const AST = struct {
         self.nodes.deinit();
         self.extra_data.deinit();
         self.string_table.deinit();
+    }
+
+    pub fn invalidate(self: *AST) void {
+        self.is_valid = false;
     }
 
     pub fn addRoot(self: *AST, node_id: NodeId) !void {

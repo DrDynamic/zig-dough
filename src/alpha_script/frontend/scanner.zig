@@ -44,7 +44,7 @@ pub const Scanner = struct {
         try self.advance(); // fill current()
     }
 
-    pub fn peek(self: *const Scanner) Token {
+    pub fn next(self: *const Scanner) Token {
         return self.window[(self.window_index + 2) % 3];
     }
 
@@ -57,7 +57,13 @@ pub const Scanner = struct {
     }
 
     pub fn advance(self: *Scanner) Error!void {
+        //const token: Token = while (true) {
+        //    const token = self.nextToken() catch continue;
+        //    break token;
+        //} else unreachable;
+
         const token = try self.nextToken();
+
         self.window_index = (self.window_index + 1) % 3;
         self.window[(self.window_index + 2) % 3] = token;
     }
@@ -251,8 +257,8 @@ pub const Scanner = struct {
                     self.pos += 1;
                 },
                 '/' => {
-                    const next = self.source[self.pos + 1];
-                    if (next == '/') {
+                    const nextChar = self.source[self.pos + 1];
+                    if (nextChar == '/') {
                         // single line comment
                         self.pos += 2;
 
@@ -260,7 +266,7 @@ pub const Scanner = struct {
                             if (self.source[self.pos] == '\n') break;
                             self.pos += 1;
                         }
-                    } else if (next == '*') {
+                    } else if (nextChar == '*') {
                         // multiline comment
                         self.pos += 2;
 

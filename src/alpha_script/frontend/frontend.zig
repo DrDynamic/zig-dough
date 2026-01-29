@@ -30,4 +30,6 @@ pub const SymbolTable = scope.SymbolTable;
 
 pub const SemanticAnalyzer = @import("semantic_analyzer.zig").SemanticAnalyzer;
 
-pub const ErrorReporter = @import("error_reporter.zig").ErrorReporter;
+const error_reporter = @import("error_reporter.zig");
+pub const ErrorReporter = error_reporter.ErrorReporter;
+pub const ErrorType = error_reporter.ErrorType;

@@ -14,6 +14,7 @@ pub const ASTPrinter = struct {
             .terminal = terminal,
         };
 
+        printer.terminal.print("AST (valid: {s})\n", .{if (printer.ast.is_valid) "true" else "false"});
         const roots = ast_.getRoots();
         for (0.., roots) |index, node_id| {
             try printer.printNode(node_id, "", index == roots.len - 1);
