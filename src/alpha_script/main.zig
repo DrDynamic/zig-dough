@@ -9,7 +9,7 @@ pub fn main() !void {
         \\ //var z = @broken.call()
         \\ /* Multi
         \\line */
-        \\ var s = "Lorem Ipsum ";
+        \\ // var s = "Lorem Ipsum ";
         \\ //var t = "a + 2;
         \\
     ;
@@ -56,6 +56,13 @@ pub fn main() !void {
     }
 
     try as.frontend.debug.ASTPrinter.printAST(&ast, &type_pool, &stdout_terminal);
+
+    var chunk = as.compiler.Chunk.init(allocator);
+    var compiler = as.compiler.Compiler.init(&ast, &chunk, allocator);
+    try compiler.compile();
+
+    const disassambler = as.frontend.debug.Disassambler.init(&stdout_terminal);
+    disassambler.disassambleChunk(&chunk, "debug");
 }
 
 const std = @import("std");

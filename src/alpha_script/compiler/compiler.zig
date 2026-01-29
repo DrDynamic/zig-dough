@@ -10,6 +10,15 @@ pub const Local = struct {
 };
 
 pub const Compiler = struct {
+    pub const Error = error{
+        LocalNotFound,
+        UnexpectedComptime,
+        UnexpectedVoid,
+        ConstantOverflow,
+        OutOfMemory,
+        NotImplemented,
+    };
+
     allocator: std.mem.Allocator,
 
     ast: *AST,
@@ -29,10 +38,16 @@ pub const Compiler = struct {
         };
     }
 
-    fn compileNode(self: *Compiler, node_id: NodeId) !u8 {
+    pub fn compile(self: *Compiler) !void {
+        for (self.ast.getRoots()) |node_id| {
+            _ = try self.compileNode(node_id);
+        }
+    }
+
+    fn compileNode(self: *Compiler, node_id: NodeId) Error!u8 {
         const node = self.ast.nodes.items[node_id];
 
-        switch (node.tag) {
+        return switch (node.tag) {
             // nodes needed ad compiletime (should not bleed into runtime!)
             .comptime_uninitialized => return error.UnexpectedComptime,
 
@@ -44,7 +59,7 @@ pub const Compiler = struct {
 
                 try self.emitLoadConstant(.load_const, register, .{
                     .tag = .null,
-                    .data = .{},
+                    .data = undefined,
                 });
                 return register;
             },
@@ -89,41 +104,63 @@ pub const Compiler = struct {
 
                 var init_reg: RegisterId = undefined;
                 if (init_node.tag == .comptime_uninitialized) {
-                    const register = self.next_free_reg;
+                    init_reg = self.next_free_reg;
                     self.next_free_reg += 1;
-                    init_reg = try self.emitLoadConstant(.load_const, register, .{
+                    try self.emitLoadConstant(.load_const, init_reg, .{
                         .tag = .null,
-                        .data = .{},
+                        .data = undefined,
                     });
-                    _ = try self.addLocal(data.name_id, init_reg, true);
+                    try self.addLocal(data.name_id, init_reg, true);
                 } else {
                     // create a temporary local, so compileNode can reference the variable
                     const local_index = self.locals.items.len;
                     try self.addLocal(data.name_id, self.next_free_reg, false);
 
-                    init_reg = self.compileNode(data.init_value);
+                    init_reg = try self.compileNode(data.init_value);
                     self.locals.items[local_index].is_initialized = true;
                     self.locals.items[local_index].reg_slot = init_reg;
                 }
+
+                return init_reg;
             },
 
             // access
             .identifier_expr => {
-                return self.resolveLocal(node.data.string_id);
+                return try self.resolveLocal(node.data.string_id);
             },
 
             // binary operations
-            .binary_add => return self.emitBinaryOp(.add, node),
-            .binary_sub => return self.emitBinaryOp(.sub, node),
-            .binary_mul => return self.emitBinaryOp(.multiply, node),
-            .binary_div => return self.emitBinaryOp(.divide, node),
-            .binary_equal => return self.emitBinaryOp(.equal, node),
-            .binary_not_equal => return self.emitBinaryOp(.not_equal, node),
-            .binary_less => return self.emitBinaryOp(.less, node),
-            .binary_less_equal => return self.emitBinaryOp(.less_equal, node),
-            .binary_greater => return self.emitBinaryOp(.greater, node),
-            .binary_greater_equal => return self.emitBinaryOp(.greater_equal, node),
-        }
+            .binary_add => {
+                return self.emitBinaryOp(.add, &node);
+            },
+            .binary_sub => {
+                return self.emitBinaryOp(.sub, &node);
+            },
+            .binary_mul => {
+                return self.emitBinaryOp(.multiply, &node);
+            },
+            .binary_div => {
+                return self.emitBinaryOp(.divide, &node);
+            },
+            .binary_equal => {
+                return self.emitBinaryOp(.equal, &node);
+            },
+            .binary_not_equal => {
+                return self.emitBinaryOp(.not_equal, &node);
+            },
+            .binary_less => {
+                return self.emitBinaryOp(.less, &node);
+            },
+            .binary_less_equal => {
+                return self.emitBinaryOp(.less_equal, &node);
+            },
+            .binary_greater => {
+                return self.emitBinaryOp(.greater, &node);
+            },
+            .binary_greater_equal => {
+                return self.emitBinaryOp(.greater_equal, &node);
+            },
+        };
     }
 
     fn emitBinaryOp(self: *Compiler, op_code: OpCode, node: *const Node) !RegisterId {
@@ -144,7 +181,7 @@ pub const Compiler = struct {
     }
 
     /// bind a variable to a register
-    fn addLocal(self: *Compiler, name_id: StringId, register: RegisterId, is_initialized: bool) !RegisterId {
+    fn addLocal(self: *Compiler, name_id: StringId, register: RegisterId, is_initialized: bool) !void {
         try self.locals.append(.{
             .name_id = name_id,
             .depth = self.scope_depth,
@@ -152,19 +189,17 @@ pub const Compiler = struct {
             .is_captured = false,
             .is_initialized = is_initialized,
         });
-        // TODO error handling (overflow of the u8 register id)
-        return register;
     }
 
     /// searches for the register of a variable
-    fn resolveLocal(self: *const Compiler, name_id: StringId) ?RegisterId {
-        var local_index: isize = self.locals.items.len - 1;
+    fn resolveLocal(self: *const Compiler, name_id: StringId) !RegisterId {
+        var local_index: isize = @as(isize, @intCast(self.locals.items.len)) - 1;
         while (local_index >= 0) : (local_index -= 1) {
-            const local = self.locals.items[local_index];
+            const local = self.locals.items[@intCast(local_index)];
             if (local.name_id == name_id) return local.reg_slot;
         }
 
-        return null;
+        return error.LocalNotFound;
     }
 
     fn enterScope(self: *Compiler) void {

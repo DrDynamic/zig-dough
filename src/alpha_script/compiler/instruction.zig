@@ -18,12 +18,12 @@ pub const OpCode = enum(u8) {
 pub const Instruction = struct {
     opcode: OpCode,
     data: packed union {
-        triplet: struct {
+        triplet: packed struct {
             a: u8,
             b: u8,
             c: u8,
         },
-        doublet: struct {
+        doublet: packed struct {
             a: u8,
             b: u16,
         },
@@ -36,17 +36,29 @@ pub const Chunk = struct {
     code: std.ArrayList(Instruction),
     constants: std.ArrayList(Value),
 
-    pub fn emitTriplet(self: *Chunk, op_code: OpCode, a: u8, b: u8, c: u8) !void {
+    pub fn init(allocator: std.mem.Allocator) Chunk {
+        return .{
+            .code = std.ArrayList(Instruction).init(allocator),
+            .constants = std.ArrayList(Value).init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *Chunk) void {
+        self.code.deinit();
+        self.constants.deinit();
+    }
+
+    pub fn emitTriplet(self: *Chunk, opcode: OpCode, a: u8, b: u8, c: u8) !void {
         try self.code.append(.{
-            .op_code = op_code,
-            .triplet = .{ .a = a, .b = b, .c = c },
+            .opcode = opcode,
+            .data = .{ .triplet = .{ .a = a, .b = b, .c = c } },
         });
     }
 
-    pub fn emitDoublet(self: *Chunk, op_code: OpCode, a: u8, b: u16) !void {
+    pub fn emitDoublet(self: *Chunk, opcode: OpCode, a: u8, b: u16) !void {
         try self.code.append(.{
-            .op_code = op_code,
-            .double = .{ .a = a, .b = b },
+            .opcode = opcode,
+            .data = .{ .doublet = .{ .a = a, .b = b } },
         });
     }
 
