@@ -13,6 +13,8 @@ pub const Command = union(enum) {
             return .{.help};
         }
     }
+
+    pub fn run() !void {}
 };
 
 const std = @import("std");
