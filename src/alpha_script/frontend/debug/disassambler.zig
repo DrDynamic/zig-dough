@@ -13,26 +13,25 @@ pub const Disassambler = struct {
     pub fn disassambleChunk(self: *const Disassambler, chunk: *const Chunk, name: []const u8) void {
         self.terminal.print("===== {s} =====\n", .{name});
         for (chunk.code.items, 0..) |instruction, index| {
-            self.disassambleInstruction(chunk, &instruction, index);
+            self.disassambleInstruction(chunk, instruction, index);
         }
     }
 
-    pub fn disassambleInstruction(self: *const Disassambler, chunk: *const Chunk, instruction: *const Instruction, offset: usize) void {
+    pub fn disassambleInstruction(self: *const Disassambler, chunk: *const Chunk, instruction: Instruction, offset: usize) void {
         self.terminal.print("{d:0>4} ", .{offset});
 
-        const op = instruction.opcode;
+        const op = instruction.abc.opcode;
 
         switch (op) {
             .load_const => {
-                const dest_reg = instruction.data.doublet.a;
-                const constant_id = instruction.data.doublet.b;
+                const dest_reg = instruction.ab.a;
+                const constant_id = instruction.ab.b;
                 const value = chunk.constants.items[constant_id];
 
                 self.terminal.print("{s:<16} R{d:<2}, K{d:<3}    ; ", .{ @tagName(op), dest_reg, constant_id });
                 self.terminal.printWithOptions("{}", .{value}, value_options);
                 self.terminal.print("\n", .{});
             },
-            .move, // moves values from one register into another
             // math
             .add,
             .sub,
@@ -45,16 +44,24 @@ pub const Disassambler = struct {
             .greater_equal,
             .less,
             .less_equal,
-            => self.printBinaryOp(instruction),
+            => self.printABC(instruction),
+            .stack_return => self.printA(instruction),
         }
     }
 
-    fn printBinaryOp(self: *const Disassambler, instruction: *const Instruction) void {
+    fn printABC(self: *const Disassambler, instruction: Instruction) void {
         self.terminal.print("{s:<16} R{d:<2}, R{d:<2}, R{d:<2};\n", .{
-            @tagName(instruction.opcode),
-            instruction.data.triplet.a,
-            instruction.data.triplet.b,
-            instruction.data.triplet.c,
+            @tagName(instruction.abc.opcode),
+            instruction.abc.a,
+            instruction.abc.b,
+            instruction.abc.c,
+        });
+    }
+
+    fn printA(self: *const Disassambler, instruction: Instruction) void {
+        self.terminal.print("{s:<16} R{d:<2}\n", .{
+            @tagName(instruction.abc.opcode),
+            instruction.abc.a,
         });
     }
 };

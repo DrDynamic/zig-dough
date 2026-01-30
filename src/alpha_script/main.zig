@@ -1,7 +1,7 @@
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
 
-    const source =
+    _ =
         \\ var x: i32 = 1 + 2 * 3 > 4.5;
         \\ var a = 1*2+3;
         \\ //var uninitialized;
@@ -11,7 +11,20 @@ pub fn main() !void {
         \\line */
         \\ // var s = "Lorem Ipsum ";
         \\ //var t = "a + 2;
+        \\ var res = 9*9+9;
+        \\ var res2 = 9+9*9;
+        \\ return res;
+        \\ return res2;
+        \\ return res == res2;
         \\
+    ;
+
+    const source =
+        \\ var res = 9*9+9;
+        \\ var res2 = 9+9*9;
+        \\ return res;
+        \\ return res2;
+        \\ return res == res2;
     ;
 
     const stdout_terminal = as.common.Terminal.init(std.io.getStdOut());
@@ -63,6 +76,16 @@ pub fn main() !void {
 
     const disassambler = as.frontend.debug.Disassambler.init(&stdout_terminal);
     disassambler.disassambleChunk(&chunk, "debug");
+
+    var vm = as.runtime.VirtualMachine.init(allocator);
+    try vm.execute(&chunk);
+
+    //    const Value = as.runtime.values.Value;
+    //    const a: Value = Value.makeInteger(2);
+    //    const b: Value = Value.makeFloat(2.1);
+    //    const res = a < b; //std.math.compare(a, .eq, b);
+    //
+    //    std.debug.print("{d} < {d} = {s}\n", .{ a, b, if (res) "true" else "false" });
 }
 
 const std = @import("std");

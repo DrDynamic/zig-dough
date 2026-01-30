@@ -1,6 +1,5 @@
 pub const OpCode = enum(u8) {
     load_const, // load a constant into a register
-    move, // moves values from one register into another
     // math
     add,
     sub,
@@ -13,21 +12,40 @@ pub const OpCode = enum(u8) {
     greater_equal,
     less,
     less_equal,
+    // stack,
+    stack_return,
 };
 
-pub const Instruction = struct {
-    opcode: OpCode,
-    data: packed union {
-        triplet: packed struct {
-            a: u8,
-            b: u8,
-            c: u8,
-        },
-        doublet: packed struct {
-            a: u8,
-            b: u16,
-        },
+pub const Instruction = packed union {
+    raw: u32,
+    abc: packed struct {
+        opcode: OpCode,
+        a: u8,
+        b: u8,
+        c: u8,
     },
+    ab: packed struct {
+        opcode: OpCode,
+        a: u8,
+        b: u16,
+    },
+
+    pub inline fn fromABC(opcode: OpCode, a: u8, b: u8, c: u8) Instruction {
+        return .{ .abc = .{
+            .opcode = opcode,
+            .a = a,
+            .b = b,
+            .c = c,
+        } };
+    }
+
+    pub inline fn fromAB(opcode: OpCode, a: u8, b: u16) Instruction {
+        return .{ .ab = .{
+            .opcode = opcode,
+            .a = a,
+            .b = b,
+        } };
+    }
 };
 
 pub const ConstantId = u16;
@@ -48,18 +66,8 @@ pub const Chunk = struct {
         self.constants.deinit();
     }
 
-    pub fn emitTriplet(self: *Chunk, opcode: OpCode, a: u8, b: u8, c: u8) !void {
-        try self.code.append(.{
-            .opcode = opcode,
-            .data = .{ .triplet = .{ .a = a, .b = b, .c = c } },
-        });
-    }
-
-    pub fn emitDoublet(self: *Chunk, opcode: OpCode, a: u8, b: u16) !void {
-        try self.code.append(.{
-            .opcode = opcode,
-            .data = .{ .doublet = .{ .a = a, .b = b } },
-        });
+    pub fn emit(self: *Chunk, instruction: Instruction) !void {
+        try self.code.append(instruction);
     }
 
     pub fn addConstant(self: *Chunk, value: Value) !ConstantId {

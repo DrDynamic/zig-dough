@@ -57,40 +57,44 @@ pub const Compiler = struct {
                 const register = self.next_free_reg;
                 self.next_free_reg += 1;
 
-                try self.emitLoadConstant(.load_const, register, .{
-                    .tag = .null,
-                    .data = undefined,
-                });
+                try self.emitLoadConstant(
+                    .load_const,
+                    register,
+                    Value.makeNull(),
+                );
                 return register;
             },
             .literal_bool => {
                 const register = self.next_free_reg;
                 self.next_free_reg += 1;
 
-                try self.emitLoadConstant(.load_const, register, .{
-                    .tag = .bool,
-                    .data = .{ .boolean = node.data.bool_value },
-                });
+                try self.emitLoadConstant(
+                    .load_const,
+                    register,
+                    Value.makeBool(node.data.bool_value),
+                );
                 return register;
             },
             .literal_int => {
                 const register = self.next_free_reg;
                 self.next_free_reg += 1;
 
-                try self.emitLoadConstant(.load_const, register, .{
-                    .tag = .integer,
-                    .data = .{ .integer = node.data.int_value },
-                });
+                try self.emitLoadConstant(
+                    .load_const,
+                    register,
+                    Value.makeInteger(node.data.int_value),
+                );
                 return register;
             },
             .literal_float => {
                 const register = self.next_free_reg;
                 self.next_free_reg += 1;
 
-                try self.emitLoadConstant(.load_const, register, .{
-                    .tag = .float,
-                    .data = .{ .float = node.data.float_value },
-                });
+                try self.emitLoadConstant(
+                    .load_const,
+                    register,
+                    Value.makeFloat(node.data.float_value),
+                );
                 return register;
             },
 
@@ -106,10 +110,11 @@ pub const Compiler = struct {
                 if (init_node.tag == .comptime_uninitialized) {
                     init_reg = self.next_free_reg;
                     self.next_free_reg += 1;
-                    try self.emitLoadConstant(.load_const, init_reg, .{
-                        .tag = .null,
-                        .data = undefined,
-                    });
+                    try self.emitLoadConstant(
+                        .load_const,
+                        init_reg,
+                        Value.makeNull(),
+                    );
                     try self.addLocal(data.name_id, init_reg, true);
                 } else {
                     // create a temporary local, so compileNode can reference the variable
@@ -160,24 +165,31 @@ pub const Compiler = struct {
             .binary_greater_equal => {
                 return self.emitBinaryOp(.greater_equal, &node);
             },
+
+            // stack_actions
+            .stack_return => {
+                const reg = try self.compileNode(node.data.node_id);
+                try self.chunk.emit(Instruction.fromAB(.stack_return, reg, 0));
+                return 0;
+            },
         };
     }
 
-    fn emitBinaryOp(self: *Compiler, op_code: OpCode, node: *const Node) !RegisterId {
+    fn emitBinaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {
         const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
         const lhs_reg = try self.compileNode(extra.lhs);
         const rhs_reg = try self.compileNode(extra.rhs);
 
-        try self.chunk.emitTriplet(op_code, lhs_reg, lhs_reg, rhs_reg);
+        try self.chunk.emit(Instruction.fromABC(opcode, lhs_reg, lhs_reg, rhs_reg));
 
         // free rhs_reg
         self.next_free_reg -= 1;
         return lhs_reg;
     }
 
-    fn emitLoadConstant(self: *Compiler, op_code: OpCode, register: RegisterId, constant: Value) !void {
+    fn emitLoadConstant(self: *Compiler, opcode: OpCode, register: RegisterId, constant: Value) !void {
         const constant_id = try self.chunk.addConstant(constant);
-        try self.chunk.emitDoublet(op_code, register, constant_id);
+        try self.chunk.emit(Instruction.fromAB(opcode, register, constant_id));
     }
 
     /// bind a variable to a register

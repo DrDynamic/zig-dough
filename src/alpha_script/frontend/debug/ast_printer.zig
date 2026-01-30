@@ -75,6 +75,9 @@ pub const ASTPrinter = struct {
                 const name = self.ast.string_table.get(data.name_id);
                 self.terminal.print(" (name: {s}, init_value: {d})\n", .{ name, data.init_value });
             },
+            .stack_return => {
+                self.terminal.print("\n", .{});
+            },
         }
 
         // 3. Kinder rekursiv verarbeiten
@@ -117,6 +120,9 @@ pub const ASTPrinter = struct {
             .declaration_var => {
                 const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationExtra);
                 try self.printNode(data.init_value, prefix, true);
+            },
+            .stack_return => {
+                try self.printNode(node.data.node_id, prefix, true);
             },
         }
     }

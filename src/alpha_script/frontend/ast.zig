@@ -31,6 +31,9 @@ pub const NodeType = enum(u8) {
     binary_less_equal,
     binary_greater,
     binary_greater_equal,
+
+    // stack actions
+    stack_return,
 };
 
 pub const VarDeclarationExtra = struct {
@@ -54,6 +57,7 @@ pub const Node = struct {
         int_value: i64,
         float_value: f64,
         string_id: StringId,
+        node_id: NodeId,
         extra_id: u32,
     },
 };

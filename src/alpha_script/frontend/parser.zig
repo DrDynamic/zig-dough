@@ -93,7 +93,22 @@ pub const Parser = struct {
 
     // statements
     fn statement(self: *Parser) !ast.NodeId {
+        if (try self.match(.return_)) {
+            return try self.returnStatement();
+        }
         return try self.expression();
+    }
+
+    fn returnStatement(self: *Parser) !ast.NodeId {
+        const token = self.scanner.previous();
+        const expr = try self.expression();
+        _ = try self.match(.semicolon);
+        return try self.ast.addNode(.{
+            .tag = .stack_return,
+            .token_position = token.location.start,
+            .resolved_type_id = TypePool.UNRESOLVED,
+            .data = .{ .node_id = expr },
+        });
     }
 
     // expressions
@@ -250,31 +265,45 @@ pub const Parser = struct {
     }
 
     fn primary(self: *Parser) !ast.NodeId {
-        const token = try self.advance();
+        const token = self.scanner.current();
         return switch (token.tag) {
-            .null_ => try self.ast.addNode(.{
-                .tag = .literal_null,
-                .token_position = token.location.start,
-                .resolved_type_id = TypePool.NULL,
-                .data = undefined,
-            }),
-            .true_ => try self.ast.addNode(.{
-                .tag = .literal_bool,
-                .token_position = token.location.start,
-                .resolved_type_id = TypePool.BOOL,
-                .data = .{ .bool_value = true },
-            }),
-            .false_ => try self.ast.addNode(.{
-                .tag = .literal_bool,
-                .token_position = token.location.start,
-                .resolved_type_id = TypePool.BOOL,
-                .data = .{ .bool_value = false },
-            }),
-            .number => |_| number_case: {
-                const lexeme = self.scanner.getLexeme(self.scanner.previous());
+            .null_ => |_| case: {
+                _ = try self.advance();
+
+                break :case try self.ast.addNode(.{
+                    .tag = .literal_null,
+                    .token_position = token.location.start,
+                    .resolved_type_id = TypePool.NULL,
+                    .data = undefined,
+                });
+            },
+            .true_ => |_| case: {
+                _ = try self.advance();
+
+                break :case try self.ast.addNode(.{
+                    .tag = .literal_bool,
+                    .token_position = token.location.start,
+                    .resolved_type_id = TypePool.BOOL,
+                    .data = .{ .bool_value = true },
+                });
+            },
+            .false_ => |_| case: {
+                _ = try self.advance();
+
+                break :case try self.ast.addNode(.{
+                    .tag = .literal_bool,
+                    .token_position = token.location.start,
+                    .resolved_type_id = TypePool.BOOL,
+                    .data = .{ .bool_value = false },
+                });
+            },
+            .number => |_| case: {
+                _ = try self.advance();
+
+                const lexeme = self.scanner.getLexeme(token);
                 if (std.mem.indexOfScalar(u8, lexeme, '.') != null) {
                     const val = try std.fmt.parseFloat(f64, lexeme);
-                    break :number_case try self.ast.addNode(.{
+                    break :case try self.ast.addNode(.{
                         .tag = .literal_float,
                         .token_position = token.location.start,
                         .resolved_type_id = TypePool.FLOAT,
@@ -282,7 +311,7 @@ pub const Parser = struct {
                     });
                 } else {
                     const val = try std.fmt.parseInt(i64, lexeme, 10);
-                    break :number_case self.ast.addNode(.{
+                    break :case self.ast.addNode(.{
                         .tag = .literal_int,
                         .token_position = token.location.start,
                         .resolved_type_id = TypePool.INT,
@@ -290,13 +319,27 @@ pub const Parser = struct {
                     });
                 }
             },
-            .string => |_| string_case: {
-                // TODO safe string literal in extra
-                break :string_case try self.ast.addNode(.{
+            .string => |_| case: {
+                _ = try self.advance();
+
+                const lexeme = self.scanner.getLexeme(token);
+                const string_id = try self.ast.string_table.add(lexeme);
+
+                // TODO safe string lexeme in extra
+                break :case try self.ast.addNode(.{
                     .tag = .object_string,
                     .token_position = token.location.start,
                     .resolved_type_id = TypePool.STRING,
-                    .data = undefined,
+                    .data = .{ .string_id = string_id },
+                });
+            },
+            .identifier => |_| identifier_case: {
+                const string_id = try self.parseIdentifier();
+                break :identifier_case try self.ast.addNode(.{
+                    .tag = .identifier_expr,
+                    .token_position = token.location.start,
+                    .resolved_type_id = TypePool.UNRESOLVED,
+                    .data = .{ .string_id = string_id },
                 });
             },
             else => |tag| {
