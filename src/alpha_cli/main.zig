@@ -1,6 +1,21 @@
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
 
+    const stdout_terminal = as.common.Terminal.init(std.io.getStdOut());
+    const stderr_terminal = as.common.Terminal.init(std.io.getStdErr());
+
+    const args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
+
+    const command = commands.Command.fromArgs(args) catch |err| {
+        switch (err) {
+            .MissingCommand => stderr_terminal.print("no command specified", .{}),
+            .MissingPathArgument => stderr_terminal.print("run command needs path argument", .{}),
+        }
+    };
+
+    command.run();
+
     _ =
         \\ var x: i32 = 1 + 2 * 3 > 4.5;
         \\ var a = 1*2+3;
@@ -90,3 +105,4 @@ pub fn main() !void {
 
 const std = @import("std");
 const as = @import("as");
+const commands = @import("./commands/commands.zig");

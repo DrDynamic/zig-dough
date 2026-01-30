@@ -15,6 +15,12 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
+    const as_lib = makeAsLib(b, target, optimize);
+    const cli_exe = makeCli(b, as_lib, target, optimize);
+    makeUnitTests(b, as_lib, cli_exe);
+}
+
+fn makeAsLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {
     // This creates a "module", which represents a collection of source files alongside
     // some compilation options, such as optimization mode and linked system libraries.
     // Every executable or library we compile will be based on one or more modules.
@@ -27,80 +33,39 @@ pub fn build(b: *std.Build) void {
     //        .target = target,
     //        .optimize = optimize,
     //    });
-
     const alpha_script = b.createModule(.{
         .root_source_file = b.path("src/alpha_script/alpha_script.zig"),
-    });
-    alpha_script.addImport("as", alpha_script);
-
-    const as_mod = b.createModule(.{
-        .root_source_file = b.path("src/alpha_script/main.zig"),
         .target = target,
         .optimize = optimize,
     });
-    as_mod.addImport("as", alpha_script);
+
+    // Modules can depend on one another using the `std.Build.Module.addImport` function.
+    // This is what allows Zig source code to use `@import("foo")` where 'foo' is not a
+    // file path. In this case, we set up `exe_mod` to import `lib_mod`.
+    alpha_script.addImport("as", alpha_script);
+
+    return alpha_script;
+}
+
+fn makeCli(b: *std.Build, as_lib: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {
+    const cli_module = b.createModule(.{
+        .root_source_file = b.path("src/alpha_cli/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    cli_module.addImport("as", as_lib);
 
     // This creates another `std.Build.Step.Compile`, but this one builds an executable
     // rather than a static library.
     const as_exe = b.addExecutable(.{
         .name = "as",
-        .root_module = as_mod,
+        .root_module = cli_module,
     });
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
     b.installArtifact(as_exe);
-
-    ////////////////// legacy //////////////////
-
-    //    const dough = b.createModule(.{
-    //        .root_source_file = b.path("src/dough/dough.zig"),
-    //    });
-    //    dough.addImport("dough", dough);
-
-    //    // We will also create a module for our other entry point, 'main.zig'.
-    //    const exe_mod = b.createModule(.{
-    //        // `root_source_file` is the Zig "entry point" of the module. If a module
-    //        // only contains e.g. external object files, you can make this `null`.
-    //        // In this case the main source file is merely a path, however, in more
-    //        // complicated build scripts, this could be a generated file.
-    //        .root_source_file = b.path("src/main.zig"),
-    //        .target = target,
-    //        .optimize = optimize,
-    //    });
-    //    exe_mod.addImport("dough", dough);
-
-    // Modules can depend on one another using the `std.Build.Module.addImport` function.
-    // This is what allows Zig source code to use `@import("foo")` where 'foo' is not a
-    // file path. In this case, we set up `exe_mod` to import `lib_mod`.
-    //    exe_mod.addImport("zig_dough_lib", lib_mod);
-
-    // Now, we will create a static library based on the module we created above.
-    // This creates a `std.Build.Step.Compile`, which is the build step responsible
-    // for actually invoking the compiler.
-    //    const lib = b.addLibrary(.{
-    //        .linkage = .static,
-    //        .name = "zig_dough",
-    //        .root_module = lib_mod,
-    //    });
-
-    // This declares intent for the library to be installed into the standard
-    // location when the user invokes the "install" step (the default step when
-    // running `zig build`).
-    //    b.installArtifact(lib);
-
-    // This creates another `std.Build.Step.Compile`, but this one builds an executable
-    // rather than a static library.
-    //    const exe = b.addExecutable(.{
-    //        .name = "zig_dough",
-    //        .root_module = exe_mod,
-    //    });
-
-    // This declares intent for the executable to be installed into the
-    // standard location when the user invokes the "install" step (the default
-    // step when running `zig build`).
-    //    b.installArtifact(exe);
 
     // This *creates* a Run step in the build graph, to be executed when another
     // step is evaluated that depends on it. The next line below will establish
@@ -125,24 +90,25 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
+    return cli_module;
+}
+
+fn makeUnitTests(b: *std.Build, as_lib: *std.Build.Module, cli: *std.Build.Module) void {
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
-    //    const lib_unit_tests = b.addTest(.{
-    //        .root_module = lib_mod,
-    //    });
+    const lib_unit_tests = b.addTest(.{
+        .root_module = as_lib,
+    });
 
-    //    const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
+    const run_lib_unit_tests = b.addRunArtifact(lib_unit_tests);
 
-    //    const exe_unit_tests = b.addTest(.{
-    //        .root_module = exe_mod,
-    //    });
+    const cli_unit_tests = b.addTest(.{
+        .root_module = cli,
+    });
 
-    //    const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
+    const run_exe_unit_tests = b.addRunArtifact(cli_unit_tests);
 
-    // Similar to creating the run step earlier, this exposes a `test` step to
-    // the `zig build --help` menu, providing a way for the user to request
-    // running the unit tests.
-    //    const test_step = b.step("test", "Run unit tests");
-    //    test_step.dependOn(&run_lib_unit_tests.step);
-    //    test_step.dependOn(&run_exe_unit_tests.step);
+    const test_step = b.step("test", "Run unit tests");
+    test_step.dependOn(&run_lib_unit_tests.step);
+    test_step.dependOn(&run_exe_unit_tests.step);
 }
