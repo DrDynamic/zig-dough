@@ -1,6 +1,71 @@
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
 
+    //const stdout_terminal = as.common.Terminal.init(std.io.getStdOut());
+    const stderr_terminal = as.common.Terminal.init(std.io.getStdErr());
+
+    var argsIterator = try std.process.ArgIterator.initWithAllocator(allocator);
+    defer argsIterator.deinit();
+
+    // Skip executable
+    _ = argsIterator.next();
+
+    var chunk = as.compiler.Chunk.init(allocator);
+
+    if (argsIterator.next()) |path| {
+        var file = try std.fs.cwd().openFile(path, .{});
+        defer file.close();
+
+        const source = try file.readToEndAllocOptions(allocator, std.math.maxInt(usize), null, @alignOf(u8), 0);
+        defer allocator.free(source);
+
+        const error_reporter = as.frontend.ErrorReporter.init(source, "test_string", &stderr_terminal);
+
+        const scanner = try as.frontend.Scanner.init(source, &error_reporter);
+
+        var ast = try as.frontend.AST.init(allocator);
+        defer ast.deinit();
+
+        var parser = as.frontend.Parser.init(
+            scanner,
+            &ast,
+            &error_reporter,
+            allocator,
+        );
+        try parser.parse();
+
+        var type_pool = try as.frontend.TypePool.init(allocator);
+        defer type_pool.deinit();
+
+        var semantic_analyzer = try as.frontend.SemanticAnalyzer.init(
+            allocator,
+            &ast,
+            &type_pool,
+            &error_reporter,
+        );
+        defer semantic_analyzer.deinit();
+
+        for (ast.getRoots()) |root_node_id| {
+            _ = try semantic_analyzer.analyze(root_node_id);
+        }
+        //    try as.frontend.debug.ASTPrinter.printAST(&ast, &type_pool, &stdout_terminal);
+
+        var compiler = as.compiler.Compiler.init(&ast, &chunk, allocator);
+        try compiler.compile();
+
+        //const disassambler = as.frontend.debug.Disassambler.init(&stdout_terminal);
+        //    disassambler.disassambleChunk(&chunk, "debug");
+    } else {
+        stderr_terminal.print("No source file given!", .{});
+    }
+
+    var vm = as.runtime.VirtualMachine.init(allocator);
+    try vm.execute(&chunk);
+}
+
+pub fn _main() !void {
+    const allocator = std.heap.page_allocator;
+
     const stdout_terminal = as.common.Terminal.init(std.io.getStdOut());
     const stderr_terminal = as.common.Terminal.init(std.io.getStdErr());
 
@@ -42,8 +107,8 @@ pub fn main() !void {
         \\ return res == res2;
     ;
 
-    const stdout_terminal = as.common.Terminal.init(std.io.getStdOut());
-    const stderr_terminal = as.common.Terminal.init(std.io.getStdErr());
+    //const stdout_terminal = as.common.Terminal.init(std.io.getStdOut());
+    //const stderr_terminal = as.common.Terminal.init(std.io.getStdErr());
 
     const error_reporter = as.frontend.ErrorReporter.init(source, "test_string", &stderr_terminal);
 
