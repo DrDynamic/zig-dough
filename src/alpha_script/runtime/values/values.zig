@@ -162,6 +162,9 @@ pub const UnionValue = union(ValueType) {
 
 const std = @import("std");
 const objects = @import("objects.zig");
+pub const natives = @import("./natives.zig");
+
 pub const ObjectType = objects.ObjectType;
 pub const ObjectHeader = objects.ObjectHeader;
 pub const ObjString = objects.ObjString;
+pub const ObjNative = natives.ObjNative;

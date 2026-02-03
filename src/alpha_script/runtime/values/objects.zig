@@ -1,4 +1,5 @@
 pub const ObjectType = enum(u8) {
+    native_function,
     string,
 };
 
@@ -11,6 +12,10 @@ pub const ObjectHeader = struct {
         _ = self;
         _ = other;
         return false;
+    }
+
+    pub inline fn as(self: *ObjectHeader, comptime T: type) *T {
+        return @alignCast(@fieldParentPtr("header", self));
     }
 };
 

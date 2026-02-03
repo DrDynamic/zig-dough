@@ -63,8 +63,8 @@ pub const VirtualMachine = struct {
                 .multiply => try self.numericMath(instruction, MathOps.mul),
                 .divide => {
                     const reg_a = base + instruction.abc.a;
-                    const val_b = self.stack[base + instruction.abc.b];
-                    const val_c = self.stack[base + instruction.abc.c];
+                    const val_b = stack[base + instruction.abc.b];
+                    const val_c = stack[base + instruction.abc.c];
 
                     const float_b = val_b.castToF64() catch 0;
                     const float_c = val_c.castToF64() catch 0;
@@ -79,45 +79,68 @@ pub const VirtualMachine = struct {
                 // compare
                 .equal => {
                     const reg_a = base + instruction.abc.a;
-                    const val_b = self.stack[base + instruction.abc.b];
-                    const val_c = self.stack[base + instruction.abc.c];
+                    const val_b = stack[base + instruction.abc.b];
+                    const val_c = stack[base + instruction.abc.c];
 
                     stack[reg_a] = Value.makeBool(val_b.equals(val_c));
                 },
                 .not_equal => {
                     const reg_a = base + instruction.abc.a;
-                    const val_b = self.stack[base + instruction.abc.b];
-                    const val_c = self.stack[base + instruction.abc.c];
+                    const val_b = stack[base + instruction.abc.b];
+                    const val_c = stack[base + instruction.abc.c];
 
                     stack[reg_a] = Value.makeBool(!val_b.equals(val_c));
                 },
                 .greater => {
                     const reg_a = base + instruction.abc.a;
-                    const float_b = try self.stack[base + instruction.abc.b].castToF64();
-                    const float_c = try self.stack[base + instruction.abc.c].castToF64();
+                    const float_b = try stack[base + instruction.abc.b].castToF64();
+                    const float_c = try stack[base + instruction.abc.c].castToF64();
 
                     stack[reg_a] = Value.makeBool(float_b > float_c);
                 },
                 .greater_equal => {
                     const reg_a = base + instruction.abc.a;
-                    const float_b = try self.stack[base + instruction.abc.b].castToF64();
-                    const float_c = try self.stack[base + instruction.abc.c].castToF64();
+                    const float_b = try stack[base + instruction.abc.b].castToF64();
+                    const float_c = try stack[base + instruction.abc.c].castToF64();
 
                     stack[reg_a] = Value.makeBool(float_b >= float_c);
                 },
                 .less => {
                     const reg_a = base + instruction.abc.a;
-                    const float_b = try self.stack[base + instruction.abc.b].castToF64();
-                    const float_c = try self.stack[base + instruction.abc.c].castToF64();
+                    const float_b = try stack[base + instruction.abc.b].castToF64();
+                    const float_c = try stack[base + instruction.abc.c].castToF64();
 
                     stack[reg_a] = Value.makeBool(float_b < float_c);
                 },
                 .less_equal => {
                     const reg_a = base + instruction.abc.a;
-                    const float_b = try self.stack[base + instruction.abc.b].castToF64();
-                    const float_c = try self.stack[base + instruction.abc.c].castToF64();
+                    const float_b = try stack[base + instruction.abc.b].castToF64();
+                    const float_c = try stack[base + instruction.abc.c].castToF64();
 
                     stack[reg_a] = Value.makeBool(float_b <= float_c);
+                },
+                // interaction
+                .call => {
+                    const reg_dest = base + instruction.abc.a;
+                    const reg_callee = base + instruction.abc.b;
+                    const arg_count = instruction.abc.c;
+
+                    const callee = stack[reg_callee];
+
+                    if (callee.isObject()) {
+                        switch (callee.object.tag) {
+                            .native_function => {
+                                const native = callee.object.as(values.ObjNative);
+
+                                const reg_args_start = reg_callee + 1;
+                                const args = stack[reg_args_start .. reg_args_start + arg_count];
+
+                                const result = native.function(args);
+                                stack[reg_dest] = result;
+                            },
+                            else => unreachable,
+                        }
+                    }
                 },
 
                 //debug
@@ -161,6 +184,7 @@ pub const VirtualMachine = struct {
 
 const std = @import("std");
 const as = @import("as");
+const values = as.runtime.values;
 
 const Chunk = as.compiler.Chunk;
 const Instruction = as.compiler.Instruction;

@@ -260,8 +260,35 @@ pub const Parser = struct {
 
     fn call(self: *Parser) !ast.NodeId {
         const callee = try self.primary();
+
+        while (true) {
+            if (try self.match(.left_paren)) {
+                // finish Call
+                const arg_count = self.expressionList(.right_paren);
+            } else if (try self.match(.dot)) {
+                // TODO implement get expression
+            } else {
+                break;
+            }
+        }
+
         // TODO implement call
         return callee;
+    }
+
+    fn expressionList(self: *Parser, end_token: TokenType) !self.NodeId {
+        var arg_count = 0;
+        while (!try self.match(end_token)) {
+            self.expression();
+            if (arg_count == 255) {
+                return error.ListOverflow;
+            }
+            arg_count += 1;
+            if (!self.match(.comma)) {
+                break;
+            }
+        }
+        return arg_count;
     }
 
     fn primary(self: *Parser) !ast.NodeId {

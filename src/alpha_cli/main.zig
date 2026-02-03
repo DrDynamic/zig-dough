@@ -63,6 +63,28 @@ pub fn main() !void {
     try vm.execute(&chunk);
 }
 
+fn registerNatives(compiler: *as.compiler.Compiler, vm: *as.runtime.VirtualMachine) !void {
+    const name_id = compiler.ast.string_table.add("print");
+
+    try compiler.locals.append(.{
+        .name_id = name_id,
+        .depth = 0,
+        .reg_slot = 0,
+        .is_captured = false,
+        .is_initialized = true,
+    });
+    compiler.next_free_reg += 1;
+
+    const native_print = try vm.allocator.create(as.runtime.values.ObjNative);
+    native_print.* = .{
+        .header = .{ .tag = .native_function, .is_marked = false, .next = null },
+        .name_id = name_id,
+        .function = as.runtime.values.natives.nativePrint,
+    };
+
+    vm.stack[0] = as.runtime.values.Value.fromObject(native_print);
+}
+
 pub fn _main() !void {
     const allocator = std.heap.page_allocator;
 
