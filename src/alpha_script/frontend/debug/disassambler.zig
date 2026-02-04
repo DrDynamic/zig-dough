@@ -32,6 +32,7 @@ pub const Disassambler = struct {
                 self.terminal.printWithOptions("{}", .{value}, value_options);
                 self.terminal.print("\n", .{});
             },
+            .move => self.printABCTwoAgrs(instruction),
             // math
             .add,
             .sub,
@@ -45,8 +46,29 @@ pub const Disassambler = struct {
             .less,
             .less_equal,
             => self.printABC(instruction),
+            // interaction
+            .call => self.printCall(instruction),
             .stack_return => self.printA(instruction),
         }
+    }
+
+    fn printCall(self: *const Disassambler, instruction: Instruction) void {
+        self.terminal.print("{s:<16} R{d:<2}, R{d:<2}, {d:<3}; ", .{
+            @tagName(instruction.abc.opcode),
+            instruction.abc.a,
+            instruction.abc.b,
+            instruction.abc.c,
+        });
+        self.terminal.printWithOptions("REG_RETURN REG_CALLEE ARG_COUNT", .{}, value_options);
+        self.terminal.print("\n", .{});
+    }
+
+    fn printABCTwoAgrs(self: *const Disassambler, instruction: Instruction) void {
+        self.terminal.print("{s:<16} R{d:<2}, R{d:<2}     ;\n", .{
+            @tagName(instruction.abc.opcode),
+            instruction.abc.a,
+            instruction.abc.b,
+        });
     }
 
     fn printABC(self: *const Disassambler, instruction: Instruction) void {

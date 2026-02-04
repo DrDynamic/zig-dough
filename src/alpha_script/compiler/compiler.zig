@@ -27,10 +27,10 @@ pub const Compiler = struct {
     scope_depth: i32,
     next_free_reg: RegisterId,
 
-    pub fn init(ast: *AST, chunk: *Chunk, allocator: std.mem.Allocator) Compiler {
+    pub fn init(_ast: *AST, chunk: *Chunk, allocator: std.mem.Allocator) Compiler {
         return .{
             .allocator = allocator,
-            .ast = ast,
+            .ast = _ast,
             .chunk = chunk,
             .locals = std.ArrayList(Local).init(allocator),
             .scope_depth = 0,
@@ -40,16 +40,17 @@ pub const Compiler = struct {
 
     pub fn compile(self: *Compiler) !void {
         for (self.ast.getRoots()) |node_id| {
-            _ = try self.compileNode(node_id);
+            _ = try self.compileExpression(node_id);
         }
     }
 
-    fn compileNode(self: *Compiler, node_id: NodeId) Error!u8 {
+    fn compileExpression(self: *Compiler, node_id: NodeId) Error!u8 {
         const node = self.ast.nodes.items[node_id];
 
         return switch (node.tag) {
             // nodes needed ad compiletime (should not bleed into runtime!)
             .comptime_uninitialized => return error.UnexpectedComptime,
+            .node_list => unreachable,
 
             // literals
             .literal_void => return error.UnexpectedVoid,
@@ -103,7 +104,7 @@ pub const Compiler = struct {
 
             // declarations
             .declaration_var => {
-                const data = self.ast.getExtra(node.data.extra_id, VarDeclarationExtra);
+                const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationExtra);
                 const init_node = self.ast.nodes.items[data.init_value];
 
                 var init_reg: RegisterId = undefined;
@@ -117,11 +118,11 @@ pub const Compiler = struct {
                     );
                     try self.addLocal(data.name_id, init_reg, true);
                 } else {
-                    // create a temporary local, so compileNode can reference the variable
+                    // create a temporary local, so compileExpression can reference the variable
                     const local_index = self.locals.items.len;
                     try self.addLocal(data.name_id, self.next_free_reg, false);
 
-                    init_reg = try self.compileNode(data.init_value);
+                    init_reg = try self.compileExpression(data.init_value);
                     self.locals.items[local_index].is_initialized = true;
                     self.locals.items[local_index].reg_slot = init_reg;
                 }
@@ -132,6 +133,28 @@ pub const Compiler = struct {
             // access
             .identifier_expr => {
                 return try self.resolveLocal(node.data.string_id);
+            },
+            .call => {
+                const data = self.ast.getExtra(node.data.extra_id, ast.CallExtra);
+
+                const reg_callee = self.next_free_reg;
+                self.next_free_reg += 1;
+
+                try self.compileExpressionEnsureRegister(data.callee, reg_callee);
+
+                var reg_arg = self.next_free_reg;
+                var arg_list = data.args_start;
+                for (0..data.args_count) |_| {
+                    const list_node = self.ast.nodes.items[arg_list];
+                    const list_extra = self.ast.getExtra(list_node.data.extra_id, ast.NodeListExtra);
+
+                    try self.compileExpressionEnsureRegister(list_extra.node_id, reg_arg);
+                    reg_arg += 1;
+                    arg_list = list_extra.next;
+                }
+
+                try self.chunk.emit(Instruction.fromABC(.call, reg_callee, reg_callee, data.args_count));
+                return reg_callee;
             },
 
             // binary operations
@@ -168,17 +191,27 @@ pub const Compiler = struct {
 
             // stack_actions
             .stack_return => {
-                const reg = try self.compileNode(node.data.node_id);
+                const reg = try self.compileExpression(node.data.node_id);
                 try self.chunk.emit(Instruction.fromAB(.stack_return, reg, 0));
                 return 0;
             },
         };
     }
 
+    inline fn compileExpressionEnsureRegister(self: *Compiler, node_id: ast.NodeId, register: RegisterId) !void {
+        const result = try self.compileExpression(node_id);
+        if (result != register) {
+            try self.chunk.emit(Instruction.fromABC(.move, register, result, 0));
+            if (register <= self.next_free_reg) {
+                self.next_free_reg = register + 1;
+            }
+        }
+    }
+
     fn emitBinaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {
-        const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
-        const lhs_reg = try self.compileNode(extra.lhs);
-        const rhs_reg = try self.compileNode(extra.rhs);
+        const extra = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
+        const lhs_reg = try self.compileExpression(extra.lhs);
+        const rhs_reg = try self.compileExpression(extra.rhs);
 
         try self.chunk.emit(Instruction.fromABC(opcode, lhs_reg, lhs_reg, rhs_reg));
 
@@ -205,6 +238,9 @@ pub const Compiler = struct {
 
     /// searches for the register of a variable
     fn resolveLocal(self: *const Compiler, name_id: StringId) !RegisterId {
+        const str = self.ast.string_table.get(name_id);
+
+        _ = str;
         var local_index: isize = @as(isize, @intCast(self.locals.items.len)) - 1;
         while (local_index >= 0) : (local_index -= 1) {
             const local = self.locals.items[@intCast(local_index)];
@@ -239,12 +275,11 @@ pub const OpCode = instructions.OpCode;
 
 const std = @import("std");
 const as = @import("as");
+const ast = as.frontend.ast;
 
 const AST = as.frontend.AST;
 const TypePool = as.frontend.TypePool;
 const Value = as.runtime.values.Value;
-const VarDeclarationExtra = as.frontend.ast.VarDeclarationExtra;
-const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
 const Node = as.frontend.ast.Node;
 
 const NodeId = as.frontend.ast.NodeId;

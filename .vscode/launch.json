@@ -9,7 +9,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/zig-out/bin/as",
-            "args": ["test.dough"],
+            "args": ["test.as"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],

@@ -1,27 +1,73 @@
+const StartOptions = struct {
+    path: ?[]const u8,
+    print_tokens: bool,
+    print_ast: bool,
+    print_asm: bool,
+};
+
+fn makeStartOptions(iterator: *std.process.ArgIterator) !StartOptions {
+    var options: StartOptions = .{
+        .path = null,
+        .print_tokens = false,
+        .print_ast = false,
+        .print_asm = false,
+    };
+
+    // Skip executable
+    _ = iterator.next();
+
+    while (iterator.next()) |arg| {
+        if (arg[0] == '-') {
+            if (std.mem.eql(u8, arg, "--print-tokens")) {
+                options.print_tokens = true;
+            } else if (std.mem.eql(u8, arg, "--print-ast")) {
+                options.print_ast = true;
+            } else if (std.mem.eql(u8, arg, "--print-asm")) {
+                options.print_asm = true;
+            } else {
+                return error.UnknownOption;
+            }
+        } else {
+            options.path = arg;
+        }
+    }
+
+    return options;
+}
+
+fn getFile(path: []const u8, allocator: std.mem.Allocator) ![]const u8 {
+    var file = try std.fs.cwd().openFile(path, .{});
+    defer file.close();
+
+    const source = try file.readToEndAllocOptions(allocator, std.math.maxInt(usize), null, @alignOf(u8), 0);
+    return source;
+}
+
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
 
-    //const stdout_terminal = as.common.Terminal.init(std.io.getStdOut());
+    const stdout_terminal = as.common.Terminal.init(std.io.getStdOut());
     const stderr_terminal = as.common.Terminal.init(std.io.getStdErr());
 
     var argsIterator = try std.process.ArgIterator.initWithAllocator(allocator);
     defer argsIterator.deinit();
 
-    // Skip executable
-    _ = argsIterator.next();
+    const start_options = try makeStartOptions(&argsIterator);
 
     var chunk = as.compiler.Chunk.init(allocator);
+    var vm = as.runtime.VirtualMachine.init(allocator);
 
-    if (argsIterator.next()) |path| {
-        var file = try std.fs.cwd().openFile(path, .{});
-        defer file.close();
-
-        const source = try file.readToEndAllocOptions(allocator, std.math.maxInt(usize), null, @alignOf(u8), 0);
+    if (start_options.path) |path| {
+        const source = try getFile(path, allocator);
         defer allocator.free(source);
 
         const error_reporter = as.frontend.ErrorReporter.init(source, "test_string", &stderr_terminal);
+        var scanner = try as.frontend.Scanner.init(source, &error_reporter);
 
-        const scanner = try as.frontend.Scanner.init(source, &error_reporter);
+        if (start_options.print_tokens) {
+            try as.frontend.debug.TokenPrinter.printTokens(&scanner, stdout_terminal.writer);
+            scanner.reset();
+        }
 
         var ast = try as.frontend.AST.init(allocator);
         defer ast.deinit();
@@ -48,23 +94,29 @@ pub fn main() !void {
         for (ast.getRoots()) |root_node_id| {
             _ = try semantic_analyzer.analyze(root_node_id);
         }
-        //    try as.frontend.debug.ASTPrinter.printAST(&ast, &type_pool, &stdout_terminal);
+
+        if (start_options.print_ast) {
+            try as.frontend.debug.ASTPrinter.printAST(&ast, &type_pool, &stdout_terminal);
+        }
 
         var compiler = as.compiler.Compiler.init(&ast, &chunk, allocator);
+
+        try registerNatives(&compiler, &vm);
         try compiler.compile();
 
-        //const disassambler = as.frontend.debug.Disassambler.init(&stdout_terminal);
-        //    disassambler.disassambleChunk(&chunk, "debug");
-    } else {
-        stderr_terminal.print("No source file given!", .{});
-    }
+        if (start_options.print_asm) {
+            const disassambler = as.frontend.debug.Disassambler.init(&stdout_terminal);
+            disassambler.disassambleChunk(&chunk, "debug");
+        }
 
-    var vm = as.runtime.VirtualMachine.init(allocator);
-    try vm.execute(&chunk);
+        try vm.execute(&chunk);
+    } else {
+        stderr_terminal.print("no file specified!\n", .{});
+    }
 }
 
 fn registerNatives(compiler: *as.compiler.Compiler, vm: *as.runtime.VirtualMachine) !void {
-    const name_id = compiler.ast.string_table.add("print");
+    const name_id = try compiler.ast.string_table.add("print");
 
     try compiler.locals.append(.{
         .name_id = name_id,
@@ -82,7 +134,7 @@ fn registerNatives(compiler: *as.compiler.Compiler, vm: *as.runtime.VirtualMachi
         .function = as.runtime.values.natives.nativePrint,
     };
 
-    vm.stack[0] = as.runtime.values.Value.fromObject(native_print);
+    vm.stack[0] = as.runtime.values.Value.fromObject(&native_print.header);
 }
 
 pub fn _main() !void {

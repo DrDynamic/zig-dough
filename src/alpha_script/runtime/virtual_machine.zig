@@ -1,5 +1,5 @@
 const FRAMES_MAX = 128;
-const STACK_MAX = FRAMES_MAX * 1024;
+const STACK_MAX = FRAMES_MAX * 255;
 
 pub const CallFrame = struct {
     chunk: *const Chunk,
@@ -40,22 +40,49 @@ pub const VirtualMachine = struct {
     }
 
     fn run(self: *VirtualMachine) !void {
+        const debug = false;
+
         var ip = self.current_ip;
         const chunk = self.current_chunk;
         const code = chunk.code.items;
         var stack = &self.stack;
         const base = self.current_base;
 
+        const terminal = as.common.Terminal.init(std.io.getStdOut());
+        const disassambler = as.frontend.debug.Disassambler.init(&terminal);
+        if (debug) {
+            for (1..255) |index| {
+                stack[index] = Value.makeUninitialized();
+            }
+            terminal.print("== EXEC == \n", .{});
+        }
+
         while (true) {
             if (ip >= code.len) return;
             const instruction = code[ip];
             ip += 1;
+
+            if (debug) {
+                for (stack, 0..) |register, index| {
+                    terminal.printWithOptions("[{d:0>2} ", .{index}, .{});
+                    terminal.printWithOptions("{} ", .{register}, .{ .styles = &.{.faint} });
+                    terminal.printWithOptions("] ", .{}, .{});
+                    if (index > 8) break;
+                }
+                terminal.print("\n", .{});
+                disassambler.disassambleInstruction(chunk, instruction, ip);
+            }
 
             switch (instruction.abc.opcode) {
                 .load_const => {
                     const reg_dest = base + instruction.ab.a;
                     const constant_id = instruction.ab.b;
                     stack[reg_dest] = chunk.constants.items[constant_id];
+                },
+                .move => {
+                    const reg_dest = base + instruction.abc.a;
+                    const reg_src = base + instruction.abc.b;
+                    stack[reg_dest] = stack[reg_src];
                 },
                 // math
                 .add => try self.numericMath(instruction, MathOps.add),

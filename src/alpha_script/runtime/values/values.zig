@@ -58,12 +58,12 @@ pub const UnionValue = union(ValueType) {
             .bool => try writer.print("{s}", .{if (self.bool) "true" else "false"}),
             .integer => try writer.print("{d}", .{self.integer}),
             .float => try writer.print("{d}", .{self.float}),
-            .object => try writer.print("<object {*}>", .{self.object}),
+            .object => try writer.print("<object>", .{}),
         }
     }
 
     pub inline fn makeUninitialized() UnionValue {
-        return .{.uninitialized};
+        return .{ .uninitialized = undefined };
     }
 
     pub inline fn isUninitialized(self: UnionValue) bool {

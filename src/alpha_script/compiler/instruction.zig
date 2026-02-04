@@ -1,19 +1,20 @@
 pub const OpCode = enum(u8) {
-    load_const, // load a constant into a register
+    load_const, // REG_DEST CONST_ADDR // load a constant (CONST_ADDR) into a register (REG_DEST)
+    move, // REG_DEST REG_SRC // copy the Value from REG_SRC to REG_DEST
     // math
-    add,
-    sub,
-    multiply,
-    divide,
+    add, // REG_DEST REG_A REG_B // add REG_A and REG_B and save the result in REG_DEST
+    sub, // REG_DEST REG_A REG_B // subtract REG_A and REG_B and save the result in REG_DEST
+    multiply, // REG_DEST REG_A REG_B // multiply REG_A and REG_B and save the result in REG_DEST
+    divide, // REG_DEST REG_A REG_B // devide REG_A and REG_B and save the result in REG_DEST
     // compare
-    equal,
-    not_equal,
-    greater,
-    greater_equal,
-    less,
-    less_equal,
+    equal, // REG_DEST REG_A REG_B // compare REG_A and REG_B and save the result in REG_DEST (true when equal, false otherwise)
+    not_equal, // REG_DEST REG_A REG_B // compare REG_A and REG_B and save the result in REG_DEST (false when equal, true otherwise)
+    greater, // REG_DEST REG_A REG_B // compare REG_A and REG_B and save the result in REG_DEST (true when REG_A > REG_B, false otherwise)
+    greater_equal, // REG_DEST REG_A REG_B // compare REG_A and REG_B and save the result in REG_DEST (true when REG_A >= REG_B, false otherwise)
+    less, // REG_DEST REG_A REG_B // compare REG_A and REG_B and save the result in REG_DEST (true when REG_A < REG_B, false otherwise)
+    less_equal, // REG_DEST REG_A REG_B // compare REG_A and REG_B and save the result in REG_DEST (true when REG_A <= REG_B, false otherwise)
     // interaction
-    call,
+    call, // REG_DEST REG_CALLEE ARGS_COUNT // call REG_CALLEE and store the return Value in REG_DEST (ARG_COUNT registers after REG_CALLEE are reserved for call arguments)
     // stack,
     stack_return,
 };

@@ -8,8 +8,9 @@ pub const ObjNative = struct {
 
 pub fn nativePrint(args: []Value) Value {
     for (args) |value| {
-        std.io.getStdOut().writer().print("{}", .{value});
+        std.io.getStdOut().writer().print("{}\n", .{value}) catch {};
     }
+    return Value.makeNull();
 }
 
 const std = @import("std");

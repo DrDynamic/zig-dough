@@ -61,6 +61,9 @@ pub const SemanticAnalyzer = struct {
             .stack_return => {
                 return self.analyze(node.data.node_id);
             },
+            .call => {
+                return TypePool.UNRESOLVED;
+            },
             else => {
                 std.debug.print("Unhandled node: {s}\n", .{@tagName(node.tag)});
                 return error.UnhandledNodeType;

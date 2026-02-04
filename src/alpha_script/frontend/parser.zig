@@ -1,4 +1,14 @@
 pub const Parser = struct {
+    const Error = error{
+        OutOfMemory,
+        ScannerError,
+        TokenMissMatch,
+        ListOverflow,
+        InvalidCharacter,
+        Overflow,
+        ParserError,
+    };
+
     allocator: Allocator,
     scanner: Scanner,
     ast: *AST,
@@ -96,7 +106,9 @@ pub const Parser = struct {
         if (try self.match(.return_)) {
             return try self.returnStatement();
         }
-        return try self.expression();
+        const node_id = try self.expression();
+        _ = try self.match(.semicolon);
+        return node_id;
     }
 
     fn returnStatement(self: *Parser) !ast.NodeId {
@@ -112,36 +124,36 @@ pub const Parser = struct {
     }
 
     // expressions
-    fn expression(self: *Parser) !ast.NodeId {
+    fn expression(self: *Parser) Error!ast.NodeId {
         return try self.assignment();
     }
 
-    fn assignment(self: *Parser) !ast.NodeId {
+    fn assignment(self: *Parser) Error!ast.NodeId {
         const assignment_target = self.ternary();
         // TODO implement assignment
 
         return assignment_target;
     }
 
-    fn ternary(self: *Parser) !ast.NodeId {
+    fn ternary(self: *Parser) Error!ast.NodeId {
         const condition = try self.or_();
         // TODO implement ternary
         return condition;
     }
 
-    fn or_(self: *Parser) !ast.NodeId {
+    fn or_(self: *Parser) Error!ast.NodeId {
         const lhs = try self.and_();
         // TODO implement or
         return lhs;
     }
 
-    fn and_(self: *Parser) !ast.NodeId {
+    fn and_(self: *Parser) Error!ast.NodeId {
         const lhs = try self.equality();
         // TODO implement and
         return lhs;
     }
 
-    fn equality(self: *Parser) !ast.NodeId {
+    fn equality(self: *Parser) Error!ast.NodeId {
         var lhs = try self.comparsion();
         search_equality: while (true) {
             const token = self.scanner.current();
@@ -168,7 +180,7 @@ pub const Parser = struct {
         return lhs;
     }
 
-    fn comparsion(self: *Parser) !ast.NodeId {
+    fn comparsion(self: *Parser) Error!ast.NodeId {
         var lhs = try self.term();
 
         search_comparsion: while (true) {
@@ -199,7 +211,7 @@ pub const Parser = struct {
         return lhs;
     }
 
-    fn term(self: *Parser) !ast.NodeId {
+    fn term(self: *Parser) Error!ast.NodeId {
         var lhs = try self.factor();
         search_term: while (true) {
             const token = self.scanner.current();
@@ -226,7 +238,7 @@ pub const Parser = struct {
         return lhs;
     }
 
-    fn factor(self: *Parser) !ast.NodeId {
+    fn factor(self: *Parser) Error!ast.NodeId {
         var lhs = try self.unary();
         search_factor: while (true) {
             const token = self.scanner.current();
@@ -253,18 +265,31 @@ pub const Parser = struct {
         return lhs;
     }
 
-    fn unary(self: *Parser) !ast.NodeId {
+    fn unary(self: *Parser) Error!ast.NodeId {
         // TODO implement unary
         return try self.call();
     }
 
-    fn call(self: *Parser) !ast.NodeId {
-        const callee = try self.primary();
+    fn call(self: *Parser) Error!ast.NodeId {
+        var callee = try self.primary();
 
         while (true) {
             if (try self.match(.left_paren)) {
+                const token = self.scanner.previous();
                 // finish Call
-                const arg_count = self.expressionList(.right_paren);
+                const list = try self.expressionList(.right_paren);
+
+                const extra_id = try self.ast.addExtra(ast.CallExtra{
+                    .callee = callee,
+                    .args_count = list.count,
+                    .args_start = list.list_start,
+                });
+                callee = try self.ast.addNode(.{
+                    .tag = .call,
+                    .token_position = token.location.start,
+                    .resolved_type_id = TypePool.UNRESOLVED,
+                    .data = .{ .extra_id = extra_id },
+                });
             } else if (try self.match(.dot)) {
                 // TODO implement get expression
             } else {
@@ -272,26 +297,51 @@ pub const Parser = struct {
             }
         }
 
-        // TODO implement call
         return callee;
     }
 
-    fn expressionList(self: *Parser, end_token: TokenType) !self.NodeId {
-        var arg_count = 0;
-        while (!try self.match(end_token)) {
-            self.expression();
-            if (arg_count == 255) {
+    /// parses a comma seperated list of expressions until end_token is found
+    /// returns the number of found expressions and the start of a node_list with all expressions
+    fn expressionList(self: *Parser, end_token: TokenType) Error!struct { count: u8, list_start: ast.NodeId } {
+        var expression_ids: [255]ast.NodeId = undefined;
+        var count: u8 = 0;
+        while (!self.check(end_token)) {
+            expression_ids[count] = try self.expression();
+
+            if (count == 255) {
                 return error.ListOverflow;
             }
-            arg_count += 1;
-            if (!self.match(.comma)) {
+            count += 1;
+            if (!try self.match(.comma)) {
                 break;
             }
         }
-        return arg_count;
+        _ = try self.consume(end_token);
+
+        var list_node: ast.NodeId = undefined;
+        var index: usize = count;
+        while (index > 0) {
+            index -= 1;
+            const extra_id = try self.ast.addExtra(ast.NodeListExtra{
+                .node_id = expression_ids[index],
+                .next = list_node,
+            });
+
+            list_node = try self.ast.addNode(.{
+                .tag = .node_list,
+                .token_position = 0,
+                .resolved_type_id = TypePool.UNRESOLVED,
+                .data = .{ .extra_id = extra_id },
+            });
+        }
+
+        return .{
+            .count = count,
+            .list_start = list_node,
+        };
     }
 
-    fn primary(self: *Parser) !ast.NodeId {
+    fn primary(self: *Parser) Error!ast.NodeId {
         const token = self.scanner.current();
         return switch (token.tag) {
             .null_ => |_| case: {
@@ -378,14 +428,14 @@ pub const Parser = struct {
     }
 
     // string table
-    pub fn parseIdentifier(self: *Parser) !StringId {
+    pub fn parseIdentifier(self: *Parser) Error!StringId {
         const token = try self.consume(.identifier);
         const lexeme = self.scanner.getLexeme(token);
         return self.ast.string_table.add(lexeme);
     }
 
     // scanner interactions
-    pub fn advance(self: *Parser) !Token {
+    pub fn advance(self: *Parser) Error!Token {
         var scanner = &self.scanner;
 
         scanner.advance() catch {
@@ -404,7 +454,7 @@ pub const Parser = struct {
         return scanner.previous();
     }
 
-    pub fn consume(self: *Parser, token_type: TokenType) !Token {
+    pub fn consume(self: *Parser, token_type: TokenType) Error!Token {
         if (self.check(token_type)) {
             return self.advance();
         } else {
@@ -412,7 +462,7 @@ pub const Parser = struct {
         }
     }
 
-    pub fn match(self: *Parser, token_type: TokenType) !bool {
+    pub fn match(self: *Parser, token_type: TokenType) Error!bool {
         if (!self.check(token_type)) {
             return false;
         }

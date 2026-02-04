@@ -20,7 +20,7 @@ pub const NodeType = enum(u8) {
     // access
     identifier_expr,
     call,
-    expression_list,
+    node_list,
 
     // binary operations
     binary_add,
@@ -51,8 +51,13 @@ pub const BinaryOpExtra = struct {
 
 pub const CallExtra = struct {
     callee: NodeId,
-    arg_count: u8,
-    expression_list: ?NodeId,
+    args_count: u8,
+    args_start: NodeId,
+};
+
+pub const NodeListExtra = struct {
+    node_id: NodeId,
+    next: NodeId,
 };
 
 pub const Node = struct {
@@ -65,7 +70,7 @@ pub const Node = struct {
         int_value: i64,
         float_value: f64,
         string_id: StringId,
-        node_id: ?NodeId,
+        node_id: NodeId,
         extra_id: u32,
     },
 };
