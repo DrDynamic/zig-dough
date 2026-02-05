@@ -47,11 +47,7 @@ pub const ASTPrinter = struct {
             .literal_int => self.terminal.print(": {d}\n", .{node.data.int_value}),
             .literal_float => self.terminal.print(": {d:.4}\n", .{node.data.float_value}),
             .literal_bool => self.terminal.print(": {}\n", .{node.data.bool_value}),
-            .identifier_expr,
-            => {
-                const str = self.ast.string_table.get(node.data.string_id);
-                self.terminal.print(": \"{s}\"\n", .{str});
-            },
+
             // TODO print the actual string
             .object_string => self.terminal.print(": string\n", .{}),
             .binary_add,
@@ -75,6 +71,20 @@ pub const ASTPrinter = struct {
                 const name = self.ast.string_table.get(data.name_id);
                 self.terminal.print(" (name: {s}, init_value: {d})\n", .{ name, data.init_value });
             },
+            // access
+            .identifier_expr,
+            => {
+                const str = self.ast.string_table.get(node.data.string_id);
+                self.terminal.print(": \"{s}\"\n", .{str});
+            },
+            .call => {
+                const data = self.ast.getExtra(node.data.extra_id, ast.CallExtra);
+                self.terminal.print("( args: {d})\n", .{data.args_count});
+            },
+            .node_list => {
+                self.terminal.print("\n", .{});
+            },
+            //
             .stack_return => {
                 self.terminal.print("\n", .{});
             },
@@ -123,6 +133,24 @@ pub const ASTPrinter = struct {
             },
             .stack_return => {
                 try self.printNode(node.data.node_id, prefix, true);
+            },
+            // access
+            .call => {
+                const data = self.ast.getExtra(node.data.extra_id, ast.CallExtra);
+                try self.printNode(data.callee, prefix, false);
+
+                var arg_id = data.args_start;
+                for (0..data.args_count) |index| {
+                    try self.printNode(arg_id, prefix, index == data.args_count - 1);
+
+                    const arg_node = self.ast.nodes.items[arg_id];
+                    const list_extra = self.ast.getExtra(arg_node.data.extra_id, ast.NodeListExtra);
+                    arg_id = list_extra.next;
+                }
+            },
+            .node_list => {
+                const data = self.ast.getExtra(node.data.extra_id, ast.NodeListExtra);
+                try self.printNode(data.node_id, prefix, true);
             },
         }
     }

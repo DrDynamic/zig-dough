@@ -66,7 +66,7 @@ pub fn main() !void {
 
         if (start_options.print_tokens) {
             try as.frontend.debug.TokenPrinter.printTokens(&scanner, stdout_terminal.writer);
-            scanner.reset();
+            try scanner.reset();
         }
 
         var ast = try as.frontend.AST.init(allocator);
