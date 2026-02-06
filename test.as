@@ -1,2 +1,2 @@
-var false = 5;
-print(a, 5+5, 5+5+5, null);
+// [line 2] Error at '.': Expect expression.
+.123;

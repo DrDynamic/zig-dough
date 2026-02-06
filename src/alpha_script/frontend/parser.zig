@@ -423,10 +423,10 @@ pub const Parser = struct {
                     .data = .{ .string_id = string_id },
                 });
             },
-            else => |tag| {
-                std.debug.print("unexpected token in primary(): {s} '{s}'\n", .{ @tagName(tag), self.scanner.getLexeme(token) });
-                // TODO report error
-                return error.ParserError;
+            else => |_| {
+                self.error_reporter.parserError(self, Error.UnexpectedToken, token, "Expect expression");
+                _ = try self.advance();
+                return Error.UnexpectedToken;
             },
         };
     }

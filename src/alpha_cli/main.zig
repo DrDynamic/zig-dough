@@ -1,3 +1,6 @@
+const EXIT_CODE_COMPILER_ERROR = 65; // EX_DATAERR
+const EXIT_CODE_RUNTIME_ERROR = 70; // EX_SOFTWARE
+
 const StartOptions = struct {
     path: ?[]const u8,
     print_tokens: bool,
@@ -103,6 +106,10 @@ pub fn main() !void {
         );
         try parser.parse();
 
+        if (!ast.is_valid) {
+            std.process.exit(EXIT_CODE_COMPILER_ERROR);
+        }
+
         var type_pool = try as.frontend.TypePool.init(allocator);
         defer type_pool.deinit();
 
@@ -118,6 +125,10 @@ pub fn main() !void {
             _ = try semantic_analyzer.analyze(root_node_id);
         }
 
+        if (!ast.is_valid) {
+            std.process.exit(EXIT_CODE_COMPILER_ERROR);
+        }
+
         if (start_options.print_ast) {
             try as.frontend.debug.ASTPrinter.printAST(&ast, &type_pool, &stdout_terminal);
         }
@@ -125,14 +136,18 @@ pub fn main() !void {
         var compiler = as.compiler.Compiler.init(&ast, &chunk, &error_reporter, allocator);
 
         try registerNatives(&ast, &compiler, &vm);
-        try compiler.compile();
+        compiler.compile() catch {
+            std.process.exit(EXIT_CODE_COMPILER_ERROR);
+        };
 
         if (start_options.print_asm) {
             const disassambler = as.frontend.debug.Disassambler.init(&stdout_terminal);
             disassambler.disassambleChunk(&chunk, "debug");
         }
 
-        try vm.execute(&chunk);
+        vm.execute(&chunk) catch {
+            std.process.exit(EXIT_CODE_RUNTIME_ERROR);
+        };
     } else {
         stderr_terminal.print("no file specified!\n", .{});
     }

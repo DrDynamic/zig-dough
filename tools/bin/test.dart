@@ -329,6 +329,7 @@ class Test {
     var unexpectedCount = 0;
     for (var line in errorLines) {
       var match = _syntaxErrorPattern.firstMatch(line);
+
       if (match != null) {
         var error = "[${match[1]}] ${match[2]}";
         if (_expectedCompileErrors.contains(error)) {
@@ -343,7 +344,7 @@ class Test {
       } else if (line != "") {
         if (unexpectedCount < 10) {
           fail("Unexpected output on stderr:");
-          fail(line);
+          fail("/$line/");
         }
         unexpectedCount++;
       }
@@ -355,7 +356,8 @@ class Test {
 
     // Validate that every expected error occurred.
     for (var error in _expectedCompileErrors.difference(foundErrors)) {
-      fail("Missing expected error: $error");
+      fail("Missing expected error:");
+      fail("/$error/");
     }
   }
 

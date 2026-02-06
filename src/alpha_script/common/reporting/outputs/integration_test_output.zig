@@ -21,7 +21,7 @@ pub const IntegrationTestErrorOutput = struct {
         const location = source_helper.calcSourceLocation(source, report.source_info.token);
         const token = report.source_info.token;
 
-        self.terminal.print("[{d}] Error at '{s}': {s}\n", .{
+        self.terminal.print("[line {d}] Error at '{s}': {s}\n", .{
             location.line,
             source[token.location.start..token.location.end],
             report.message,
