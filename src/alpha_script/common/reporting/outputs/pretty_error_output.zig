@@ -31,6 +31,8 @@ pub const PrettyErrorOutput = struct {
         const self: *PrettyErrorOutput = @ptrCast(@alignCast(ptr));
         const source = source_helper.sourceFromReportingModule(report.reporting_module);
         const location = source_helper.calcSourceLocation(source, report.source_info.token);
+
+        self.printMessage(report.error_code, report.source_info, location, report.message);
         self.printMarkedSource(source, location);
     }
 
@@ -47,9 +49,9 @@ pub const PrettyErrorOutput = struct {
         self.terminal.printWithOptions("\n", .{}, Terminal.reset_options);
     }
 
-    fn printMessage(self: *const PrettyErrorOutput, location: SourceLocation, message: []const u8) void {
-        self.terminal.printWithOptions("{s}:{d}:{d} ", .{ self.file_name, location.line, location.column }, location_label_options);
-        self.terminal.printWithOptions("error: ", .{}, error_label_options);
+    fn printMessage(self: *const PrettyErrorOutput, error_code: u32, source_info: SourceInfo, location: SourceLocation, message: []const u8) void {
+        self.terminal.printWithOptions("{?s}:{d}:{d} ", .{ source_info.file_path, location.line, location.column }, location_label_options);
+        self.terminal.printWithOptions("error[{d}]: ", .{error_code}, error_label_options);
         self.terminal.printWithOptions("{s}\n", .{message}, location_label_options);
         self.terminal.setStyle(Terminal.reset_options);
     }
@@ -58,7 +60,7 @@ pub const PrettyErrorOutput = struct {
 const as = @import("as");
 const ErrorOutput = as.common.reporting.ErrorOutput;
 const ErrorReport = as.common.reporting.ErrorReport;
-
+const SourceInfo = as.common.reporting.SourceInfo;
 const source_helper = as.common.reporting.source_helper;
 const SourceLocation = as.common.reporting.source_helper.SourceLocation;
 

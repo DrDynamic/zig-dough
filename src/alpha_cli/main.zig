@@ -3,6 +3,12 @@ const StartOptions = struct {
     print_tokens: bool,
     print_ast: bool,
     print_asm: bool,
+    error_output: OutputType,
+};
+
+const OutputType = enum {
+    pretty,
+    integration_test,
 };
 
 fn makeStartOptions(iterator: *std.process.ArgIterator) !StartOptions {
@@ -11,6 +17,7 @@ fn makeStartOptions(iterator: *std.process.ArgIterator) !StartOptions {
         .print_tokens = false,
         .print_ast = false,
         .print_asm = false,
+        .error_output = .pretty,
     };
 
     // Skip executable
@@ -24,6 +31,8 @@ fn makeStartOptions(iterator: *std.process.ArgIterator) !StartOptions {
                 options.print_ast = true;
             } else if (std.mem.eql(u8, arg, "--print-asm")) {
                 options.print_asm = true;
+            } else if (std.mem.eql(u8, arg, "--errors=test")) {
+                options.error_output = .integration_test;
             } else {
                 return error.UnknownOption;
             }
@@ -61,9 +70,18 @@ pub fn main() !void {
         const source = try getFile(path, allocator);
         defer allocator.free(source);
 
-        var pretty_error_output = as.common.reporting.outputs.PrettyErrorOutput.init(&stderr_terminal);
-        const error_output = pretty_error_output.output();
-        const error_reporter = as.common.reporting.ErrorReporter.init(error_output);
+        const output: as.common.reporting.ErrorOutput = switch (start_options.error_output) {
+            .pretty => case: {
+                var pretty_output = as.common.reporting.outputs.PrettyErrorOutput.init(&stderr_terminal);
+                break :case pretty_output.output();
+            },
+            .integration_test => case: {
+                var pretty_output = as.common.reporting.outputs.IntegrationTestErrorOutput.init(&stderr_terminal);
+                break :case pretty_output.output();
+            },
+        };
+
+        const error_reporter = as.common.reporting.ErrorReporter.init(output);
 
         const token_stream = as.frontend.TokenStream.init(path, source, error_reporter);
 

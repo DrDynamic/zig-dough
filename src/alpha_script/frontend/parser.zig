@@ -48,6 +48,9 @@ pub const Parser = struct {
         const name_id: StringId = self.parseIdentifier() catch |err| switch (err) {
             error.TokenMissMatch => {
                 self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "Expect variable name");
+                _ = try self.advance();
+                _ = try self.match(.colon);
+                _ = try self.match(.equal);
                 return error.ParserError;
             },
             else => {
