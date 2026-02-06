@@ -1,12 +1,12 @@
-pub const Error = error{
-    OutOfMemory,
-    UnhandledNodeType,
-    TypeMismatch,
-    IncompatibleTypes,
-    RedeclarationError,
-};
-
 pub const SemanticAnalyzer = struct {
+    pub const Error = error{
+        OutOfMemory,
+        UnhandledNodeType,
+        TypeMismatch,
+        IncompatibleTypes,
+        RedeclarationError,
+    };
+
     allocator: std.mem.Allocator,
     ast: *AST,
     type_pool: *TypePool,
@@ -32,7 +32,6 @@ pub const SemanticAnalyzer = struct {
 
         const resolved_type: TypeId = switch (node.tag) {
             // literals
-            .literal_void => TypePool.VOID,
             .literal_null => TypePool.NULL,
             .literal_bool => TypePool.BOOL,
             .literal_int => TypePool.INT,
@@ -149,7 +148,7 @@ const std = @import("std");
 const as = @import("as");
 const ast = as.frontend.ast;
 
-const ErrorReporter = as.frontend.ErrorReporter;
+const ErrorReporter = as.common.reporting.ErrorReporter;
 
 const AST = as.frontend.AST;
 const TypePool = as.frontend.TypePool;

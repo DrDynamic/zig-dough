@@ -3,7 +3,9 @@ pub const debug = @import("debug/debug.zig");
 pub const AstPrinter = debug.ASTPrinter;
 
 // Lexing (Sourcecode -> Tokens)
-pub const Scanner = @import("scanner.zig").Scanner;
+const scanner = @import("scanner.zig");
+pub const Scanner = scanner.Scanner;
+pub const TokenStream = scanner.TokenStream;
 
 const token = @import("token.zig");
 pub const TokenType = token.TokenType;

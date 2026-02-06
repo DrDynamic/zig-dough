@@ -11,25 +11,25 @@ pub const Local = struct {
 
 pub const Compiler = struct {
     pub const Error = error{
-        LocalNotFound,
-        UnexpectedComptime,
-        UnexpectedVoid,
+        UndefinedIdentifier,
+
         ConstantOverflow,
         OutOfMemory,
-        NotImplemented,
     };
 
     allocator: std.mem.Allocator,
+    error_reporter: *const ErrorReporter,
 
-    ast: *AST,
+    ast: *const AST,
     chunk: *Chunk,
     locals: std.ArrayList(Local),
     scope_depth: i32,
     next_free_reg: RegisterId,
 
-    pub fn init(_ast: *AST, chunk: *Chunk, allocator: std.mem.Allocator) Compiler {
+    pub fn init(_ast: *const AST, chunk: *Chunk, error_reporter: *const ErrorReporter, allocator: std.mem.Allocator) Compiler {
         return .{
             .allocator = allocator,
+            .error_reporter = error_reporter,
             .ast = _ast,
             .chunk = chunk,
             .locals = std.ArrayList(Local).init(allocator),
@@ -49,11 +49,10 @@ pub const Compiler = struct {
 
         return switch (node.tag) {
             // nodes needed ad compiletime (should not bleed into runtime!)
-            .comptime_uninitialized => return error.UnexpectedComptime,
+            .comptime_uninitialized => unreachable,
             .node_list => unreachable,
 
             // literals
-            .literal_void => return error.UnexpectedVoid,
             .literal_null => {
                 const register = self.next_free_reg;
                 self.next_free_reg += 1;
@@ -100,7 +99,7 @@ pub const Compiler = struct {
             },
 
             // objects
-            .object_string => error.NotImplemented,
+            .object_string => unreachable,
 
             // declarations
             .declaration_var => {
@@ -132,7 +131,10 @@ pub const Compiler = struct {
 
             // access
             .identifier_expr => {
-                return try self.resolveLocal(node.data.string_id);
+                return self.resolveLocal(node.data.string_id) catch {
+                    self.error_reporter.compilerError(self, Error.UndefinedIdentifier, node, "Undefined identifier");
+                    return Error.UndefinedIdentifier;
+                };
             },
             .call => {
                 const data = self.ast.getExtra(node.data.extra_id, ast.CallExtra);
@@ -237,7 +239,7 @@ pub const Compiler = struct {
     }
 
     /// searches for the register of a variable
-    fn resolveLocal(self: *const Compiler, name_id: StringId) !RegisterId {
+    fn resolveLocal(self: *const Compiler, name_id: StringId) error{NotFound}!RegisterId {
         const str = self.ast.string_table.get(name_id);
 
         _ = str;
@@ -247,7 +249,7 @@ pub const Compiler = struct {
             if (local.name_id == name_id) return local.reg_slot;
         }
 
-        return error.LocalNotFound;
+        return error.NotFound;
     }
 
     fn enterScope(self: *Compiler) void {
@@ -272,12 +274,13 @@ pub const Chunk = instructions.Chunk;
 
 pub const ConstantId = instructions.ConstantId;
 pub const OpCode = instructions.OpCode;
-
+//---------------
 const std = @import("std");
 const as = @import("as");
 const ast = as.frontend.ast;
 
 const AST = as.frontend.AST;
+const ErrorReporter = as.common.reporting.ErrorReporter;
 const TypePool = as.frontend.TypePool;
 const Value = as.runtime.values.Value;
 const Node = as.frontend.ast.Node;

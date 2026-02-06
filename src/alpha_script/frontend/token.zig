@@ -1,7 +1,9 @@
 const std = @import("std");
 
 pub const TokenType = enum {
-    comptime_uninitialized, // when the scanner hasn't scanned a value yet
+    comptime_uninitialized, // when the Scanner hasn't scanned a value yet
+    comptime_corrupt, // when the TokenStream finds chars it con not parse into a valid token (for error reporting)
+
     // Single-character tokens.
     left_paren,
     right_paren,

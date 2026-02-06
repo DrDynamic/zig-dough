@@ -1,5 +1,5 @@
 const FRAMES_MAX = 128;
-const STACK_MAX = FRAMES_MAX * 255;
+const STACK_MAX = FRAMES_MAX * 256;
 
 pub const CallFrame = struct {
     chunk: *const Chunk,
@@ -8,6 +8,8 @@ pub const CallFrame = struct {
 };
 
 pub const VirtualMachine = struct {
+    pub const Error = error{};
+
     frames: [FRAMES_MAX]CallFrame,
     frame_count: usize,
 

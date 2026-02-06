@@ -42,7 +42,6 @@ pub const ASTPrinter = struct {
         // 2. Spezifische Daten je nach Typ ausgeben
         switch (node.tag) {
             .comptime_uninitialized => self.terminal.print(": -", .{}),
-            .literal_void => self.terminal.print(": void\n", .{}),
             .literal_null => self.terminal.print(": null\n", .{}),
             .literal_int => self.terminal.print(": {d}\n", .{node.data.int_value}),
             .literal_float => self.terminal.print(": {d:.4}\n", .{node.data.float_value}),
@@ -103,7 +102,6 @@ pub const ASTPrinter = struct {
     fn printChildren(self: ASTPrinter, node: ast.Node, prefix: []const u8) !void {
         switch (node.tag) {
             .comptime_uninitialized,
-            .literal_void,
             .literal_null,
             .literal_int,
             .literal_float,

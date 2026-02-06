@@ -1,5 +1,7 @@
 pub const Parser = struct {
-    const Error = error{
+    pub const Error = error{
+        UnexpectedToken,
+        //
         OutOfMemory,
         ScannerError,
         TokenMissMatch,
@@ -10,11 +12,11 @@ pub const Parser = struct {
     };
 
     allocator: Allocator,
-    scanner: Scanner,
+    scanner: *Scanner,
     ast: *AST,
     error_reporter: *const ErrorReporter,
 
-    pub fn init(scanner: Scanner, ast_: *AST, error_reporter: *const ErrorReporter, allocator: Allocator) Parser {
+    pub fn init(scanner: *Scanner, ast_: *AST, error_reporter: *const ErrorReporter, allocator: Allocator) Parser {
         return .{
             .scanner = scanner,
             .ast = ast_,
@@ -45,8 +47,7 @@ pub const Parser = struct {
     fn varDeclaration(self: *Parser) !ast.NodeId {
         const name_id: StringId = self.parseIdentifier() catch |err| switch (err) {
             error.TokenMissMatch => {
-                // TODO report error
-                self.error_reporter.reportByToken(self.scanner.current(), ErrorType.expected_identifier);
+                self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "Expect variable name");
                 return error.ParserError;
             },
             else => {
@@ -59,7 +60,7 @@ pub const Parser = struct {
         if (try self.match(.colon)) {
             _ = self.consume(.identifier) catch |err| switch (err) {
                 error.TokenMissMatch => {
-                    self.error_reporter.reportByToken(self.scanner.current(), ErrorType.expected_identifier);
+                    self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "Exprect type name");
                     return error.ParserError;
                 },
                 else => {
@@ -436,7 +437,7 @@ pub const Parser = struct {
 
     // scanner interactions
     pub fn advance(self: *Parser) Error!Token {
-        var scanner = &self.scanner;
+        var scanner = self.scanner;
 
         scanner.advance() catch {
             // read tokens until the scanner finds a valid one
@@ -479,7 +480,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const as = @import("as");
-const ErrorReporter = as.frontend.ErrorReporter;
+const ErrorReporter = as.common.reporting.ErrorReporter;
 const Scanner = as.frontend.Scanner;
 const TokenType = as.frontend.TokenType;
 const Token = as.frontend.Token;

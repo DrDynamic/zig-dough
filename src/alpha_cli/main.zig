@@ -61,19 +61,24 @@ pub fn main() !void {
         const source = try getFile(path, allocator);
         defer allocator.free(source);
 
-        const error_reporter = as.frontend.ErrorReporter.init(source, "test_string", &stderr_terminal);
-        var scanner = try as.frontend.Scanner.init(source, &error_reporter);
+        var pretty_error_output = as.common.reporting.outputs.PrettyErrorOutput.init(&stderr_terminal);
+        const error_output = pretty_error_output.output();
+        const error_reporter = as.common.reporting.ErrorReporter.init(error_output);
+
+        const token_stream = as.frontend.TokenStream.init(path, source, error_reporter);
+
+        var scanner = try as.frontend.Scanner.init(token_stream, &error_reporter);
 
         if (start_options.print_tokens) {
             try as.frontend.debug.TokenPrinter.printTokens(&scanner, stdout_terminal.writer);
             try scanner.reset();
         }
 
-        var ast = try as.frontend.AST.init(allocator);
+        var ast = try as.frontend.AST.init(&scanner, allocator);
         defer ast.deinit();
 
         var parser = as.frontend.Parser.init(
-            scanner,
+            &scanner,
             &ast,
             &error_reporter,
             allocator,
@@ -99,9 +104,9 @@ pub fn main() !void {
             try as.frontend.debug.ASTPrinter.printAST(&ast, &type_pool, &stdout_terminal);
         }
 
-        var compiler = as.compiler.Compiler.init(&ast, &chunk, allocator);
+        var compiler = as.compiler.Compiler.init(&ast, &chunk, &error_reporter, allocator);
 
-        try registerNatives(&compiler, &vm);
+        try registerNatives(&ast, &compiler, &vm);
         try compiler.compile();
 
         if (start_options.print_asm) {
@@ -115,8 +120,8 @@ pub fn main() !void {
     }
 }
 
-fn registerNatives(compiler: *as.compiler.Compiler, vm: *as.runtime.VirtualMachine) !void {
-    const name_id = try compiler.ast.string_table.add("print");
+fn registerNatives(ast: *as.frontend.AST, compiler: *as.compiler.Compiler, vm: *as.runtime.VirtualMachine) !void {
+    const name_id = try ast.string_table.add("print");
 
     try compiler.locals.append(.{
         .name_id = name_id,

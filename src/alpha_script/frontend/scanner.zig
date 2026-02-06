@@ -5,16 +5,14 @@ pub const Scanner = struct {
     };
     error_reporter: *const ErrorReporter,
 
-    source: []const u8,
-    pos: usize,
+    token_stream: TokenStream,
     window: [3]Token,
     window_index: usize,
 
-    pub fn init(source: []const u8, error_reporter: *const ErrorReporter) Error!Scanner {
+    pub fn init(token_stream: TokenStream, error_reporter: *const ErrorReporter) Error!Scanner {
         var scanner = Scanner{
             .error_reporter = error_reporter,
-            .source = source,
-            .pos = 0,
+            .token_stream = token_stream,
             .window = .{
                 .{ .tag = .comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
                 .{ .tag = .comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
@@ -24,14 +22,14 @@ pub const Scanner = struct {
         };
 
         // initialize the scanner
-        try scanner.advance(); // fill peek()
+        try scanner.advance(); // fill next()
         try scanner.advance(); // fill current()
 
         return scanner;
     }
 
     pub fn reset(self: *Scanner) Error!void {
-        self.pos = 0;
+        self.token_stream.pos = 0;
         self.window = .{
             .{ .tag = .comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
             .{ .tag = .comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
@@ -57,22 +55,41 @@ pub const Scanner = struct {
     }
 
     pub fn advance(self: *Scanner) Error!void {
-        //const token: Token = while (true) {
-        //    const token = self.nextToken() catch continue;
-        //    break token;
-        //} else unreachable;
-
-        const token = try self.nextToken();
+        const token = try self.token_stream.nextToken();
 
         self.window_index = (self.window_index + 1) % 3;
         self.window[(self.window_index + 2) % 3] = token;
     }
 
-    pub fn getLexeme(self: *const Scanner, token: Token) []const u8 {
+    pub inline fn getLexeme(self: *const Scanner, token: Token) []const u8 {
+        return self.token_stream.getLexeme(token);
+    }
+};
+
+pub const TokenStream = struct {
+    error_reporter: ?ErrorReporter,
+    file_path: []const u8,
+    source: []const u8,
+    pos: usize,
+
+    pub fn init(file_path: []const u8, source: []const u8, error_reporter: ?ErrorReporter) TokenStream {
+        return .{
+            .error_reporter = error_reporter,
+            .file_path = file_path,
+            .source = source,
+            .pos = 0,
+        };
+    }
+
+    pub fn getFilePath(self: *const TokenStream) []const u8 {
+        return self.file_path;
+    }
+
+    pub fn getLexeme(self: *const TokenStream, token: Token) []const u8 {
         return self.source[token.location.start..token.location.end];
     }
 
-    pub fn scanPosition(self: *Scanner, lexeme_start: isize) !Token {
+    pub fn scanPosition(self: *TokenStream, lexeme_start: usize) !Token {
         const currentPosition = self.pos;
         self.pos = lexeme_start;
         const token = self.nextToken();
@@ -81,7 +98,7 @@ pub const Scanner = struct {
         return token;
     }
 
-    fn nextToken(self: *Scanner) Error!Token {
+    fn nextToken(self: *TokenStream) Scanner.Error!Token {
         self.skipWhitespaceAndComments();
 
         if (self.isAtEnd()) {
@@ -151,24 +168,28 @@ pub const Scanner = struct {
                         self.pos += 1;
                     }
 
-                    self.error_reporter.reportScannerError(Error.UnexpectedCharacter, start, self.pos);
+                    if (self.error_reporter) |error_reporter| {
+                        error_reporter.tokenStreamError(self, Scanner.Error.UnexpectedCharacter, start, self.pos, "Unexpected Character");
+                    }
 
                     // TODO collect character to the next whitespace
-                    return Error.UnexpectedCharacter;
+                    return Scanner.Error.UnexpectedCharacter;
                 }
             },
         };
     }
 
-    fn makeString(self: *Scanner, stringChar: u8) !Token {
+    fn makeString(self: *TokenStream, stringChar: u8) !Token {
         const token_start = self.pos;
         while (!self.matchChar(stringChar) and !self.isAtEnd()) {
             self.pos += 1;
         }
 
         if (self.isAtEnd() and self.source[self.pos - 1] != stringChar) {
-            self.error_reporter.reportScannerError(Error.UnterminatedString, token_start, self.pos - 1);
-            return Error.UnterminatedString;
+            if (self.error_reporter) |error_reporter| {
+                error_reporter.tokenStreamError(self, Scanner.Error.UnterminatedString, token_start, self.pos, "Unterminated String");
+            }
+            return Scanner.Error.UnterminatedString;
         }
 
         return .{
@@ -180,7 +201,7 @@ pub const Scanner = struct {
         };
     }
 
-    fn makeNumber(self: *Scanner) Token {
+    fn makeNumber(self: *TokenStream) Token {
         const token_start = self.pos - 1;
         while (!self.isAtEnd()) {
             if (std.ascii.isDigit(self.source[self.pos]) or (self.source[self.pos] == '.' and std.ascii.isDigit(self.source[self.pos + 1]))) {
@@ -199,7 +220,7 @@ pub const Scanner = struct {
         };
     }
 
-    fn makeIdentifier(self: *Scanner) Token {
+    fn makeIdentifier(self: *TokenStream) Token {
         const token_start = self.pos - 1;
         while (self.isIdentifierChar(self.source[self.pos])) {
             self.pos += 1;
@@ -258,7 +279,7 @@ pub const Scanner = struct {
         };
     }
 
-    fn skipWhitespaceAndComments(self: *Scanner) void {
+    fn skipWhitespaceAndComments(self: *TokenStream) void {
         while (!self.isAtEnd()) {
             const char = self.source[self.pos];
             switch (char) {
@@ -295,7 +316,7 @@ pub const Scanner = struct {
         }
     }
 
-    fn matchChar(self: *Scanner, char: u8) bool {
+    fn matchChar(self: *TokenStream, char: u8) bool {
         if (self.isAtEnd()) return false;
         if (self.source[self.pos] != char) return false;
         self.pos += 1;
@@ -303,18 +324,18 @@ pub const Scanner = struct {
     }
 
     /// checks if the last part of a token matches a given string
-    fn matchIdentifier(self: *const Scanner, rest: []const u8, offset: usize, length: usize, token_start: usize, token_end: usize, guessedTag: TokenType) TokenType {
+    fn matchIdentifier(self: *const TokenStream, rest: []const u8, offset: usize, length: usize, token_start: usize, token_end: usize, guessedTag: TokenType) TokenType {
         if (offset + length == token_end - token_start and std.mem.eql(u8, self.source[token_start + offset .. token_end], rest)) {
             return guessedTag;
         }
         return .identifier;
     }
 
-    fn isAtEnd(self: *const Scanner) bool {
+    fn isAtEnd(self: *const TokenStream) bool {
         return self.pos >= self.source.len;
     }
 
-    fn isIdentifierChar(_: *const Scanner, char: u8) bool {
+    fn isIdentifierChar(_: *const TokenStream, char: u8) bool {
         return (std.ascii.isAlphanumeric(char) or char == '_' or !std.ascii.isAscii(char));
     }
 };
@@ -322,7 +343,7 @@ pub const Scanner = struct {
 const std = @import("std");
 
 const as = @import("as");
-const ErrorReporter = as.frontend.ErrorReporter;
+const ErrorReporter = as.common.reporting.ErrorReporter;
 const Token = as.frontend.Token;
 const TokenType = as.frontend.TokenType;
 

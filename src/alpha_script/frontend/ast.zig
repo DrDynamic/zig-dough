@@ -5,7 +5,6 @@ pub const NodeType = enum(u8) {
     comptime_uninitialized,
 
     // literals
-    literal_void,
     literal_null,
     literal_bool,
     literal_int,
@@ -78,15 +77,17 @@ pub const Node = struct {
 pub const AST = struct {
     allocator: Allocator,
 
+    scanner: *const Scanner,
     roots: ArrayList(NodeId),
     nodes: ArrayList(Node),
     extra_data: ArrayList(u32),
     string_table: StringTable,
     is_valid: bool,
 
-    pub fn init(allocator: Allocator) !AST {
+    pub fn init(scanner: *const Scanner, allocator: Allocator) !AST {
         const ast: AST = .{
             .allocator = allocator,
+            .scanner = scanner,
             .roots = ArrayList(NodeId).init(allocator),
             .nodes = ArrayList(Node).init(allocator),
             .extra_data = ArrayList(u32).init(allocator),
@@ -153,3 +154,5 @@ const as = @import("as");
 const TypeId = as.frontend.TypeId;
 const StringId = as.common.StringId;
 const StringTable = as.common.StringTable;
+
+const Scanner = as.frontend.Scanner;
