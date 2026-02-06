@@ -204,7 +204,7 @@ pub const TokenStream = struct {
     fn makeNumber(self: *TokenStream) Token {
         const token_start = self.pos - 1;
         while (!self.isAtEnd()) {
-            if (std.ascii.isDigit(self.source[self.pos]) or (self.source[self.pos] == '.' and std.ascii.isDigit(self.source[self.pos + 1]))) {
+            if (std.ascii.isDigit(self.source[self.pos]) or (self.source[self.pos] == '.' and self.pos < self.source.len - 1 and std.ascii.isDigit(self.source[self.pos + 1]))) {
                 self.pos += 1;
             } else {
                 break;

@@ -45,7 +45,7 @@ pub const PrettyErrorOutput = struct {
         self.terminal.setStyle(marker_options);
         for (0..location.column - 1) |_| self.terminal.print(" ", .{});
         self.terminal.print("{s}", .{"^"});
-        for (0..location.width - 1) |_| self.terminal.print("~", .{});
+        for (0..@max(location.width, 1) - 1) |_| self.terminal.print("~", .{});
         self.terminal.printWithOptions("\n", .{}, Terminal.reset_options);
     }
 

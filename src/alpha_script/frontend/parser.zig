@@ -295,7 +295,11 @@ pub const Parser = struct {
                     .data = .{ .extra_id = extra_id },
                 });
             } else if (try self.match(.dot)) {
-                // TODO implement get expression
+                _ = self.consume(.identifier) catch {
+                    self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "Expect property after '.'");
+                    _ = try self.advance();
+                    return Error.UnexpectedToken;
+                };
             } else {
                 break;
             }

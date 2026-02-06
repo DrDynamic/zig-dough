@@ -1,2 +1,7 @@
-// [line 2] Error at '.': Expect expression.
-.123;
+var a = "1
+2
+3";
+print(a);
+// expect: 1
+// expect: 2
+// expect: 3
