@@ -18,89 +18,49 @@ pub const Compiler = struct {
     };
 
     allocator: std.mem.Allocator,
+    garbage_collector: *GarbageCollector,
+    string_table: *const StringTable,
     error_reporter: *const ErrorReporter,
 
-    ast: *const AST,
-    chunk: *Chunk,
+    ast: *const AST = undefined,
+    max_registers: *u8 = undefined,
+    chunk: *Chunk = undefined,
     locals: std.ArrayList(Local),
     scope_depth: i32,
     next_free_reg: RegisterId,
 
-    pub fn init(_ast: *const AST, chunk: *Chunk, error_reporter: *const ErrorReporter, allocator: std.mem.Allocator) Compiler {
+    pub fn init(string_table: *const StringTable, error_reporter: *const ErrorReporter, garbage_collector: *GarbageCollector, allocator: std.mem.Allocator) Compiler {
         return .{
             .allocator = allocator,
+            .garbage_collector = garbage_collector,
+            .string_table = string_table,
             .error_reporter = error_reporter,
-            .ast = _ast,
-            .chunk = chunk,
             .locals = std.ArrayList(Local).init(allocator),
             .scope_depth = 0,
             .next_free_reg = 0,
         };
     }
 
-    pub fn compile(self: *Compiler) !void {
+    pub fn compile(self: *Compiler, _ast: *const AST) !*ObjModule {
+        self.ast = _ast;
+
+        var function = ObjFunction.init(self.garbage_collector);
+        self.max_registers = &function.max_registers;
+        self.chunk = &function.chunk;
+
         for (self.ast.getRoots()) |node_id| {
-            _ = try self.compileExpression(node_id);
+            try self.compileStatement(node_id);
         }
+
+        self.chunk.emit(.return_);
+
+        return ObjModule.init(function, self.garbage_collector);
     }
 
-    fn compileExpression(self: *Compiler, node_id: NodeId) Error!u8 {
+    fn compileStatement(self: *Compiler, node_id: NodeId) void {
         const node = self.ast.nodes.items[node_id];
 
-        return switch (node.tag) {
-            // nodes needed ad compiletime (should not bleed into runtime!)
-            .comptime_uninitialized => unreachable,
-            .node_list => unreachable,
-
-            // literals
-            .literal_null => {
-                const register = self.next_free_reg;
-                self.next_free_reg += 1;
-
-                try self.emitLoadConstant(
-                    .load_const,
-                    register,
-                    Value.makeNull(),
-                );
-                return register;
-            },
-            .literal_bool => {
-                const register = self.next_free_reg;
-                self.next_free_reg += 1;
-
-                try self.emitLoadConstant(
-                    .load_const,
-                    register,
-                    Value.makeBool(node.data.bool_value),
-                );
-                return register;
-            },
-            .literal_int => {
-                const register = self.next_free_reg;
-                self.next_free_reg += 1;
-
-                try self.emitLoadConstant(
-                    .load_const,
-                    register,
-                    Value.makeInteger(node.data.int_value),
-                );
-                return register;
-            },
-            .literal_float => {
-                const register = self.next_free_reg;
-                self.next_free_reg += 1;
-
-                try self.emitLoadConstant(
-                    .load_const,
-                    register,
-                    Value.makeFloat(node.data.float_value),
-                );
-                return register;
-            },
-
-            // objects
-            .object_string => unreachable,
-
+        switch (node.tag) {
             // declarations
             .declaration_var => {
                 const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationExtra);
@@ -127,6 +87,77 @@ pub const Compiler = struct {
                 }
 
                 return init_reg;
+            },
+            else => { // expression statements
+                _ = self.compileExpression(node_id);
+                self.next_free_reg -= 1;
+            },
+        }
+    }
+
+    fn compileExpression(self: *Compiler, node_id: NodeId) Error!u8 {
+        const node = self.ast.nodes.items[node_id];
+
+        return switch (node.tag) {
+            // nodes needed ad compiletime (should not bleed into runtime!)
+            .comptime_uninitialized => unreachable,
+            .node_list => unreachable,
+
+            // statements
+            .declaration_var => unreachable,
+
+            // literals
+            .literal_null => {
+                const register = self.getFreeRegister();
+
+                try self.emitLoadConstant(
+                    .load_const,
+                    register,
+                    Value.makeNull(),
+                );
+                return register;
+            },
+            .literal_bool => {
+                const register = self.getFreeRegister();
+
+                try self.emitLoadConstant(
+                    .load_const,
+                    register,
+                    Value.makeBool(node.data.bool_value),
+                );
+                return register;
+            },
+            .literal_int => {
+                const register = self.getFreeRegister();
+
+                try self.emitLoadConstant(
+                    .load_const,
+                    register,
+                    Value.makeInteger(node.data.int_value),
+                );
+                return register;
+            },
+            .literal_float => {
+                const register = self.getFreeRegister();
+
+                try self.emitLoadConstant(
+                    .load_const,
+                    register,
+                    Value.makeFloat(node.data.float_value),
+                );
+                return register;
+            },
+
+            // objects
+            .object_string => {
+                const register = self.getFreeRegister();
+                const string_data = self.ast.string_table.get(node.data.string_id);
+                try self.emitLoadConstant(
+                    .load_const,
+                    register,
+                    Value.fromObject(ObjString.copydata(string_data, self.garbage_collector)),
+                );
+                return register;
             },
 
             // access
@@ -210,6 +241,13 @@ pub const Compiler = struct {
         }
     }
 
+    inline fn getFreeRegister(self: *Compiler) RegisterId {
+        const next_free = self.next_free_reg;
+        self.next_free_reg += 1;
+        self.max_registers += 1;
+        return next_free;
+    }
+
     fn emitBinaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {
         const extra = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
         const lhs_reg = try self.compileExpression(extra.lhs);
@@ -281,9 +319,14 @@ const ast = as.frontend.ast;
 
 const AST = as.frontend.AST;
 const ErrorReporter = as.common.reporting.ErrorReporter;
+const GarbageCollector = as.common.memory.GarbageCollector;
+const Node = as.frontend.ast.Node;
+const ObjFunction = as.runtime.values.ObjFunction;
+const ObjModule = as.runtime.values.ObjModule;
+const ObjString = as.runtime.values.ObjString;
+const StringTable = as.common.StringTable;
 const TypePool = as.frontend.TypePool;
 const Value = as.runtime.values.Value;
-const Node = as.frontend.ast.Node;
 
 const NodeId = as.frontend.ast.NodeId;
 const StringId = as.common.StringId;

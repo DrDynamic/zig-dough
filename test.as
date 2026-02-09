@@ -1,6 +1,7 @@
-var a = "1
-2
-3";
+var a = 5;
+//var a = "1
+//2
+//3";
 print(a);
 // expect: 1
 // expect: 2

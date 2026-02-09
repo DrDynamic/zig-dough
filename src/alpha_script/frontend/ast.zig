@@ -84,14 +84,14 @@ pub const AST = struct {
     string_table: StringTable,
     is_valid: bool,
 
-    pub fn init(scanner: *const Scanner, allocator: Allocator) !AST {
+    pub fn init(scanner: *const Scanner, string_table: *StringTable, allocator: Allocator) !AST {
         const ast: AST = .{
             .allocator = allocator,
             .scanner = scanner,
             .roots = ArrayList(NodeId).init(allocator),
             .nodes = ArrayList(Node).init(allocator),
             .extra_data = ArrayList(u32).init(allocator),
-            .string_table = StringTable.init(allocator),
+            .string_table = string_table,
             .is_valid = true,
         };
 

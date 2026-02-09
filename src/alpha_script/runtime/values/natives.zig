@@ -4,6 +4,10 @@ pub const ObjNative = struct {
     header: ObjectHeader,
     name_id: StringId,
     function: NativeFn,
+
+    pub fn deinit(self: ObjNative, allocator: std.mem.Allocator) void {
+        allocator.destroy(self);
+    }
 };
 
 pub fn nativePrint(args: []Value) Value {

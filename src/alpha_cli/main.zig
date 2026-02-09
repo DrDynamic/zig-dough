@@ -66,7 +66,7 @@ pub fn main() !void {
 
     const start_options = try makeStartOptions(&argsIterator);
 
-    var chunk = as.compiler.Chunk.init(allocator);
+    var garbage_collector = as.common.memory.GarbageCollector.init(allocator);
     var vm = as.runtime.VirtualMachine.init(allocator);
 
     if (start_options.path) |path| {
@@ -90,12 +90,14 @@ pub fn main() !void {
 
         var scanner = try as.frontend.Scanner.init(token_stream, &error_reporter);
 
+        var string_table = as.common.StringTable.init(allocator);
+
         if (start_options.print_tokens) {
             try as.frontend.debug.TokenPrinter.printTokens(&scanner, stdout_terminal.writer);
             try scanner.reset();
         }
 
-        var ast = try as.frontend.AST.init(&scanner, allocator);
+        var ast = try as.frontend.AST.init(&scanner, &string_table, allocator);
         defer ast.deinit();
 
         var parser = as.frontend.Parser.init(
@@ -133,19 +135,19 @@ pub fn main() !void {
             try as.frontend.debug.ASTPrinter.printAST(&ast, &type_pool, &stdout_terminal);
         }
 
-        var compiler = as.compiler.Compiler.init(&ast, &chunk, &error_reporter, allocator);
+        var compiler = as.compiler.Compiler.init(&error_reporter, &garbage_collector, allocator);
 
         try registerNatives(&ast, &compiler, &vm);
-        compiler.compile() catch {
+        const module = compiler.compile(&ast) catch {
             std.process.exit(EXIT_CODE_COMPILER_ERROR);
         };
 
         if (start_options.print_asm) {
             const disassambler = as.frontend.debug.Disassambler.init(&stdout_terminal);
-            disassambler.disassambleChunk(&chunk, "debug");
+            disassambler.disassambleChunk(&module.function.chunk, "debug");
         }
 
-        vm.execute(&chunk) catch {
+        vm.execute(&module) catch {
             std.process.exit(EXIT_CODE_RUNTIME_ERROR);
         };
     } else {

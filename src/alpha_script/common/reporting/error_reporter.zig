@@ -99,7 +99,24 @@ pub const ErrorReporter = struct {
         });
     }
 
-    //    pub fn virtualMachineError(self: *const ErrorReporter, err: VirtualMachine.Error, message: []const u8) void {}
+    pub fn virtualMachineError(self: *const ErrorReporter, vm: *VirtualMachine, err: VirtualMachine.Error, message: []const u8) void {
+        const reporting_module: ReportingModule = .{ .VirtualMachine = vm };
+
+        self.error_output.reportError(.{
+            .reporting_module = reporting_module,
+            .reported_error = .{ .vm_error = err },
+            .error_code = self.calcErrorCode(reporting_module, @intFromError(err)),
+            .source_info = .{
+                .file_path = null,
+                // TODO get a reference to the token
+                .token = Token{
+                    .tag = .synthetic,
+                    .location = .{ .start = 0, .end = 0 },
+                },
+                .message = message,
+            },
+        });
+    }
 
     fn buildReport(self: *const ErrorReporter, module: ReportingModule, err: ReportedError, token_start: usize, token_end: usize, message: []const u8) ErrorReport {
         return .{

@@ -166,5 +166,7 @@ pub const natives = @import("./natives.zig");
 
 pub const ObjectType = objects.ObjectType;
 pub const ObjectHeader = objects.ObjectHeader;
-pub const ObjString = objects.ObjString;
+pub const ObjFunction = objects.ObjFunction;
+pub const ObjModule = objects.ObjModule;
 pub const ObjNative = natives.ObjNative;
+pub const ObjString = objects.ObjString;
