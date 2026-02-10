@@ -2,7 +2,7 @@ const FRAMES_MAX = 128;
 const STACK_MAX = FRAMES_MAX * 256;
 
 pub const CallFrame = struct {
-    function: *const ObjFunction,
+    function: *ObjFunction,
     ip: usize,
     base_pointer: usize,
 };
@@ -32,7 +32,7 @@ pub const VirtualMachine = struct {
             .frames = undefined,
             .frame_count = 0,
             .stack = undefined,
-            .stack_top = 0,
+            .stack_top = 1,
             .allocator = allocator,
             .garbage_collector = garbage_collector,
             .error_reporter = error_reporter,
@@ -43,7 +43,7 @@ pub const VirtualMachine = struct {
     }
 
     pub fn execute(self: *VirtualMachine, module: *const ObjModule) !void {
-        self.current_chunk = module.function.chunk;
+        self.current_chunk = &module.function.chunk;
         self.current_ip = 0;
         self.current_base = 0;
 
@@ -183,10 +183,10 @@ pub const VirtualMachine = struct {
                     }
                 },
 
-                .stack_return => {
+                .call_return => {
                     if (self.frame_count == 1) {
                         // return from main module
-                        _ = self.pop();
+                        self.stack_top = 0;
                         self.frame_count = 0;
                         return;
                     }
@@ -197,7 +197,7 @@ pub const VirtualMachine = struct {
         }
     }
 
-    inline fn call(self: *VirtualMachine, function: values.ObjFunction, arg_count: u8) Error!void {
+    inline fn call(self: *VirtualMachine, function: *ObjFunction, arg_count: u8) Error!void {
         if (arg_count < function.arity) {
             const error_string = std.fmt.allocPrint(self.allocator, "Expected {d} arguments but got {d}", .{ function.arity, arg_count }) catch {
                 @panic("Allocation failed!");

@@ -57,7 +57,7 @@ pub const SemanticAnalyzer = struct {
             .binary_greater,
             .binary_greater_equal,
             => try self.analyzeBinaryCompare(node_id),
-            .stack_return => {
+            .call_return => {
                 return self.analyze(node.data.node_id);
             },
             .call => {

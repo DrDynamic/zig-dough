@@ -46,9 +46,13 @@ pub const ObjModule = struct {
         return module;
     }
 
-    pub fn deinit(self: ObjModule, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *ObjModule, allocator: std.mem.Allocator) void {
         self.function.deinit(allocator);
         allocator.destroy(self);
+    }
+
+    pub fn asObject(self: *ObjModule) *ObjectHeader {
+        return &self.header;
     }
 };
 
@@ -56,7 +60,7 @@ pub const ObjFunction = struct {
     header: ObjectHeader,
     arity: u8,
     max_registers: u8,
-    chunk: *Chunk,
+    chunk: Chunk,
     name: ?ObjString,
 
     pub fn init(garbage_collector: *GarbageCollector) *ObjFunction {
@@ -68,12 +72,16 @@ pub const ObjFunction = struct {
         return function;
     }
 
-    pub fn deinit(self: ObjFunction, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *ObjFunction, allocator: std.mem.Allocator) void {
         self.chunk.deinit();
-        if (self.name) |name| {
-            name.deinit(allocator);
+        if (self.name != null) {
+            self.name.?.deinit(allocator);
         }
         allocator.destroy(self);
+    }
+
+    pub fn asObject(self: *ObjFunction) *ObjectHeader {
+        return &self.header;
     }
 };
 
@@ -81,14 +89,14 @@ pub const ObjString = struct {
     header: ObjectHeader,
     data: []const u8,
 
-    pub fn init(data: []const u8, garbage_collector: *GarbageCollector) ObjString {
+    pub fn init(data: []const u8, garbage_collector: *GarbageCollector) *ObjString {
         var string = garbage_collector.createObject(ObjString, .string);
         string.data = data;
 
         return string;
     }
 
-    pub fn copydata(data: []const u8, garbage_collector: *GarbageCollector) ObjString {
+    pub fn copydata(data: []const u8, garbage_collector: *GarbageCollector) *ObjString {
         const buffer = garbage_collector.allocator().alloc(u8, data.len) catch {
             // TODO runtime error?
             @panic("Failed to create String");
@@ -97,9 +105,13 @@ pub const ObjString = struct {
         return ObjString.init(buffer, garbage_collector);
     }
 
-    pub fn deinit(self: ObjString, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *ObjString, allocator: std.mem.Allocator) void {
         allocator.free(self.data);
         allocator.destroy(self);
+    }
+
+    pub fn asObject(self: *ObjString) *ObjectHeader {
+        return &self.header;
     }
 };
 

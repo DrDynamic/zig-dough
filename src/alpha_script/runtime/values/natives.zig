@@ -5,7 +5,7 @@ pub const ObjNative = struct {
     name_id: StringId,
     function: NativeFn,
 
-    pub fn deinit(self: ObjNative, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *ObjNative, allocator: std.mem.Allocator) void {
         allocator.destroy(self);
     }
 };

@@ -15,8 +15,7 @@ pub const OpCode = enum(u8) {
     less_equal, // REG_DEST REG_A REG_B // compare REG_A and REG_B and save the result in REG_DEST (true when REG_A <= REG_B, false otherwise)
     // interaction
     call, // REG_DEST REG_CALLEE ARGS_COUNT // call REG_CALLEE and store the return Value in REG_DEST (ARG_COUNT registers after REG_CALLEE are reserved for call arguments)
-    // stack,
-    stack_return,
+    call_return,
 };
 
 pub const Instruction = packed union {

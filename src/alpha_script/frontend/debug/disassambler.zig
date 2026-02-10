@@ -48,7 +48,7 @@ pub const Disassambler = struct {
             => self.printABC(instruction),
             // interaction
             .call => self.printCall(instruction),
-            .stack_return => self.printA(instruction),
+            .call_return => self.printA(instruction),
         }
     }
 

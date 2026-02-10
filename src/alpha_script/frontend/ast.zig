@@ -19,6 +19,7 @@ pub const NodeType = enum(u8) {
     // access
     identifier_expr,
     call,
+    call_return,
     node_list,
 
     // binary operations
@@ -32,9 +33,6 @@ pub const NodeType = enum(u8) {
     binary_less_equal,
     binary_greater,
     binary_greater_equal,
-
-    // stack actions
-    stack_return,
 };
 
 pub const VarDeclarationExtra = struct {
@@ -81,7 +79,7 @@ pub const AST = struct {
     roots: ArrayList(NodeId),
     nodes: ArrayList(Node),
     extra_data: ArrayList(u32),
-    string_table: StringTable,
+    string_table: *StringTable,
     is_valid: bool,
 
     pub fn init(scanner: *const Scanner, string_table: *StringTable, allocator: Allocator) !AST {

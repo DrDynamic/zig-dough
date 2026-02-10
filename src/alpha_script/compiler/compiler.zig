@@ -19,7 +19,6 @@ pub const Compiler = struct {
 
     allocator: std.mem.Allocator,
     garbage_collector: *GarbageCollector,
-    string_table: *const StringTable,
     error_reporter: *const ErrorReporter,
 
     ast: *const AST = undefined,
@@ -29,11 +28,10 @@ pub const Compiler = struct {
     scope_depth: i32,
     next_free_reg: RegisterId,
 
-    pub fn init(string_table: *const StringTable, error_reporter: *const ErrorReporter, garbage_collector: *GarbageCollector, allocator: std.mem.Allocator) Compiler {
+    pub fn init(error_reporter: *const ErrorReporter, garbage_collector: *GarbageCollector, allocator: std.mem.Allocator) Compiler {
         return .{
             .allocator = allocator,
             .garbage_collector = garbage_collector,
-            .string_table = string_table,
             .error_reporter = error_reporter,
             .locals = std.ArrayList(Local).init(allocator),
             .scope_depth = 0,
@@ -52,12 +50,12 @@ pub const Compiler = struct {
             try self.compileStatement(node_id);
         }
 
-        self.chunk.emit(.return_);
+        try self.chunk.emit(Instruction.fromABC(.call_return, 0, 0, 0));
 
         return ObjModule.init(function, self.garbage_collector);
     }
 
-    fn compileStatement(self: *Compiler, node_id: NodeId) void {
+    fn compileStatement(self: *Compiler, node_id: NodeId) !void {
         const node = self.ast.nodes.items[node_id];
 
         switch (node.tag) {
@@ -85,11 +83,9 @@ pub const Compiler = struct {
                     self.locals.items[local_index].is_initialized = true;
                     self.locals.items[local_index].reg_slot = init_reg;
                 }
-
-                return init_reg;
             },
             else => { // expression statements
-                _ = self.compileExpression(node_id);
+                _ = try self.compileExpression(node_id);
                 self.next_free_reg -= 1;
             },
         }
@@ -155,7 +151,7 @@ pub const Compiler = struct {
                 try self.emitLoadConstant(
                     .load_const,
                     register,
-                    Value.fromObject(ObjString.copydata(string_data, self.garbage_collector)),
+                    Value.fromObject(ObjString.copydata(string_data, self.garbage_collector).asObject()),
                 );
                 return register;
             },
@@ -223,9 +219,9 @@ pub const Compiler = struct {
             },
 
             // stack_actions
-            .stack_return => {
+            .call_return => {
                 const reg = try self.compileExpression(node.data.node_id);
-                try self.chunk.emit(Instruction.fromAB(.stack_return, reg, 0));
+                try self.chunk.emit(Instruction.fromAB(.call_return, reg, 0));
                 return 0;
             },
         };
@@ -244,7 +240,7 @@ pub const Compiler = struct {
     inline fn getFreeRegister(self: *Compiler) RegisterId {
         const next_free = self.next_free_reg;
         self.next_free_reg += 1;
-        self.max_registers += 1;
+        self.max_registers.* += 1;
         return next_free;
     }
 

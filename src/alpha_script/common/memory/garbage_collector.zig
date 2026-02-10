@@ -1,3 +1,15 @@
+const DebugLogs = struct {
+    alloc: bool = false,
+    stats: bool = false,
+    sweep: bool = false,
+    blacken: bool = false,
+    mark: bool = false,
+
+    pub fn any(self: *const DebugLogs) bool {
+        return self.alloc or self.stats or self.sweep or self.blacken or self.mark;
+    }
+};
+
 pub const GarbageCollector = struct {
     const GC_HEAP_GROW_FACTOR: usize = 2;
 
@@ -5,18 +17,8 @@ pub const GarbageCollector = struct {
 
     // Debugging props
     /// collect garage as often as possible
-    stress_mode: bool,
-    debug_logs: struct {
-        /// log allocations
-        alloc: bool,
-        stats: bool,
-        sweep: bool,
-        blacken: bool,
-
-        pub fn any(self: GarbageCollector.debug_logs) bool {
-            return self.alloc or self.stats or self.sweep or self.blacken;
-        }
-    },
+    stress_mode: bool = false,
+    debug_logs: DebugLogs,
 
     // Collector state
     bytes_allocated: usize,
@@ -40,23 +42,25 @@ pub const GarbageCollector = struct {
             .internal_allocator = _allocator,
             .bytes_allocated = 0,
             .next_gc = 1024 * 1024,
+            .debug_logs = .{},
+            .temp_objects = std.ArrayList(*ObjectHeader).init(_allocator),
         };
     }
 
-    pub fn createObject(self: *GarbageCollector, comptime T: type, tag: ObjectType) T {
-        var obj = self.allocator().create(T) catch {
+    pub fn createObject(self: *GarbageCollector, comptime T: type, tag: ObjectType) *T {
+        var obj: *T = self.allocator().create(T) catch {
             // TODO runtime error?
             @panic("Failed to create Object");
         };
 
-        obj.header.* = .{
+        obj.header = .{
             .tag = tag,
             .is_marked = false,
             .next = self.objects,
-            .nextGray = null,
+            .next_gray = null,
         };
 
-        self.objects = obj.header;
+        self.objects = &obj.header;
 
         if (self.debug_logs.alloc) {
             std.debug.print("   [init] {*} ({s}) {d} bytes\n", .{
@@ -77,7 +81,7 @@ pub const GarbageCollector = struct {
         self.compiler = compiler;
     }
 
-    pub fn collectGarbage(self: GarbageCollector) void {
+    pub fn collectGarbage(self: *GarbageCollector) void {
         var size_before: usize = undefined;
 
         if (self.debug_logs.any()) {
@@ -114,21 +118,21 @@ pub const GarbageCollector = struct {
                 //                std.debug.print("   # vm.frames: {d}\n", .{self.vm.frame_count});
                 //                std.debug.print("   # compiler.current_compiler: {}\n", .{self.compiler.current_compiler != null});
 
-                var objectCount: usize = 0;
-                var obj = self.doughObjects;
+                var object_count: usize = 0;
+                var obj = self.objects;
                 while (obj != null) {
-                    objectCount += 1;
+                    object_count += 1;
                     obj = obj.?.next;
                 }
-                std.debug.print("   # garbage_collector.objects: {d}\n", .{objectCount});
+                std.debug.print("   # garbage_collector.objects: {d}\n", .{object_count});
 
-                var grayCount: usize = 0;
+                var gray_count: usize = 0;
                 var gray = self.gray_objects;
                 while (gray != null) {
-                    grayCount += 1;
+                    gray_count += 1;
                     gray = gray.?.next;
                 }
-                std.debug.print("   # garbage_collector.gray_objects: {d}\n", .{grayCount});
+                std.debug.print("   # garbage_collector.gray_objects: {d}\n", .{gray_count});
             }
             std.debug.print("-- gc end\n", .{});
         }
@@ -146,7 +150,7 @@ pub const GarbageCollector = struct {
         const frame_count = self.vm.frame_count;
         for (0.., frames) |index, frame| {
             if (index >= frame_count) break;
-            self.markObject(frame.closure.asObject());
+            self.markObject(frame.function.asObject());
         }
     }
 
@@ -177,17 +181,17 @@ pub const GarbageCollector = struct {
                 if (previous) |p| {
                     p.next = maybe_object;
                 } else {
-                    self.doughObjects = maybe_object;
+                    self.objects = maybe_object;
                 }
 
                 if (self.debug_logs.sweep) {
-                    std.debug.print("   [sweep] {*} ({s}) '{}'\n", .{ unreached, @tagName(unreached.obj_type), unreached });
+                    std.debug.print("   [sweep] {*} ({s}) '{}'\n", .{ unreached, @tagName(unreached.tag), unreached });
                 }
 
                 if (unreached.tag == .string) {
                     // TODO remove interned ObjString
                 }
-                unreached.deinit();
+                unreached.deinit(self.allocator());
             }
         }
     }
@@ -196,7 +200,7 @@ pub const GarbageCollector = struct {
         if (self.debug_logs.blacken) {
             std.debug.print("   [blacken] {*} ({s}) '{}'\n", .{
                 object,
-                @tagName(object.obj_type),
+                @tagName(object.tag),
                 object,
             });
         }
@@ -206,43 +210,43 @@ pub const GarbageCollector = struct {
                 const function = object.as(ObjFunction);
                 self.markArray(function.chunk.constants.items);
             },
-            .Module => {
-                const module = object.as(objects.DoughModule);
+            .module => {
+                const module = object.as(ObjModule);
                 self.markObject(module.function.asObject());
             },
-            .NativeFunction => {},
-            .String => {},
+            .native_function => {},
+            .string => {},
         }
     }
 
-    fn markArray(self: *GarbageColletingAllocator, array: []values.Value) void {
+    fn markArray(self: *GarbageCollector, array: []Value) void {
         for (array) |value| {
             self.markValue(value);
         }
     }
 
-    fn markValue(self: *GarbageColletingAllocator, value: values.Value) void {
+    fn markValue(self: *GarbageCollector, value: Value) void {
         if (value.isObject()) {
             self.markObject(value.toObject());
         }
     }
 
-    fn markObject(self: *GarbageColletingAllocator, object: ?*objects.DoughObject) void {
-        const assured_object = object orelse return;
-        if (assured_object.is_marked) return;
+    fn markObject(self: *GarbageCollector, maybe_object: ?*ObjectHeader) void {
+        const object = maybe_object orelse return;
+        if (object.is_marked) return;
 
-        if (config.debug_log_gc_mark) {
+        if (self.debug_logs.mark) {
             std.debug.print("   [mark] {*} ({s}) '{}'\n", .{
-                assured_object,
-                @tagName(assured_object.obj_type),
-                assured_object,
+                object,
+                @tagName(object.tag),
+                object,
             });
         }
 
-        assured_object.is_marked = true;
+        object.is_marked = true;
 
-        assured_object.nextGray = self.grayObjects;
-        self.grayObjects = assured_object;
+        object.next_gray = self.gray_objects;
+        self.gray_objects = object;
     }
 
     // Allocator Interface
@@ -409,6 +413,7 @@ const as = @import("as");
 const Compiler = as.compiler.Compiler;
 const ObjectHeader = as.runtime.values.ObjectHeader;
 const ObjFunction = as.runtime.values.ObjFunction;
+const ObjModule = as.runtime.values.ObjModule;
 const Value = as.runtime.values.Value;
 const VirtualMachine = as.runtime.VirtualMachine;
 

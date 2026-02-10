@@ -84,7 +84,7 @@ pub const ASTPrinter = struct {
                 self.terminal.print("\n", .{});
             },
             //
-            .stack_return => {
+            .call_return => {
                 self.terminal.print("\n", .{});
             },
         }
@@ -129,7 +129,7 @@ pub const ASTPrinter = struct {
                 const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationExtra);
                 try self.printNode(data.init_value, prefix, true);
             },
-            .stack_return => {
+            .call_return => {
                 try self.printNode(node.data.node_id, prefix, true);
             },
             // access

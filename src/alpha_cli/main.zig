@@ -66,13 +66,7 @@ pub fn main() !void {
 
     const start_options = try makeStartOptions(&argsIterator);
 
-    var garbage_collector = as.common.memory.GarbageCollector.init(allocator);
-    var vm = as.runtime.VirtualMachine.init(allocator);
-
     if (start_options.path) |path| {
-        const source = try getFile(path, allocator);
-        defer allocator.free(source);
-
         const output: as.common.reporting.ErrorOutput = switch (start_options.error_output) {
             .pretty => case: {
                 var pretty_output = as.common.reporting.outputs.PrettyErrorOutput.init(&stderr_terminal);
@@ -86,8 +80,13 @@ pub fn main() !void {
 
         const error_reporter = as.common.reporting.ErrorReporter.init(output);
 
-        const token_stream = as.frontend.TokenStream.init(path, source, error_reporter);
+        var garbage_collector = as.common.memory.GarbageCollector.init(allocator);
+        var vm = as.runtime.VirtualMachine.init(&error_reporter, &garbage_collector, allocator);
 
+        const source = try getFile(path, allocator);
+        defer allocator.free(source);
+
+        const token_stream = as.frontend.TokenStream.init(path, source, error_reporter);
         var scanner = try as.frontend.Scanner.init(token_stream, &error_reporter);
 
         var string_table = as.common.StringTable.init(allocator);
@@ -147,7 +146,7 @@ pub fn main() !void {
             disassambler.disassambleChunk(&module.function.chunk, "debug");
         }
 
-        vm.execute(&module) catch {
+        vm.execute(module) catch {
             std.process.exit(EXIT_CODE_RUNTIME_ERROR);
         };
     } else {
@@ -169,7 +168,7 @@ fn registerNatives(ast: *as.frontend.AST, compiler: *as.compiler.Compiler, vm: *
 
     const native_print = try vm.allocator.create(as.runtime.values.ObjNative);
     native_print.* = .{
-        .header = .{ .tag = .native_function, .is_marked = false, .next = null },
+        .header = .{ .tag = .native_function, .is_marked = false, .next = null, .next_gray = null },
         .name_id = name_id,
         .function = as.runtime.values.natives.nativePrint,
     };

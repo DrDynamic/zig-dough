@@ -113,8 +113,8 @@ pub const ErrorReporter = struct {
                     .tag = .synthetic,
                     .location = .{ .start = 0, .end = 0 },
                 },
-                .message = message,
             },
+            .message = message,
         });
     }
 
