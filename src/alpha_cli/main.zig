@@ -146,8 +146,9 @@ pub fn main() !void {
             disassambler.disassambleChunk(&module.function.chunk, "debug");
         }
 
-        vm.execute(module) catch {
-            std.process.exit(EXIT_CODE_RUNTIME_ERROR);
+        vm.execute(module) catch |err| {
+            return err;
+            //            std.process.exit(EXIT_CODE_RUNTIME_ERROR);
         };
     } else {
         stderr_terminal.print("no file specified!\n", .{});

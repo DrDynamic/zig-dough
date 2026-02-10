@@ -71,7 +71,7 @@ pub const Compiler = struct {
                     try self.emitLoadConstant(
                         .load_const,
                         init_reg,
-                        Value.makeNull(),
+                        Value.makeUninitialized(),
                     );
                     try self.addLocal(data.name_id, init_reg, true);
                 } else {
@@ -104,7 +104,7 @@ pub const Compiler = struct {
 
             // literals
             .literal_null => {
-                const register = self.getFreeRegister();
+                const register = self.allocateRegister();
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -114,7 +114,7 @@ pub const Compiler = struct {
                 return register;
             },
             .literal_bool => {
-                const register = self.getFreeRegister();
+                const register = self.allocateRegister();
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -124,7 +124,7 @@ pub const Compiler = struct {
                 return register;
             },
             .literal_int => {
-                const register = self.getFreeRegister();
+                const register = self.allocateRegister();
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -134,7 +134,7 @@ pub const Compiler = struct {
                 return register;
             },
             .literal_float => {
-                const register = self.getFreeRegister();
+                const register = self.allocateRegister();
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -146,13 +146,14 @@ pub const Compiler = struct {
 
             // objects
             .object_string => {
-                const register = self.getFreeRegister();
+                const register = self.allocateRegister();
                 const string_data = self.ast.string_table.get(node.data.string_id);
                 try self.emitLoadConstant(
                     .load_const,
                     register,
                     Value.fromObject(ObjString.copydata(string_data, self.garbage_collector).asObject()),
                 );
+
                 return register;
             },
 
@@ -237,23 +238,24 @@ pub const Compiler = struct {
         }
     }
 
-    inline fn getFreeRegister(self: *Compiler) RegisterId {
+    inline fn allocateRegister(self: *Compiler) RegisterId {
         const next_free = self.next_free_reg;
         self.next_free_reg += 1;
-        self.max_registers.* += 1;
+        self.max_registers.* = @max(self.next_free_reg, self.max_registers.*);
         return next_free;
     }
 
     fn emitBinaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {
         const extra = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
-        const lhs_reg = try self.compileExpression(extra.lhs);
-        const rhs_reg = try self.compileExpression(extra.rhs);
+        const reg_lhs = try self.compileExpression(extra.lhs);
+        const reg_rhs = try self.compileExpression(extra.rhs);
+        const reg_dest = self.allocateRegister();
 
-        try self.chunk.emit(Instruction.fromABC(opcode, lhs_reg, lhs_reg, rhs_reg));
+        try self.chunk.emit(Instruction.fromABC(opcode, reg_dest, reg_lhs, reg_rhs));
 
         // free rhs_reg
         self.next_free_reg -= 1;
-        return lhs_reg;
+        return reg_dest;
     }
 
     fn emitLoadConstant(self: *Compiler, opcode: OpCode, register: RegisterId, constant: Value) !void {

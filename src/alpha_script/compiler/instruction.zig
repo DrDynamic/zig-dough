@@ -73,6 +73,7 @@ pub const Chunk = struct {
     }
 
     pub fn addConstant(self: *Chunk, value: Value) !ConstantId {
+        // TODO don't add the same Value multiple times. return the ConstantId of the Vialue that already exists in constants
         try self.constants.append(value);
         const index = self.constants.items.len - 1;
         if (index > std.math.maxInt(u16)) {
