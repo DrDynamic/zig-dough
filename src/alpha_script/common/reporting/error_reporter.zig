@@ -67,7 +67,7 @@ pub const ErrorReporter = struct {
         });
     }
 
-    pub fn semanticAnalyserError(self: *const ErrorReporter, semantic_analyser: *const SemanticAnalyser, err: SemanticAnalyser.Error, node: Node, message: []const u8) void {
+    pub fn semanticAnalyserError(self: *ErrorReporter, semantic_analyser: *const SemanticAnalyser, err: SemanticAnalyser.Error, node: Node, message: []const u8) void {
         const reporting_module: ReportingModule = .{ .SemanticAnalyser = semantic_analyser };
 
         self.error_output.reportError(.{
@@ -76,7 +76,7 @@ pub const ErrorReporter = struct {
             .error_code = self.calcErrorCode(reporting_module, @intFromError(err)),
             .source_info = .{
                 .file_path = semantic_analyser.ast.scanner.token_stream.getFilePath(),
-                .token = semantic_analyser.ast.scanner.token_stream.scanPosition(node.token_position),
+                .token = semantic_analyser.ast.scanner.token_stream.scanPosition(node.token_position) catch return,
             },
             .message = message,
         });

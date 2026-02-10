@@ -78,7 +78,7 @@ pub fn main() !void {
             },
         };
 
-        const error_reporter = as.common.reporting.ErrorReporter.init(output);
+        var error_reporter = as.common.reporting.ErrorReporter.init(output);
 
         var garbage_collector = as.common.memory.GarbageCollector.init(allocator);
         var vm = as.runtime.VirtualMachine.init(&error_reporter, &garbage_collector, allocator);
@@ -87,7 +87,7 @@ pub fn main() !void {
         defer allocator.free(source);
 
         const token_stream = as.frontend.TokenStream.init(path, source, error_reporter);
-        var scanner = try as.frontend.Scanner.init(token_stream, &error_reporter);
+        var scanner = as.frontend.Scanner.init(token_stream, &error_reporter) catch return;
 
         var string_table = as.common.StringTable.init(allocator);
 
@@ -123,7 +123,7 @@ pub fn main() !void {
         defer semantic_analyzer.deinit();
 
         for (ast.getRoots()) |root_node_id| {
-            _ = try semantic_analyzer.analyze(root_node_id);
+            _ = semantic_analyzer.analyze(root_node_id) catch {};
         }
 
         if (!ast.is_valid) {

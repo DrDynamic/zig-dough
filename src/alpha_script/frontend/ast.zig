@@ -75,14 +75,14 @@ pub const Node = struct {
 pub const AST = struct {
     allocator: Allocator,
 
-    scanner: *const Scanner,
+    scanner: *Scanner,
     roots: ArrayList(NodeId),
     nodes: ArrayList(Node),
     extra_data: ArrayList(u32),
     string_table: *StringTable,
     is_valid: bool,
 
-    pub fn init(scanner: *const Scanner, string_table: *StringTable, allocator: Allocator) !AST {
+    pub fn init(scanner: *Scanner, string_table: *StringTable, allocator: Allocator) !AST {
         const ast: AST = .{
             .allocator = allocator,
             .scanner = scanner,

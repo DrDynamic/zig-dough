@@ -10,10 +10,10 @@ pub const SemanticAnalyzer = struct {
     allocator: std.mem.Allocator,
     ast: *AST,
     type_pool: *TypePool,
-    error_reporter: *const ErrorReporter,
+    error_reporter: *ErrorReporter,
     symbol_table: SymbolTable,
 
-    pub fn init(allocator: std.mem.Allocator, ast_: *AST, type_pool: *TypePool, error_reporter: *const ErrorReporter) !SemanticAnalyzer {
+    pub fn init(allocator: std.mem.Allocator, ast_: *AST, type_pool: *TypePool, error_reporter: *ErrorReporter) !SemanticAnalyzer {
         return .{
             .allocator = allocator,
             .ast = ast_,
@@ -140,6 +140,7 @@ pub const SemanticAnalyzer = struct {
             return TypePool.FLOAT;
         }
         // For simplicity, assume binary operations return the same type as operands
+        self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, node, "Incompatible types");
         return error.IncompatibleTypes;
     }
 };
