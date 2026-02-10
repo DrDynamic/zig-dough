@@ -33,6 +33,20 @@ pub const ObjectHeader = struct {
             .string => self.as(ObjString).deinit(allocator),
         }
     }
+
+    pub fn format(
+        self: *ObjectHeader,
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = fmt;
+        _ = options;
+        switch (self.tag) {
+            .string => try writer.print("{s}", .{self.as(ObjString).data}),
+            else => try writer.print("<object {s}>", .{@tagName(self.tag)}),
+        }
+    }
 };
 
 pub const ObjModule = struct {

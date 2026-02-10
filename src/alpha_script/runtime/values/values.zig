@@ -32,6 +32,7 @@ pub const UnionValue = union(ValueType) {
         if (both_numeric) {
             const a = self.castToF64() catch return false;
             const b = other.castToF64() catch return false;
+
             return a == b;
         }
 
@@ -50,15 +51,13 @@ pub const UnionValue = union(ValueType) {
         options: std.fmt.FormatOptions,
         writer: anytype,
     ) !void {
-        _ = fmt;
-        _ = options;
         switch (self) {
             .uninitialized => try writer.print("uninitialized", .{}),
             .null => try writer.print("null", .{}),
             .bool => try writer.print("{s}", .{if (self.bool) "true" else "false"}),
             .integer => try writer.print("{d}", .{self.integer}),
             .float => try writer.print("{d}", .{self.float}),
-            .object => try writer.print("<object>", .{}),
+            .object => try self.object.format(fmt, options, writer),
         }
     }
 

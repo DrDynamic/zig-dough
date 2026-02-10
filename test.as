@@ -1,2 +1,6 @@
-var a:String = "Lorem";
-var b:String = a + 42; // expect compile error: Error at '42': mixing types is not allowed
+var nan = 0/0;
+
+// NaN is not equal to self.
+print(nan == nan); // expect: false
+print("-----");
+print(nan != nan); // expect: true
