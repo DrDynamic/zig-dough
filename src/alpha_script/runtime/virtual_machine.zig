@@ -158,6 +158,22 @@ pub const VirtualMachine = struct {
 
                     stack[reg_a] = Value.makeBool(float_b <= float_c);
                 },
+                // string
+                .string_concat => {
+                    const reg_a = base + instruction.abc.b;
+                    const str_b = stack[base + instruction.abc.b].toObject().as(ObjString);
+                    const str_c = stack[base + instruction.abc.c].toObject().as(ObjString);
+
+                    var result = self.garbage_collector.allocator().alloc(u8, str_b.data.len + str_c.data.len) catch {
+                        @panic("alloc failed!");
+                    };
+
+                    @memcpy(result[0..str_b.data.len], str_b.data);
+                    @memcpy(result[str_b.data.len..], str_c.data);
+
+                    const str_result = ObjString.init(result, self.garbage_collector);
+                    stack[reg_a] = Value.fromObject(str_result.asObject());
+                },
                 // interaction
                 .call => {
                     const reg_dest = base + instruction.abc.a;
@@ -268,4 +284,5 @@ const GarbageCollector = as.common.memory.GarbageCollector;
 const Instruction = as.compiler.Instruction;
 const ObjFunction = as.runtime.values.ObjFunction;
 const ObjModule = as.runtime.values.ObjModule;
+const ObjString = as.runtime.values.ObjString;
 const Value = as.runtime.values.Value;

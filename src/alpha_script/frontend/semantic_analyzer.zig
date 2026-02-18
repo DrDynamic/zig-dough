@@ -61,7 +61,21 @@ pub const SemanticAnalyzer = struct {
                 return self.analyze(node.data.node_id);
             },
             .call => {
-                return TypePool.UNRESOLVED;
+                const extra = self.ast.getExtra(node.data.extra_id, ast.CallExtra);
+                const type_callee = self.analyze(extra.callee);
+
+                var arg_list = extra.args_start;
+                for (0..extra.args_count) |_| {
+                    const list_node = self.ast.nodes.items[arg_list];
+                    const list_extra = self.ast.getExtra(list_node.data.extra_id, ast.NodeListExtra);
+
+                    // TODO compare argument types with callee parameter list
+                    _ = try self.analyze(list_extra.node_id);
+
+                    arg_list = list_extra.next;
+                }
+
+                return type_callee;
             },
             else => {
                 std.debug.print("Unhandled node: {s}\n", .{@tagName(node.tag)});

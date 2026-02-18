@@ -1,9 +1,5 @@
-var nan = 0/0;
+print("(" + "" + ")");   // expect: ()
+//print("a string"); // expect: a string
 
-// NaN is not equal to self.
-print(nan == nan); // expect: false
-print("-----");
-print(nan != nan); // expect: true
-print(nan > 5); // expect: false
-print(nan < 5); // expect: false
-print(".....");
+// Non-ASCII.
+//print("A~¶Þॐஃ🍕"); // expect: A~¶Þॐஃ🍕

@@ -48,7 +48,10 @@ pub const ASTPrinter = struct {
             .literal_bool => self.terminal.print(": {}\n", .{node.data.bool_value}),
 
             // TODO print the actual string
-            .object_string => self.terminal.print(": string\n", .{}),
+            .object_string => {
+                const str = self.ast.string_table.get(node.data.string_id);
+                self.terminal.print(": '{s}'\n", .{str});
+            },
             .binary_add,
             .binary_sub,
             .binary_mul,

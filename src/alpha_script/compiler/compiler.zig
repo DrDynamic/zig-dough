@@ -191,7 +191,17 @@ pub const Compiler = struct {
             },
 
             // binary operations
-            .binary_add => self.emitBinaryOp(.add, &node),
+            .binary_add => {
+                const extra = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
+                const node_lhs = self.ast.nodes.items[extra.lhs];
+                const node_rhs = self.ast.nodes.items[extra.rhs];
+
+                if (node_lhs.resolved_type_id == TypePool.STRING and node_rhs.resolved_type_id == TypePool.STRING) {
+                    return self.emitBinaryOp(.string_concat, &node);
+                }
+
+                return self.emitBinaryOp(.add, &node);
+            },
             .binary_sub => self.emitBinaryOp(.sub, &node),
             .binary_mul => self.emitBinaryOp(.multiply, &node),
             .binary_div => self.emitBinaryOp(.divide, &node),
@@ -234,6 +244,7 @@ pub const Compiler = struct {
         const snapshot = self.next_free_reg;
 
         const reg_lhs = try self.compileExpression(extra.lhs);
+        _ = self.allocateRegister();
         const reg_rhs = try self.compileExpression(extra.rhs);
 
         const reg_dest = if (reg_lhs < snapshot) snapshot else reg_lhs;

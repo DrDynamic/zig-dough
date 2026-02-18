@@ -45,6 +45,8 @@ pub const Disassambler = struct {
             .greater_equal,
             .less,
             .less_equal,
+            //string
+            .string_concat,
             => self.printABC(instruction),
             // interaction
             .call => self.printCall(instruction),
