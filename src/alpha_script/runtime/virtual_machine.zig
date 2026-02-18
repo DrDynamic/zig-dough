@@ -52,7 +52,7 @@ pub const VirtualMachine = struct {
     }
 
     fn run(self: *VirtualMachine) !void {
-        const debug = true;
+        const debug = false;
 
         var ip = self.current_ip;
         const chunk = self.current_chunk;

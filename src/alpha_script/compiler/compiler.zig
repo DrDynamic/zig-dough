@@ -75,18 +75,22 @@ pub const Compiler = struct {
                     );
                     try self.addLocal(data.name_id, init_reg, true);
                 } else {
-                    // create a temporary local, so compileExpression can reference the variable
+                    // create the local before initializing it, so compileExpression can reference the variable
                     const local_index = self.locals.items.len;
                     try self.addLocal(data.name_id, self.next_free_reg, false);
 
-                    init_reg = try self.compileExpression(data.init_value);
+                    try self.compileExpressionEnsureRegister(data.init_value, self.next_free_reg);
+                    _ = self.allocateRegister();
+
                     self.locals.items[local_index].is_initialized = true;
-                    self.locals.items[local_index].reg_slot = init_reg;
                 }
             },
             else => { // expression statements
+                const snapshot = self.next_free_reg;
+
                 _ = try self.compileExpression(node_id);
-                self.next_free_reg -= 1;
+
+                self.next_free_reg = snapshot;
             },
         }
     }
@@ -167,8 +171,7 @@ pub const Compiler = struct {
             .call => {
                 const data = self.ast.getExtra(node.data.extra_id, ast.CallExtra);
 
-                const reg_callee = self.next_free_reg;
-                self.next_free_reg += 1;
+                const reg_callee = self.allocateRegister();
 
                 try self.compileExpressionEnsureRegister(data.callee, reg_callee);
 
@@ -188,36 +191,16 @@ pub const Compiler = struct {
             },
 
             // binary operations
-            .binary_add => {
-                return self.emitBinaryOp(.add, &node);
-            },
-            .binary_sub => {
-                return self.emitBinaryOp(.sub, &node);
-            },
-            .binary_mul => {
-                return self.emitBinaryOp(.multiply, &node);
-            },
-            .binary_div => {
-                return self.emitBinaryOp(.divide, &node);
-            },
-            .binary_equal => {
-                return self.emitBinaryOp(.equal, &node);
-            },
-            .binary_not_equal => {
-                return self.emitBinaryOp(.not_equal, &node);
-            },
-            .binary_less => {
-                return self.emitBinaryOp(.less, &node);
-            },
-            .binary_less_equal => {
-                return self.emitBinaryOp(.less_equal, &node);
-            },
-            .binary_greater => {
-                return self.emitBinaryOp(.greater, &node);
-            },
-            .binary_greater_equal => {
-                return self.emitBinaryOp(.greater_equal, &node);
-            },
+            .binary_add => self.emitBinaryOp(.add, &node),
+            .binary_sub => self.emitBinaryOp(.sub, &node),
+            .binary_mul => self.emitBinaryOp(.multiply, &node),
+            .binary_div => self.emitBinaryOp(.divide, &node),
+            .binary_equal => self.emitBinaryOp(.equal, &node),
+            .binary_not_equal => self.emitBinaryOp(.not_equal, &node),
+            .binary_less => self.emitBinaryOp(.less, &node),
+            .binary_less_equal => self.emitBinaryOp(.less_equal, &node),
+            .binary_greater => self.emitBinaryOp(.greater, &node),
+            .binary_greater_equal => self.emitBinaryOp(.greater_equal, &node),
 
             // stack_actions
             .call_return => {
@@ -247,14 +230,18 @@ pub const Compiler = struct {
 
     fn emitBinaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {
         const extra = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
+
+        const snapshot = self.next_free_reg;
+
         const reg_lhs = try self.compileExpression(extra.lhs);
         const reg_rhs = try self.compileExpression(extra.rhs);
-        const reg_dest = self.allocateRegister();
+
+        const reg_dest = if (reg_lhs < snapshot) snapshot else reg_lhs;
 
         try self.chunk.emit(Instruction.fromABC(opcode, reg_dest, reg_lhs, reg_rhs));
 
-        // free rhs_reg
-        self.next_free_reg -= 1;
+        // free all regs
+        self.next_free_reg = snapshot;
         return reg_dest;
     }
 
