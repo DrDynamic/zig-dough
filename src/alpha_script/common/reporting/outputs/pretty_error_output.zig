@@ -29,8 +29,28 @@ pub const PrettyErrorOutput = struct {
 
     fn printError(ptr: *anyopaque, report: ErrorReport) void {
         const self: *PrettyErrorOutput = @ptrCast(@alignCast(ptr));
+
+        if (report.source_info.node) |_| {
+            self.printNode(&report) catch {
+                self.printToken(&report);
+            };
+        } else {
+            self.printToken(&report);
+        }
+    }
+
+    fn printToken(self: *const PrettyErrorOutput, report: *const ErrorReport) void {
         const source = source_helper.sourceFromReportingModule(report.reporting_module);
-        const location = source_helper.calcSourceLocation(source, report.source_info.token);
+        const location = source_helper.calcTokenLocation(source, report.source_info.token);
+
+        self.printMessage(report.error_code, report.source_info, location, report.message);
+        self.printMarkedSource(source, location);
+    }
+
+    fn printNode(self: *const PrettyErrorOutput, report: *const ErrorReport) !void {
+        const source = source_helper.sourceFromReportingModule(report.reporting_module);
+        const ast = source_helper.astFromReportingModule(report.reporting_module);
+        const location = try source_helper.calcNodeLocation(source, report.source_info.node.?, ast.?);
 
         self.printMessage(report.error_code, report.source_info, location, report.message);
         self.printMarkedSource(source, location);
@@ -43,9 +63,15 @@ pub const PrettyErrorOutput = struct {
 
         // print marker (^~~~)
         self.terminal.setStyle(marker_options);
-        for (0..location.column - 1) |_| self.terminal.print(" ", .{});
-        self.terminal.print("{s}", .{"^"});
-        for (0..@max(location.width, 1) - 1) |_| self.terminal.print("~", .{});
+        for (1..location.marker_end) |index| {
+            if (index < location.marker_start) {
+                self.terminal.print(" ", .{});
+            } else if (index == location.column) {
+                self.terminal.print("^", .{});
+            } else {
+                self.terminal.print("~", .{});
+            }
+        }
         self.terminal.printWithOptions("\n", .{}, Terminal.reset_options);
     }
 

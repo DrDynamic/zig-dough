@@ -78,8 +78,8 @@ pub const SymbolTable = struct {
     /// Returns null if the symbol is not found
     pub fn lookup(self: *SymbolTable, name_id: StringId) ?*Symbol {
         var scope: ?*Scope = self.current_scope;
-        while (scope) |s| : (scope = scope.parent) {
-            if (s.symbols.contains(name_id)) |symbol| return symbol;
+        while (scope) |s| : (scope = scope.?.*.parent) {
+            if (s.symbols.contains(name_id)) return s.symbols.getPtr(name_id).?;
         }
         return null;
     }

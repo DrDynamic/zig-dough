@@ -21,7 +21,7 @@ pub const Compiler = struct {
     garbage_collector: *GarbageCollector,
     error_reporter: *const ErrorReporter,
 
-    ast: *const AST = undefined,
+    ast: *AST = undefined,
     max_registers: *u8 = undefined,
     chunk: *Chunk = undefined,
     locals: std.ArrayList(Local),
@@ -39,7 +39,7 @@ pub const Compiler = struct {
         };
     }
 
-    pub fn compile(self: *Compiler, _ast: *const AST) !*ObjModule {
+    pub fn compile(self: *Compiler, _ast: *AST) !*ObjModule {
         self.ast = _ast;
 
         var function = ObjFunction.init(self.garbage_collector);

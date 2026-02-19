@@ -17,6 +17,7 @@ pub const ReportedError = union {
 pub const SourceInfo = struct {
     file_path: ?[]const u8,
     token: Token,
+    node: ?Node,
 };
 
 pub const ErrorReport = struct {
@@ -44,10 +45,17 @@ pub const ErrorReporter = struct {
             .reporting_module = reporting_module,
             .reported_error = .{ .scanner_error = err },
             .error_code = self.calcErrorCode(reporting_module, @intFromError(err)),
-            .source_info = .{ .file_path = token_stream.getFilePath(), .token = .{ .tag = .comptime_corrupt, .location = .{
-                .start = token_start,
-                .end = token_end,
-            } } },
+            .source_info = .{
+                .file_path = token_stream.getFilePath(),
+                .token = .{
+                    .tag = .comptime_corrupt,
+                    .location = .{
+                        .start = token_start,
+                        .end = token_end,
+                    },
+                },
+                .node = null,
+            },
             .message = message,
         });
     }
@@ -62,6 +70,7 @@ pub const ErrorReporter = struct {
             .source_info = .{
                 .file_path = parser.scanner.token_stream.getFilePath(),
                 .token = token,
+                .node = null,
             },
             .message = message,
         });
@@ -77,6 +86,7 @@ pub const ErrorReporter = struct {
             .source_info = .{
                 .file_path = semantic_analyser.ast.scanner.token_stream.getFilePath(),
                 .token = semantic_analyser.ast.scanner.token_stream.scanPosition(node.token_position) catch return,
+                .node = node,
             },
             .message = message,
         });
@@ -94,6 +104,7 @@ pub const ErrorReporter = struct {
             .source_info = .{
                 .file_path = compiler.ast.scanner.token_stream.getFilePath(),
                 .token = scanner.token_stream.scanPosition(node.token_position) catch unreachable,
+                .node = node,
             },
             .message = message,
         });
@@ -113,6 +124,7 @@ pub const ErrorReporter = struct {
                     .tag = .synthetic,
                     .location = .{ .start = 0, .end = 0 },
                 },
+                .node = null,
             },
             .message = message,
         });

@@ -1,5 +1,2 @@
-print("(" + "" + ")");   // expect: ()
-//print("a string"); // expect: a string
-
-// Non-ASCII.
-//print("A~¶Þॐஃ🍕"); // expect: A~¶Þॐஃ🍕
+var a:String = "Lorem";
+var b:String = a + 42; // expect compile error: Error at '42': mixing types is not allowed

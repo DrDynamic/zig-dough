@@ -5,34 +5,34 @@ pub const NodeType = enum(u8) {
     comptime_uninitialized,
 
     // literals
-    literal_null,
-    literal_bool,
-    literal_int,
-    literal_float,
+    literal_null, // none
+    literal_bool, // none
+    literal_int, // int_value
+    literal_float, // float_value
 
     // objects
-    object_string,
+    object_string, // string_id
 
     // declarations
-    declaration_var,
+    declaration_var, // VarDeclarationExtra
 
     // access
-    identifier_expr,
-    call,
+    identifier_expr, // string_id
+    call, // CallExtra
     call_return,
-    node_list,
+    node_list, // NodeListExtra
 
     // binary operations
-    binary_add,
-    binary_sub,
-    binary_mul,
-    binary_div,
-    binary_equal,
-    binary_not_equal,
-    binary_less,
-    binary_less_equal,
-    binary_greater,
-    binary_greater_equal,
+    binary_add, // BinaryOpExtra
+    binary_sub, // BinaryOpExtra
+    binary_mul, // BinaryOpExtra
+    binary_div, // BinaryOpExtra
+    binary_equal, // BinaryOpExtra
+    binary_not_equal, // BinaryOpExtra
+    binary_less, // BinaryOpExtra
+    binary_less_equal, // BinaryOpExtra
+    binary_greater, // BinaryOpExtra
+    binary_greater_equal, // BinaryOpExtra
 };
 
 pub const VarDeclarationExtra = struct {

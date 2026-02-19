@@ -5,6 +5,7 @@ pub const SemanticAnalyzer = struct {
         TypeMismatch,
         IncompatibleTypes,
         RedeclarationError,
+        UnknownIdentifier,
     };
 
     allocator: std.mem.Allocator,
@@ -43,7 +44,15 @@ pub const SemanticAnalyzer = struct {
             // declarations
             .declaration_var => try self.analyzeDeclarationVar(node_id),
             // access
-            .identifier_expr => TypePool.UNRESOLVED, // TODO: implement identifier resolution
+            .identifier_expr => |_| case: {
+                const maybe_symbol = self.symbol_table.lookup(node.data.string_id);
+                if (maybe_symbol) |symbol| {
+                    break :case symbol.type_id;
+                }
+
+                self.error_reporter.semanticAnalyserError(self, Error.UnknownIdentifier, node.*, "unknown identifier");
+                return Error.UnknownIdentifier;
+            },
             // binary operations
             .binary_add,
             .binary_sub,
@@ -57,12 +66,12 @@ pub const SemanticAnalyzer = struct {
             .binary_greater,
             .binary_greater_equal,
             => try self.analyzeBinaryCompare(node_id),
-            .call_return => {
-                return self.analyze(node.data.node_id);
+            .call_return => |_| case: {
+                break :case try self.analyze(node.data.node_id);
             },
-            .call => {
+            .call => |_| case: {
                 const extra = self.ast.getExtra(node.data.extra_id, ast.CallExtra);
-                const type_callee = self.analyze(extra.callee);
+                const type_callee = try self.analyze(extra.callee);
 
                 var arg_list = extra.args_start;
                 for (0..extra.args_count) |_| {
@@ -75,9 +84,9 @@ pub const SemanticAnalyzer = struct {
                     arg_list = list_extra.next;
                 }
 
-                return type_callee;
+                break :case type_callee;
             },
-            else => {
+            else => |_| {
                 std.debug.print("Unhandled node: {s}\n", .{@tagName(node.tag)});
                 return error.UnhandledNodeType;
             },
@@ -101,6 +110,7 @@ pub const SemanticAnalyzer = struct {
             }
         } else {
             // TODO is there is no explicit type, there needs to be an initializer
+
         }
 
         // add variable to symbol table
