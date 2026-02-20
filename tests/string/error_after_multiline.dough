@@ -4,4 +4,4 @@ var a = "1
 3
 ";
 
-err; // expect compile error: Error at 'err': Undefined identifier.
+err; // expect compile error: Error at 'err': undefined identifier

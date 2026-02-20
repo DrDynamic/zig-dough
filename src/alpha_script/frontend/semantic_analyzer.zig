@@ -6,6 +6,7 @@ pub const SemanticAnalyzer = struct {
         IncompatibleTypes,
         RedeclarationError,
         UnknownIdentifier,
+        UnsupportedOperand,
     };
 
     allocator: std.mem.Allocator,
@@ -14,10 +15,10 @@ pub const SemanticAnalyzer = struct {
     error_reporter: *ErrorReporter,
     symbol_table: SymbolTable,
 
-    pub fn init(allocator: std.mem.Allocator, ast_: *AST, type_pool: *TypePool, error_reporter: *ErrorReporter) !SemanticAnalyzer {
+    pub fn init(allocator: std.mem.Allocator, type_pool: *TypePool, error_reporter: *ErrorReporter) !SemanticAnalyzer {
         return .{
             .allocator = allocator,
-            .ast = ast_,
+            .ast = undefined,
             .type_pool = type_pool,
             .error_reporter = error_reporter,
             .symbol_table = try SymbolTable.init(allocator),
@@ -28,7 +29,18 @@ pub const SemanticAnalyzer = struct {
         self.symbol_table.deinit();
     }
 
-    pub fn analyze(self: *SemanticAnalyzer, node_id: ast.NodeId) Error!TypeId {
+    pub fn analyseAst(self: *SemanticAnalyzer, ast: *AST) Error!void {
+        self.ast = ast;
+
+        for (ast.getRoots()) |node_id| {
+            _ = self.analyze(node_id) catch |err| {
+                ast.invalidate();
+                return err;
+            };
+        }
+    }
+
+    fn analyze(self: *SemanticAnalyzer, node_id: NodeId) Error!TypeId {
         var node = &self.ast.nodes.items[node_id];
 
         const resolved_type: TypeId = switch (node.tag) {
@@ -53,6 +65,28 @@ pub const SemanticAnalyzer = struct {
                 self.error_reporter.semanticAnalyserError(self, Error.UnknownIdentifier, node.*, "unknown identifier");
                 return Error.UnknownIdentifier;
             },
+            // unary operations
+            .negate => |_| case: {
+                const type_rhs = try self.analyze(node.data.node_id);
+
+                if (type_rhs == TypePool.INT or type_rhs == TypePool.FLOAT) {
+                    break :case type_rhs;
+                }
+
+                self.error_reporter.semanticAnalyserError(self, Error.UnsupportedOperand, node.*, "operand must be a number");
+                return Error.UnsupportedOperand;
+            },
+            .logical_not => |_| case: {
+                const type_rhs = try self.analyze(node.data.node_id);
+
+                if (type_rhs == TypePool.BOOL) {
+                    break :case type_rhs;
+                }
+
+                self.error_reporter.semanticAnalyserError(self, Error.UnsupportedOperand, node.*, "operand must be a bool");
+                return Error.UnsupportedOperand;
+            },
+
             // binary operations
             .binary_add,
             .binary_sub,
@@ -70,13 +104,13 @@ pub const SemanticAnalyzer = struct {
                 break :case try self.analyze(node.data.node_id);
             },
             .call => |_| case: {
-                const extra = self.ast.getExtra(node.data.extra_id, ast.CallExtra);
+                const extra = self.ast.getExtra(node.data.extra_id, CallExtra);
                 const type_callee = try self.analyze(extra.callee);
 
                 var arg_list = extra.args_start;
                 for (0..extra.args_count) |_| {
                     const list_node = self.ast.nodes.items[arg_list];
-                    const list_extra = self.ast.getExtra(list_node.data.extra_id, ast.NodeListExtra);
+                    const list_extra = self.ast.getExtra(list_node.data.extra_id, NodeListExtra);
 
                     // TODO compare argument types with callee parameter list
                     _ = try self.analyze(list_extra.node_id);
@@ -96,9 +130,9 @@ pub const SemanticAnalyzer = struct {
         return resolved_type;
     }
 
-    fn analyzeDeclarationVar(self: *SemanticAnalyzer, node_id: ast.NodeId) Error!TypeId {
+    fn analyzeDeclarationVar(self: *SemanticAnalyzer, node_id: NodeId) Error!TypeId {
         const node = self.ast.nodes.items[node_id];
-        const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationExtra);
+        const data = self.ast.getExtra(node.data.extra_id, VarDeclarationExtra);
 
         // Analyze the initializer
         const inferred_type = try self.analyze(data.init_value);
@@ -124,9 +158,9 @@ pub const SemanticAnalyzer = struct {
         return TypePool.VOID;
     }
 
-    fn analyzeBinaryCompare(self: *SemanticAnalyzer, node_id: ast.NodeId) Error!TypeId {
+    fn analyzeBinaryCompare(self: *SemanticAnalyzer, node_id: NodeId) Error!TypeId {
         const node = self.ast.nodes.items[node_id];
-        const data = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
+        const data = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
 
         const left_type = try self.analyze(data.lhs);
         const right_type = try self.analyze(data.rhs);
@@ -146,15 +180,31 @@ pub const SemanticAnalyzer = struct {
         return error.IncompatibleTypes;
     }
 
-    fn analyzeBinaryMath(self: *SemanticAnalyzer, node_id: ast.NodeId) Error!TypeId {
+    fn analyzeBinaryMath(self: *SemanticAnalyzer, node_id: NodeId) Error!TypeId {
         const node = self.ast.nodes.items[node_id];
-        const data = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
+        const data = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
 
         const left_type = try self.analyze(data.lhs);
         const right_type = try self.analyze(data.rhs);
 
         if (left_type == right_type) {
-            return left_type;
+            return switch (left_type) {
+                // TODO report rhs node
+                TypePool.STRING => {
+                    if (node.tag == .binary_add) {
+                        // allow adding strings (concat)
+                        return left_type;
+                    }
+                    self.error_reporter.semanticAnalyserError(self, Error.UnsupportedOperand, node, "unsupported operand types");
+                    return Error.UnsupportedOperand;
+                },
+                TypePool.INT => left_type,
+                TypePool.FLOAT => left_type,
+                else => {
+                    self.error_reporter.semanticAnalyserError(self, Error.UnsupportedOperand, node, "unsupported operand types");
+                    return Error.UnsupportedOperand;
+                },
+            };
         }
 
         if ((left_type == TypePool.INT and right_type == TypePool.FLOAT) or
@@ -165,13 +215,13 @@ pub const SemanticAnalyzer = struct {
         }
         // For simplicity, assume binary operations return the same type as operands
         self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, node, "Incompatible types");
+
         return error.IncompatibleTypes;
     }
 };
 
 const std = @import("std");
 const as = @import("as");
-const ast = as.frontend.ast;
 
 const ErrorReporter = as.common.reporting.ErrorReporter;
 
@@ -181,3 +231,9 @@ const SymbolTable = as.frontend.SymbolTable;
 
 const Symbol = as.frontend.Symbol;
 const TypeId = as.frontend.TypeId;
+const NodeId = as.frontend.ast.NodeId;
+
+const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
+const VarDeclarationExtra = as.frontend.ast.VarDeclarationExtra;
+const NodeListExtra = as.frontend.ast.NodeListExtra;
+const CallExtra = as.frontend.ast.CallExtra;

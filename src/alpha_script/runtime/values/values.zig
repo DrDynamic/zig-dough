@@ -45,6 +45,12 @@ pub const UnionValue = union(ValueType) {
         };
     }
 
+    pub fn isFalsey(self: UnionValue) bool {
+        if (self.isNull()) return true;
+        if (self.isBool()) return !self.toBool();
+        return false;
+    }
+
     pub fn format(
         self: @This(),
         comptime fmt: []const u8,

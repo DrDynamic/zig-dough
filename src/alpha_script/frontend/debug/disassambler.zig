@@ -38,6 +38,7 @@ pub const Disassambler = struct {
             .sub,
             .multiply,
             .divide,
+            .negate,
             // compare
             .equal,
             .not_equal,
@@ -45,6 +46,7 @@ pub const Disassambler = struct {
             .greater_equal,
             .less,
             .less_equal,
+            .logical_not,
             //string
             .string_concat,
             => self.printABC(instruction),

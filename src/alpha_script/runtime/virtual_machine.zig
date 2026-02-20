@@ -115,6 +115,16 @@ pub const VirtualMachine = struct {
                         stack[reg_a] = Value.makeFloat(result);
                     }
                 },
+                .negate => {
+                    const reg_a = base + instruction.abc.a;
+                    const val_b = stack[base + instruction.abc.b];
+
+                    if (val_b.isFloat()) {
+                        stack[reg_a] = Value.makeFloat(-val_b.toF64());
+                    } else {
+                        stack[reg_a] = Value.makeInteger(-val_b.toI64());
+                    }
+                },
                 // compare
                 .equal => {
                     const reg_a = base + instruction.abc.a;
@@ -157,6 +167,12 @@ pub const VirtualMachine = struct {
                     const float_c = try stack[base + instruction.abc.c].castToF64();
 
                     stack[reg_a] = Value.makeBool(float_b <= float_c);
+                },
+                .logical_not => {
+                    const reg_a = base + instruction.abc.a;
+                    const val_b = stack[base + instruction.abc.b];
+
+                    stack[reg_a] = Value.makeBool(val_b.isFalsey());
                 },
                 // string
                 .string_concat => {

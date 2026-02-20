@@ -116,15 +116,16 @@ pub fn main() !void {
 
         var semantic_analyzer = try as.frontend.SemanticAnalyzer.init(
             allocator,
-            &ast,
             &type_pool,
             &error_reporter,
         );
         defer semantic_analyzer.deinit();
 
-        for (ast.getRoots()) |root_node_id| {
-            _ = semantic_analyzer.analyze(root_node_id) catch {};
-        }
+        var compiler = as.compiler.Compiler.init(&error_reporter, &garbage_collector, allocator);
+
+        try registerNatives(&ast, &semantic_analyzer, &compiler, &vm);
+
+        semantic_analyzer.analyseAst(&ast) catch {};
 
         if (!ast.is_valid) {
             std.process.exit(EXIT_CODE_COMPILER_ERROR);
@@ -134,9 +135,6 @@ pub fn main() !void {
             try as.frontend.debug.ASTPrinter.printAST(&ast, &type_pool, &stdout_terminal);
         }
 
-        var compiler = as.compiler.Compiler.init(&error_reporter, &garbage_collector, allocator);
-
-        try registerNatives(&ast, &compiler, &vm);
         const module = compiler.compile(&ast) catch {
             std.process.exit(EXIT_CODE_COMPILER_ERROR);
         };
@@ -155,8 +153,15 @@ pub fn main() !void {
     }
 }
 
-fn registerNatives(ast: *as.frontend.AST, compiler: *as.compiler.Compiler, vm: *as.runtime.VirtualMachine) !void {
+fn registerNatives(ast: *as.frontend.AST, semantic_analyser: *as.frontend.SemanticAnalyzer, compiler: *as.compiler.Compiler, vm: *as.runtime.VirtualMachine) !void {
     const name_id = try ast.string_table.add("print");
+
+    try semantic_analyser.symbol_table.declare(name_id, .{
+        .name_id = name_id,
+        .type_id = as.frontend.TypePool.VOID,
+        .is_mutable = false,
+        .node_id = 0,
+    });
 
     try compiler.locals.append(.{
         .name_id = name_id,

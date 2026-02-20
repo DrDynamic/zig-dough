@@ -1,1 +1,1 @@
-print("" + 4); // expect compile error: Error at '4': mixing types is not allowed
+print("" + 4); // expect compile error: Error at '+': Incompatible types

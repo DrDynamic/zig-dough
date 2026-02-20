@@ -190,6 +190,10 @@ pub const Compiler = struct {
                 return reg_callee;
             },
 
+            //unary operations
+            .negate => self.emitUnaryOp(.negate, &node),
+            .logical_not => self.emitUnaryOp(.logical_not, &node),
+
             // binary operations
             .binary_add => {
                 const extra = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
@@ -236,6 +240,19 @@ pub const Compiler = struct {
         self.next_free_reg += 1;
         self.max_registers.* = @max(self.next_free_reg, self.max_registers.*);
         return next_free;
+    }
+
+    fn emitUnaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {
+        const snapshot = self.next_free_reg;
+
+        const reg_rhs = try self.compileExpression(node.data.node_id);
+        const reg_dest = if (reg_rhs < snapshot) snapshot else reg_rhs;
+
+        try self.chunk.emit(Instruction.fromABC(opcode, reg_dest, reg_rhs, 0));
+
+        // free all regs
+        self.next_free_reg = snapshot;
+        return reg_dest;
     }
 
     fn emitBinaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {

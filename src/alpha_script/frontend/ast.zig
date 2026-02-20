@@ -22,6 +22,10 @@ pub const NodeType = enum(u8) {
     call_return,
     node_list, // NodeListExtra
 
+    // unary operations
+    negate,
+    logical_not,
+
     // binary operations
     binary_add, // BinaryOpExtra
     binary_sub, // BinaryOpExtra

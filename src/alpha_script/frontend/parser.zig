@@ -270,6 +270,23 @@ pub const Parser = struct {
     }
 
     fn unary(self: *Parser) Error!ast.NodeId {
+        if (try self.match(.bang)) {
+            const token = self.scanner.previous();
+            return try self.ast.addNode(.{
+                .tag = .logical_not,
+                .token_position = token.location.start,
+                .resolved_type_id = TypePool.UNRESOLVED,
+                .data = .{ .node_id = try self.unary() },
+            });
+        } else if (try self.match(.minus)) {
+            const token = self.scanner.previous();
+            return try self.ast.addNode(.{
+                .tag = .negate,
+                .token_position = token.location.start,
+                .resolved_type_id = TypePool.UNRESOLVED,
+                .data = .{ .node_id = try self.unary() },
+            });
+        }
         // TODO implement unary
         return try self.call();
     }

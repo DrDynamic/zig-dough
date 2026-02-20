@@ -6,6 +6,8 @@ pub const OpCode = enum(u8) {
     sub, // REG_DEST REG_A REG_B // subtract REG_A and REG_B and save the result in REG_DEST
     multiply, // REG_DEST REG_A REG_B // multiply REG_A and REG_B and save the result in REG_DEST
     divide, // REG_DEST REG_A REG_B // devide REG_A and REG_B and save the result in REG_DEST
+    negate, // REG_DEST REG_A // negate the number in REG_A and save the result to REG_DEST
+
     // compare
     equal, // REG_DEST REG_A REG_B // compare REG_A and REG_B and save the result in REG_DEST (true when equal, false otherwise)
     not_equal, // REG_DEST REG_A REG_B // compare REG_A and REG_B and save the result in REG_DEST (false when equal, true otherwise)
@@ -13,8 +15,10 @@ pub const OpCode = enum(u8) {
     greater_equal, // REG_DEST REG_A REG_B // compare REG_A and REG_B and save the result in REG_DEST (true when REG_A >= REG_B, false otherwise)
     less, // REG_DEST REG_A REG_B // compare REG_A and REG_B and save the result in REG_DEST (true when REG_A < REG_B, false otherwise)
     less_equal, // REG_DEST REG_A REG_B // compare REG_A and REG_B and save the result in REG_DEST (true when REG_A <= REG_B, false otherwise)
+    logical_not, // REG_DEST REG_A // negate the bool value in REG_A and save the result to REG_DEST
     // strings
     string_concat,
+
     // interaction
     call, // REG_DEST REG_CALLEE ARGS_COUNT // call REG_CALLEE and store the return Value in REG_DEST (ARG_COUNT registers after REG_CALLEE are reserved for call arguments)
     call_return,
