@@ -7,7 +7,8 @@ pub const SemanticAnalyzer = struct {
         RedeclarationError,
         UnknownIdentifier,
         UnsupportedOperand,
-        UnsupportedCapture,
+        PointlessCapture,
+        MissingCapture,
     };
 
     allocator: std.mem.Allocator,
@@ -79,20 +80,40 @@ pub const SemanticAnalyzer = struct {
 
                 const type_condition = self.analyse(extra.condition);
 
-                // TODO if type_condition is error union or nullable type the captures have to be present, otherwise they must not be present
-                if (extra.has_then_capture) {
-                    const then_capture = self.ast.nodes.items[extra.then_capture];
-                    self.error_reporter.semanticAnalyserError(self, Error.UnsupportedCapture, then_capture, "then capture needs nullable or error union in condition");
-                    maybe_err = Error.UnsupportedCapture;
-                }
-
-                if (extra.has_else_capture) {
-                    const else_capture = self.ast.nodes.items[extra.else_capture];
-                    self.error_reporter.semanticAnalyserError(self, Error.UnsupportedCapture, else_capture, "else capture needs error union in condition");
-                    maybe_err = Error.UnsupportedCapture;
-                }
-
-                if (type_condition != TypePool.BOOL) {
+                if (type_condition == TypePool.BOOL) {
+                    if (extra.has_then_capture) {
+                        const then_capture = self.ast.nodes.items[extra.then_capture];
+                        self.error_reporter.semanticAnalyserError(self, Error.PointlessCapture, then_capture, "then capture is pointless (capture is always true)");
+                        maybe_err = Error.PointlessCapture;
+                    }
+                    if (extra.has_else_capture) {
+                        const else_capture = self.ast.nodes.items[extra.else_capture];
+                        self.error_reporter.semanticAnalyserError(self, Error.PointlessCapture, else_capture, "else capture is pointless (it is always false)");
+                        maybe_err = Error.PointlessCapture;
+                    }
+                } else if (self.type_pool.isNullable(type_condition)) {
+                    if (!extra.has_then_capture) {
+                        const condition = self.ast.nodes.items[extra.condition];
+                        self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing then capture for nullable condition");
+                        maybe_err = Error.UnsupportedCapture;
+                    }
+                    if (extra.has_else_capture) {
+                        const else_capture = self.ast.nodes.items[extra.else_capture];
+                        self.error_reporter.semanticAnalyserError(self, Error.PointlessCapture, else_capture, "capture is pointless for nullable condition (it is always null)");
+                        maybe_err = Error.PointlessCapture;
+                    }
+                } else if (self.type_pool.isErrorUnion(type_condition)) {
+                    if (!extra.has_then_capture) {
+                        const condition = self.ast.nodes.items[extra.condition];
+                        self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing then capture for nullable condition");
+                        maybe_err = Error.MissingCapture;
+                    }
+                    if (extra.has_else_branch and !extra.has_else_capture) {
+                        const condition = self.ast.nodes.items[extra.condition];
+                        self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing else capture for error union condition");
+                        maybe_err = Error.MissingCapture;
+                    }
+                } else {
                     const condition = self.ast.nodes.items[extra.condition];
                     self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, condition, "condition needs to evaluate to bool, nullable type or error union");
                     maybe_err = Error.IncompatibleTypes;
@@ -112,7 +133,7 @@ pub const SemanticAnalyzer = struct {
                 if (type_then == type_else) {
                     break :case type_then;
                 } else {
-                    // TODO create mixed type type_then|type_else
+                    break :case try self.type_pool.getOrCreateUnionType(.{ type_then, type_else });
                 }
 
                 break :case TypePool.VOID;

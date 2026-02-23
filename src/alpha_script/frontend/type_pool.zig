@@ -18,15 +18,11 @@ pub const Type = union(TypeTag) {
         type_list_index: u32,
         count: u32,
     },
-    data: union {
-        pointer_to: TypeId,
-    },
 };
 
 pub const TypePool = struct {
     allocator: std.mem.Allocator,
     types: ArrayList(Type),
-    extra_data: ArrayList(u32),
     type_list_buffer: std.ArrayList(TypeId),
     union_cache: TypeListMap,
 
@@ -43,7 +39,6 @@ pub const TypePool = struct {
         var pool = TypePool{
             .allocatior = allocator,
             .types = ArrayList(Type).init(allocator),
-            .extra_data = ArrayList(u32).init(allocator),
             .type_list_buffer = std.ArrayList(TypeId).init(allocator),
             .union_cache = TypeListMap.init(allocator),
         };
@@ -62,9 +57,50 @@ pub const TypePool = struct {
 
     pub fn deinit(self: *TypePool) void {
         self.types.deinit();
-        self.extra_data.deinit();
         self.type_list_buffer.deinit();
         self.union_cache.deinit();
+    }
+
+    /// a type is nullable when the type is null or a union type that contains null
+    pub fn isNullable(self: *const TypePool, type_id: TypeId) bool {
+        if (type_id == TypePool.NULL) return true;
+
+        const ty = self.types.items[type_id];
+        if (ty.tag == .union_type) {
+            const members = self.getUnionMembers(ty);
+            for (members) |member| {
+                // recursion for nested unions
+                if (self.isNullable(member)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    pub fn isNumeric(self: *const TypePool, type_id: TypeId) bool {
+        if (type_id == TypePool.INT or type_id == TypePool.FLOAT) {
+            return true;
+        }
+        const ty = self.types.items[type_id];
+        if (ty.tag == .union_type) {
+            const members = self.getUnionMembers(ty);
+            for (members) |member| {
+                // recursion for nested unions
+                if (!self.isNumeric(member)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+
+    pub fn isErrorUnion(self: *const TypePool, type_id: TypeId) bool {
+        _ = self;
+        _ = type_id;
+        return false; // TODO implement errors
     }
 
     /// a type is assignable to another type, when both type are the same or target is a superset of source
@@ -82,7 +118,26 @@ pub const TypePool = struct {
             .string => false,
             .module => unreachable,
             .union_type => {
-                // TODO test if target is a superset of source
+                const source = self.types.items[source_id];
+                if (source != .union_type) {
+                    // if source is not a union type, then source must be assignable to at least one member of target
+                    const target_members = self.getUnionMembers(target);
+                    for (target_members) |target_member| {
+                        if (self.isAssignable(target_member, source_id)) {
+                            return true;
+                        }
+                    }
+                    return false;
+                } else {
+                    // if source is also a union type, then all members of source must be assignable to target
+                    const source_members = self.getUnionMembers(source);
+                    for (source_members) |source_member| {
+                        if (!self.isAssignable(target_id, source_member)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
             },
         }
     }
@@ -114,6 +169,10 @@ pub const TypePool = struct {
         try self.union_cache.put(list_slice, type_id);
 
         return type_id;
+    }
+
+    inline fn getUnionMembers(self: *const TypePool, union_type: Type) []const TypeId {
+        return self.type_list_buffer.items[union_type.union_type.type_list_index .. union_type.union_type.type_list_index + union_type.union_type.count];
     }
 };
 
