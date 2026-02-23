@@ -7,6 +7,7 @@ pub const SemanticAnalyzer = struct {
         RedeclarationError,
         UnknownIdentifier,
         UnsupportedOperand,
+        UnsupportedCapture,
     };
 
     allocator: std.mem.Allocator,
@@ -54,7 +55,69 @@ pub const SemanticAnalyzer = struct {
             .object_string => TypePool.STRING,
 
             // declarations
-            .declaration_var => try self.analyzeDeclarationVar(node_id),
+            .declaration_var => try self.analyzeDeclaration(node_id, true),
+            .declaration_const => try self.analyzeDeclaration(node_id, false),
+
+            // statements
+            .statement_block => |_| case: {
+                var list_node = self.ast.nodes.items[node.data.node_id];
+                var extra = self.ast.getExtra(list_node.data.extra_id, NodeListExtra);
+                while (true) {
+                    _ = self.analyze(extra.node_id);
+
+                    if (extra.is_last) break;
+
+                    list_node = self.ast.nodes.items[extra.next];
+                    extra = self.ast.getExtra(list_node.data.extra_id, NodeListExtra);
+                }
+
+                break :case TypePool.VOID;
+            },
+            .statement_if => |_| case: {
+                var maybe_err: ?Error = null;
+                const extra = self.ast.getExtra(node.data.extra_id, IfExtra);
+
+                const type_condition = self.analyse(extra.condition);
+
+                // TODO if type_condition is error union or nullable type the captures have to be present, otherwise they must not be present
+                if (extra.has_then_capture) {
+                    const then_capture = self.ast.nodes.items[extra.then_capture];
+                    self.error_reporter.semanticAnalyserError(self, Error.UnsupportedCapture, then_capture, "then capture needs nullable or error union in condition");
+                    maybe_err = Error.UnsupportedCapture;
+                }
+
+                if (extra.has_else_capture) {
+                    const else_capture = self.ast.nodes.items[extra.else_capture];
+                    self.error_reporter.semanticAnalyserError(self, Error.UnsupportedCapture, else_capture, "else capture needs error union in condition");
+                    maybe_err = Error.UnsupportedCapture;
+                }
+
+                if (type_condition != TypePool.BOOL) {
+                    const condition = self.ast.nodes.items[extra.condition];
+                    self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, condition, "condition needs to evaluate to bool, nullable type or error union");
+                    maybe_err = Error.IncompatibleTypes;
+                }
+
+                const type_then = self.analyse(extra.then_branch);
+                var type_else = type_then;
+
+                if (extra.has_else_branch) {
+                    type_else = self.analyze(extra.else_branch);
+                }
+
+                if (maybe_err) |err| {
+                    return err;
+                }
+
+                if (type_then == type_else) {
+                    break :case type_then;
+                } else {
+                    // TODO create mixed type type_then|type_else
+                }
+
+                break :case TypePool.VOID;
+            },
+
             // access
             .identifier_expr => |_| case: {
                 const maybe_symbol = self.symbol_table.lookup(node.data.string_id);
@@ -130,7 +193,7 @@ pub const SemanticAnalyzer = struct {
         return resolved_type;
     }
 
-    fn analyzeDeclarationVar(self: *SemanticAnalyzer, node_id: NodeId) Error!TypeId {
+    fn analyzeDeclaration(self: *SemanticAnalyzer, node_id: NodeId, is_mutable: bool) Error!TypeId {
         const node = self.ast.nodes.items[node_id];
         const data = self.ast.getExtra(node.data.extra_id, VarDeclarationExtra);
 
@@ -151,7 +214,7 @@ pub const SemanticAnalyzer = struct {
         try self.symbol_table.declare(data.name_id, .{
             .name_id = data.name_id,
             .type_id = inferred_type,
-            .is_mutable = true,
+            .is_mutable = is_mutable,
             .node_id = node_id,
         });
 
@@ -237,3 +300,4 @@ const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
 const VarDeclarationExtra = as.frontend.ast.VarDeclarationExtra;
 const NodeListExtra = as.frontend.ast.NodeListExtra;
 const CallExtra = as.frontend.ast.CallExtra;
+const IfExtra = as.frontend.ast.IfExtra;

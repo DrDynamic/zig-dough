@@ -15,6 +15,11 @@ pub const NodeType = enum(u8) {
 
     // declarations
     declaration_var, // VarDeclarationExtra
+    declaration_const, // VarDeclarationExtra
+
+    // statements
+    statement_block, // node_id (the start of a NodeList of Satements)
+    statement_if, // IfExtra
 
     // access
     identifier_expr, // string_id
@@ -45,6 +50,20 @@ pub const VarDeclarationExtra = struct {
     init_value: NodeId,
 };
 
+pub const IfExtra = struct {
+    condition: NodeId,
+
+    has_then_capture: bool,
+    has_else_capture: bool,
+    has_else_branch: bool,
+
+    then_capture: NodeId,
+    then_branch: NodeId,
+
+    else_capture: NodeId,
+    else_branch: NodeId,
+};
+
 pub const BinaryOpExtra = struct {
     lhs: NodeId,
     rhs: NodeId,
@@ -59,6 +78,7 @@ pub const CallExtra = struct {
 pub const NodeListExtra = struct {
     node_id: NodeId,
     next: NodeId,
+    is_last: bool,
 };
 
 pub const Node = struct {
