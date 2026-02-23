@@ -161,6 +161,63 @@ pub const Compiler = struct {
                 return register;
             },
 
+            // expressions
+            .expression_block => {
+                self.enterScope();
+
+                var list_node = self.ast.nodes.items[node.data.node_id];
+                var extra = self.ast.getExtra(list_node.data.extra_id, NodeListExtra);
+                while (true) {
+                    _ = self.compileStatement(extra.node_id);
+
+                    if (extra.is_last) break;
+
+                    list_node = self.ast.nodes.items[extra.next];
+                    extra = self.ast.getExtra(list_node.data.extra_id, NodeListExtra);
+                }
+
+                self.exitScope();
+
+                return 0;
+            },
+
+            .expression_if => {
+                const extra = self.ast.getExtra(node.data.extra_id, IfExtra);
+
+                const reg_condition = try self.compileExpression(extra.condition);
+
+                const jump_if_false_pos = self.chunk.instructions.items.len;
+
+                const node_condition = self.ast.nodes.items[extra.condition];
+                if(self.type_pool.isNullable(node_condition.resolved_type_id)) {
+                    // for nullable types we jump to the else branch when the condition is null, and to the then branch when it's not null (regardless of the actual value of the condition)
+                const jump_else = switch (node_condition.resolved_type_id) {
+                    TypePool.NULL => .jump_if_null,
+                    TypePool.BOOL => .jump_if_false,
+                    else => .jump_if_false, // for error unions we jump if false, because they evaluate to false when there is an error and true when there isn't
+                }
+
+                try self.chunk.emit(Instruction.fromAB(.jump_if_false, reg_condition, 0));
+
+                const reg_then = try self.compileExpression(extra.then_branch);
+
+                const jump_end_pos = self.chunk.instructions.items.len;
+                try self.chunk.emit(Instruction.fromAB(.jump, 0, 0));
+
+                const else_jump_pos = self.chunk.instructions.items.len;
+                try self.chunk.emit(Instruction.fromAB(.jump, 0, 0));
+
+                // patch jump_if_false to jump to else branch
+                self.chunk.instructions.items[jump_if_false_pos] = Instruction.fromAB(.jump_if_false, reg_condition, @intCast(u16, else_jump_pos)));
+
+                const reg_else = try self.compileExpression(extra.else_branch);
+
+                // patch jump at the end of then branch to jump to the end of else branch
+                self.chunk.instructions.items[jump_end_pos] = Instruction.fromAB(.jump, 0, @intCast(u16, self.chunk.instructions.items.len)));
+
+                return 0;
+            },
+
             // access
             .identifier_expr => {
                 return self.resolveLocal(node.data.string_id) catch {
@@ -343,3 +400,6 @@ const Value = as.runtime.values.Value;
 
 const NodeId = as.frontend.ast.NodeId;
 const StringId = as.common.StringId;
+
+const NodeListExtra = as.frontend.ast.NodeListExtra;
+const IfExtra = as.frontend.ast.IfExtra;

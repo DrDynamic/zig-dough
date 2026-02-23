@@ -135,7 +135,7 @@ pub const Parser = struct {
 
         const list_start = try self.nodeListFromArray(statements.items);
         return self.ast.addNode(.{
-            .tag = .statement_block,
+            .tag = .expression_block,
             .token_position = left_brace.location.start,
             .resolved_type_id = TypePool.UNRESOLVED,
             .data = .{ .node_id = list_start },
@@ -205,7 +205,7 @@ pub const Parser = struct {
         });
 
         return try self.ast.addNode(.{
-            .tag = .statement_if,
+            .tag = .expression_ifif,
             .token_position = token_start.location.start,
             .resolved_type_id = TypePool.UNRESOLVED,
             .data = .{ .extra_id = extra_id },

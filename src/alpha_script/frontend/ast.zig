@@ -17,9 +17,9 @@ pub const NodeType = enum(u8) {
     declaration_var, // VarDeclarationExtra
     declaration_const, // VarDeclarationExtra
 
-    // statements
-    statement_block, // node_id (the start of a NodeList of Satements)
-    statement_if, // IfExtra
+    // expressions
+    expression_block, // node_id (the start of a NodeList of Satements)
+    expression_if, // IfExtra
 
     // access
     identifier_expr, // string_id

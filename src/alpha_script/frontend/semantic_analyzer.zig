@@ -60,7 +60,7 @@ pub const SemanticAnalyzer = struct {
             .declaration_const => try self.analyzeDeclaration(node_id, false),
 
             // statements
-            .statement_block => |_| case: {
+            .expression_block => |_| case: {
                 var list_node = self.ast.nodes.items[node.data.node_id];
                 var extra = self.ast.getExtra(list_node.data.extra_id, NodeListExtra);
                 while (true) {
@@ -74,7 +74,7 @@ pub const SemanticAnalyzer = struct {
 
                 break :case TypePool.VOID;
             },
-            .statement_if => |_| case: {
+            .expression_if => |_| case: {
                 var maybe_err: ?Error = null;
                 const extra = self.ast.getExtra(node.data.extra_id, IfExtra);
 

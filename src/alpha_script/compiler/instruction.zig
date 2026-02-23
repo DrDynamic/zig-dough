@@ -22,6 +22,13 @@ pub const OpCode = enum(u8) {
     // interaction
     call, // REG_DEST REG_CALLEE ARGS_COUNT // call REG_CALLEE and store the return Value in REG_DEST (ARG_COUNT registers after REG_CALLEE are reserved for call arguments)
     call_return,
+
+    // controlflow
+    jump, // ADDR // jump to ADDR unconditionally
+    jump_if_false, // REG_CONDITION ADDR // jump to ADDR if the value in REG_CONDITION is false
+    jump_if_true, // REG_CONDITION ADDR // jump to ADDR if the value in REG_CONDITION is true
+    jump_if_null, // REG_CONDITION ADDR // jump to ADDR if the value in REG_CONDITION is null
+
 };
 
 pub const Instruction = packed union {
