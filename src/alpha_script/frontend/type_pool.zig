@@ -14,6 +14,14 @@ pub const TypeTag = enum(u8) {
 };
 
 pub const Type = union(TypeTag) {
+    unresolved,
+    void,
+    null,
+    bool,
+    int,
+    float,
+    string,
+    module,
     union_type: struct {
         type_list_index: u32,
         count: u32,

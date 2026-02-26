@@ -186,36 +186,59 @@ pub const Compiler = struct {
 
                 const reg_condition = try self.compileExpression(extra.condition);
 
-                const jump_if_false_pos = self.chunk.instructions.items.len;
+                const pos_jump_else = self.chunk.code.items.len;
 
-                const node_condition = self.ast.nodes.items[extra.condition];
-                if(self.type_pool.isNullable(node_condition.resolved_type_id)) {
-                    // for nullable types we jump to the else branch when the condition is null, and to the then branch when it's not null (regardless of the actual value of the condition)
-                const jump_else = switch (node_condition.resolved_type_id) {
-                    TypePool.NULL => .jump_if_null,
-                    TypePool.BOOL => .jump_if_false,
-                    else => .jump_if_false, // for error unions we jump if false, because they evaluate to false when there is an error and true when there isn't
-                }
-
+                // Error and null evaluate to false. Should we use a explicit implementation for this instead of relying on falseness?
                 try self.chunk.emit(Instruction.fromAB(.jump_if_false, reg_condition, 0));
 
+                self.enterScope();
+                if (extra.has_then_capture) {
+                    const node_capture = self.ast.nodes.items[extra.then_capture];
+                    assert(node_capture.tag == .identifier_expr);
+
+                    const capture_name_id = node_capture.data.string_id;
+                    const void_identifier_id = try self.ast.string_table.add("_");
+
+                    if (capture_name_id != void_identifier_id) {
+                        try self.addLocal(capture_name_id, reg_condition, true);
+                    }
+                }
+
                 const reg_then = try self.compileExpression(extra.then_branch);
+                self.exitScope();
 
-                const jump_end_pos = self.chunk.instructions.items.len;
+                const pos_jump_end = self.chunk.code.items.len;
                 try self.chunk.emit(Instruction.fromAB(.jump, 0, 0));
 
-                const else_jump_pos = self.chunk.instructions.items.len;
-                try self.chunk.emit(Instruction.fromAB(.jump, 0, 0));
+                // patch jump_else to jump to else branch
+                self.patchJump(pos_jump_else);
 
-                // patch jump_if_false to jump to else branch
-                self.chunk.instructions.items[jump_if_false_pos] = Instruction.fromAB(.jump_if_false, reg_condition, @intCast(u16, else_jump_pos)));
+                if (extra.has_else_branch) {
+                    self.enterScope();
+                    if (extra.has_else_capture) {
+                        const node_capture = self.ast.nodes.items[extra.else_capture];
+                        assert(node_capture.tag == .identifier_expr);
 
-                const reg_else = try self.compileExpression(extra.else_branch);
+                        const capture_name_id = node_capture.data.string_id;
+                        const void_identifier_id = try self.ast.string_table.add("_");
+
+                        if (capture_name_id != void_identifier_id) {
+                            try self.addLocal(capture_name_id, reg_condition, true);
+                        }
+                    }
+
+                    const reg_else = try self.compileExpression(extra.else_branch);
+                    self.exitScope();
+
+                    // both branches should produce the same register, since the result of the if expression is in that register
+                    assert(reg_then == reg_else);
+                }
 
                 // patch jump at the end of then branch to jump to the end of else branch
-                self.chunk.instructions.items[jump_end_pos] = Instruction.fromAB(.jump, 0, @intCast(u16, self.chunk.instructions.items.len)));
+                self.patchJump(pos_jump_end);
 
-                return 0;
+                self.exitScope();
+                return reg_then;
             },
 
             // access
@@ -335,6 +358,12 @@ pub const Compiler = struct {
         try self.chunk.emit(Instruction.fromAB(opcode, register, constant_id));
     }
 
+    inline fn patchJump(self: *Compiler, jump_pos: usize) void {
+        const jump_offset: i32 = @intCast(self.chunk.code.items.len - jump_pos);
+        assert(jump_offset > 0);
+        self.chunk.code.items[jump_pos].ab.b = @intCast(jump_offset);
+    }
+
     /// bind a variable to a register
     fn addLocal(self: *Compiler, name_id: StringId, register: RegisterId, is_initialized: bool) !void {
         try self.locals.append(.{
@@ -384,6 +413,9 @@ pub const ConstantId = instructions.ConstantId;
 pub const OpCode = instructions.OpCode;
 //---------------
 const std = @import("std");
+
+const assert = std.debug.assert;
+
 const as = @import("as");
 const ast = as.frontend.ast;
 

@@ -149,9 +149,10 @@ pub const AST = struct {
     pub fn addExtra(self: *AST, data: anytype) !u32 {
         const fields = meta.fields(@TypeOf(data));
         const start_idx: u32 = @intCast(self.extra_data.items.len);
-
         inline for (fields) |field| {
             const data_value = @field(data, field.name);
+            // TODO this only works for data that can fit in u32, need a more general solution if we want to store more complex data
+            // maybe use @bitcast?
             try self.extra_data.append(@intCast(data_value));
         }
         return start_idx;

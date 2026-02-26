@@ -225,6 +225,26 @@ pub const VirtualMachine = struct {
                     // TODO return from a function -> restore stack top, decrement frame_count, etc.
                     unreachable;
                 },
+
+                // control flow
+                .jump => {
+                    const offset = instruction.ab.b;
+                    ip += offset;
+                },
+                .jump_if_false => {
+                    const reg_condition = base + instruction.ab.a;
+                    if (stack[reg_condition].isFalsey()) {
+                        const offset = instruction.ab.b;
+                        ip += offset;
+                    }
+                },
+                .jump_if_true => {
+                    const reg_condition = base + instruction.ab.a;
+                    if (!stack[reg_condition].isFalsey()) {
+                        const offset = instruction.ab.b;
+                        ip += offset;
+                    }
+                },
             }
         }
     }

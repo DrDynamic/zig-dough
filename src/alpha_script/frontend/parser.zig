@@ -213,7 +213,16 @@ pub const Parser = struct {
     }
 
     fn capture(self: *Parser) Error!NodeId {
-        const capture_name = try self.parseIdentifier();
+        const capture_name = try self.parseIdentifier() catch |err| switch (err) {
+            error.TokenMissMatch => {
+                self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "expect capture name");
+                _ = try self.advance();
+                return error.ParserError;
+            },
+            else => {
+                return err;
+            },
+        };
         const node_id = try self.ast.addNode(.{
             .tag = .declaration_const,
             .token_position = self.scanner.previous().location.start,
@@ -502,7 +511,6 @@ pub const Parser = struct {
                 const lexeme = self.scanner.getLexeme(token);
                 const string_id = try self.ast.string_table.add(lexeme);
 
-                // TODO safe string lexeme in extra
                 break :case try self.ast.addNode(.{
                     .tag = .object_string,
                     .token_position = token.location.start,

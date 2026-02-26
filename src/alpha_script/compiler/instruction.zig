@@ -24,10 +24,9 @@ pub const OpCode = enum(u8) {
     call_return,
 
     // controlflow
-    jump, // ADDR // jump to ADDR unconditionally
-    jump_if_false, // REG_CONDITION ADDR // jump to ADDR if the value in REG_CONDITION is false
-    jump_if_true, // REG_CONDITION ADDR // jump to ADDR if the value in REG_CONDITION is true
-    jump_if_null, // REG_CONDITION ADDR // jump to ADDR if the value in REG_CONDITION is null
+    jump, // 0 OFFSET // jump to the instruction at the current instruction index + OFFSET
+    jump_if_false, // REG_CONDITION OFFSET // jump to instruction index + OFFSET if the value in REG_CONDITION is false
+    jump_if_true, // REG_CONDITION OFFSET // jump to instruction index + OFFSET if the value in REG_CONDITION is true
 
 };
 
