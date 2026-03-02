@@ -53,6 +53,20 @@ pub const Disassambler = struct {
             // interaction
             .call => self.printCall(instruction),
             .call_return => self.printA(instruction),
+            // controlflow
+            .jump,
+            .jump_if_false,
+            .jump_if_true,
+            => {
+                self.terminal.print(
+                    "{s:<16} R{d:<2}, +{d:<3}   ; \n",
+                    .{
+                        @tagName(instruction.ab.opcode),
+                        instruction.ab.a,
+                        instruction.ab.b,
+                    },
+                );
+            },
         }
     }
 

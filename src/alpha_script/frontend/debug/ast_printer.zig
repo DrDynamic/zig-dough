@@ -32,7 +32,7 @@ pub const ASTPrinter = struct {
         });
 
         self.terminal.printWithOptions("[{s}] ", .{
-            @tagName(node_type.tag),
+            @tagName(node_type),
         }, .{ .styles = &.{.bold} });
 
         self.terminal.printWithOptions("{s}", .{
@@ -71,11 +71,21 @@ pub const ASTPrinter = struct {
             => {
                 self.terminal.print("\n", .{});
             },
-            .declaration_var => {
+            .declaration_var,
+            .declaration_const,
+            => {
                 const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationExtra);
                 const name = self.ast.string_table.get(data.name_id);
-                self.terminal.print(" (name: {s}, init_value: {d})\n", .{ name, data.init_value });
+                self.terminal.print(" name: {s}\n", .{name});
             },
+
+            // expressions
+            .expression_block,
+            .expression_if,
+            => {
+                self.terminal.print("\n", .{});
+            },
+
             // access
             .identifier_expr,
             => {
@@ -83,8 +93,7 @@ pub const ASTPrinter = struct {
                 self.terminal.print(": \"{s}\"\n", .{str});
             },
             .call => {
-                const data = self.ast.getExtra(node.data.extra_id, ast.CallExtra);
-                self.terminal.print("( args: {d})\n", .{data.args_count});
+                self.terminal.print("\n", .{});
             },
             .node_list => {
                 self.terminal.print("\n", .{});
@@ -135,25 +144,51 @@ pub const ASTPrinter = struct {
                 try self.printNode(extra.lhs, prefix, false);
                 try self.printNode(extra.rhs, prefix, true);
             },
-            .declaration_var => {
+            .declaration_const,
+            .declaration_var,
+            => {
                 const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationExtra);
-                try self.printNode(data.init_value, prefix, true);
+                if (data.init_value) |init_value_id| {
+                    try self.printNode(init_value_id, prefix, true);
+                } else {
+                    self.terminal.print("{s} (no initializer)\n", .{prefix});
+                }
             },
             .call_return => {
                 try self.printNode(node.data.node_id, prefix, true);
             },
+            // expressions
+            .expression_block => {
+                var iterator = ast.NodeListIterator.init(self.ast, node.data.node_id);
+                while (iterator.next()) |statement_id| {
+                    try self.printNode(statement_id, prefix, iterator.hasNext() == false);
+                }
+            },
+            .expression_if => {
+                const extra = self.ast.getExtra(node.data.extra_id, ast.IfExtra);
+                try self.printNode(extra.condition, prefix, false);
+
+                if (extra.then_capture != null) {
+                    try self.printNode(extra.then_capture.?, prefix, false);
+                }
+                try self.printNode(extra.then_branch, prefix, false);
+
+                if (extra.else_capture != null) {
+                    try self.printNode(extra.else_capture.?, prefix, false);
+                }
+                if (extra.else_branch != null) {
+                    try self.printNode(extra.else_branch.?, prefix, true);
+                }
+            },
             // access
-            .call => {
-                const data = self.ast.getExtra(node.data.extra_id, ast.CallExtra);
-                try self.printNode(data.callee, prefix, false);
+            .call,
+            => {
+                const extra = self.ast.getExtra(node.data.extra_id, ast.CallExtra);
+                try self.printNode(extra.callee, prefix, false);
 
-                var arg_id = data.args_start;
-                for (0..data.args_count) |index| {
-                    try self.printNode(arg_id, prefix, index == data.args_count - 1);
-
-                    const arg_node = self.ast.nodes.items[arg_id];
-                    const list_extra = self.ast.getExtra(arg_node.data.extra_id, ast.NodeListExtra);
-                    arg_id = list_extra.next;
+                var iterator = ast.NodeListIterator.init(self.ast, extra.args_start);
+                while (iterator.next()) |arg_id| {
+                    try self.printNode(arg_id, prefix, iterator.hasNext() == false);
                 }
             },
             .node_list => {

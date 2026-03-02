@@ -60,29 +60,29 @@ pub const Compiler = struct {
 
         switch (node.tag) {
             // declarations
-            .declaration_var => {
-                const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationExtra);
-                const init_node = self.ast.nodes.items[data.init_value];
+            .declaration_const,
+            .declaration_var,
+            => {
+                const extra = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationExtra);
 
-                var init_reg: RegisterId = undefined;
-                if (init_node.tag == .comptime_uninitialized) {
-                    init_reg = self.next_free_reg;
+                if (extra.init_value) |init_value_id| {
+                    // create the local before initializing it, so compileExpression can reference the variable
+                    const local_index = self.locals.items.len;
+                    try self.addLocal(extra.name_id, self.next_free_reg, false);
+
+                    try self.compileExpressionEnsureRegister(init_value_id, self.next_free_reg);
+                    _ = self.allocateRegister();
+
+                    self.locals.items[local_index].is_initialized = true;
+                } else {
+                    const init_reg = self.next_free_reg;
                     self.next_free_reg += 1;
                     try self.emitLoadConstant(
                         .load_const,
                         init_reg,
                         Value.makeUninitialized(),
                     );
-                    try self.addLocal(data.name_id, init_reg, true);
-                } else {
-                    // create the local before initializing it, so compileExpression can reference the variable
-                    const local_index = self.locals.items.len;
-                    try self.addLocal(data.name_id, self.next_free_reg, false);
-
-                    try self.compileExpressionEnsureRegister(data.init_value, self.next_free_reg);
-                    _ = self.allocateRegister();
-
-                    self.locals.items[local_index].is_initialized = true;
+                    try self.addLocal(extra.name_id, init_reg, true);
                 }
             },
             else => { // expression statements
@@ -104,7 +104,9 @@ pub const Compiler = struct {
             .node_list => unreachable,
 
             // statements
-            .declaration_var => unreachable,
+            .declaration_const,
+            .declaration_var,
+            => unreachable,
 
             // literals
             .literal_null => {
@@ -165,15 +167,9 @@ pub const Compiler = struct {
             .expression_block => {
                 self.enterScope();
 
-                var list_node = self.ast.nodes.items[node.data.node_id];
-                var extra = self.ast.getExtra(list_node.data.extra_id, NodeListExtra);
-                while (true) {
-                    _ = self.compileStatement(extra.node_id);
-
-                    if (extra.is_last) break;
-
-                    list_node = self.ast.nodes.items[extra.next];
-                    extra = self.ast.getExtra(list_node.data.extra_id, NodeListExtra);
+                var iterator = NodeListIterator.init(self.ast, node.data.node_id);
+                while (iterator.next()) |child_node_id| {
+                    _ = try self.compileStatement(child_node_id);
                 }
 
                 self.exitScope();
@@ -192,8 +188,8 @@ pub const Compiler = struct {
                 try self.chunk.emit(Instruction.fromAB(.jump_if_false, reg_condition, 0));
 
                 self.enterScope();
-                if (extra.has_then_capture) {
-                    const node_capture = self.ast.nodes.items[extra.then_capture];
+                if (extra.then_capture) |then_capture_id| {
+                    const node_capture = self.ast.nodes.items[then_capture_id];
                     assert(node_capture.tag == .identifier_expr);
 
                     const capture_name_id = node_capture.data.string_id;
@@ -213,10 +209,10 @@ pub const Compiler = struct {
                 // patch jump_else to jump to else branch
                 self.patchJump(pos_jump_else);
 
-                if (extra.has_else_branch) {
+                if (extra.else_branch) |else_branch_id| {
                     self.enterScope();
-                    if (extra.has_else_capture) {
-                        const node_capture = self.ast.nodes.items[extra.else_capture];
+                    if (extra.else_capture) |else_capture_id| {
+                        const node_capture = self.ast.nodes.items[else_capture_id];
                         assert(node_capture.tag == .identifier_expr);
 
                         const capture_name_id = node_capture.data.string_id;
@@ -227,7 +223,7 @@ pub const Compiler = struct {
                         }
                     }
 
-                    const reg_else = try self.compileExpression(extra.else_branch);
+                    const reg_else = try self.compileExpression(else_branch_id);
                     self.exitScope();
 
                     // both branches should produce the same register, since the result of the if expression is in that register
@@ -249,24 +245,21 @@ pub const Compiler = struct {
                 };
             },
             .call => {
-                const data = self.ast.getExtra(node.data.extra_id, ast.CallExtra);
+                const extra = self.ast.getExtra(node.data.extra_id, ast.CallExtra);
 
                 const reg_callee = self.allocateRegister();
 
-                try self.compileExpressionEnsureRegister(data.callee, reg_callee);
+                try self.compileExpressionEnsureRegister(extra.callee, reg_callee);
 
-                var reg_arg = self.next_free_reg;
-                var arg_list = data.args_start;
-                for (0..data.args_count) |_| {
-                    const list_node = self.ast.nodes.items[arg_list];
-                    const list_extra = self.ast.getExtra(list_node.data.extra_id, ast.NodeListExtra);
-
-                    try self.compileExpressionEnsureRegister(list_extra.node_id, reg_arg);
-                    reg_arg += 1;
-                    arg_list = list_extra.next;
+                var iterator = NodeListIterator.init(self.ast, extra.args_start);
+                const reg_start = self.next_free_reg;
+                var arg_count: u8 = 0;
+                while (iterator.next()) |arg_node_id| {
+                    _ = try self.compileExpressionEnsureRegister(arg_node_id, reg_start + arg_count);
+                    arg_count += 1;
                 }
 
-                try self.chunk.emit(Instruction.fromABC(.call, reg_callee, reg_callee, data.args_count));
+                try self.chunk.emit(Instruction.fromABC(.call, reg_callee, reg_callee, arg_count));
                 return reg_callee;
             },
 
@@ -434,4 +427,5 @@ const NodeId = as.frontend.ast.NodeId;
 const StringId = as.common.StringId;
 
 const NodeListExtra = as.frontend.ast.NodeListExtra;
+const NodeListIterator = as.frontend.ast.NodeListIterator;
 const IfExtra = as.frontend.ast.IfExtra;

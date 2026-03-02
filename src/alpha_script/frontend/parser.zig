@@ -74,18 +74,9 @@ pub const Parser = struct {
             type_id = null;
         }
 
-        var assignment_node_id: NodeId = undefined;
+        var assignment_node_id: ?NodeId = null;
         if (try self.match(.equal)) {
-            // TODO parse assignment
             assignment_node_id = try self.expression();
-        } else {
-            // TODO: make singleton?
-            assignment_node_id = try self.ast.addNode(.{
-                .tag = .comptime_uninitialized,
-                .token_position = identifier_token.location.start,
-                .resolved_type_id = TypePool.UNRESOLVED,
-                .data = undefined,
-            });
         }
 
         _ = try self.match(.semicolon);
@@ -111,7 +102,7 @@ pub const Parser = struct {
         } else if (try self.match(.left_brace)) {
             const left_brace = self.scanner.previous();
             const node_id = try self.blockStatement();
-            self.consume(.right_brace) catch {
+            _ = self.consume(.right_brace) catch {
                 self.error_reporter.parserError(self, Error.UnexpectedToken, left_brace, "expect '}' after code block");
                 return Error.UnexpectedToken;
             };
@@ -130,7 +121,7 @@ pub const Parser = struct {
         defer statements.deinit();
 
         while (!self.check(.right_brace)) {
-            statements.append(try self.declaration());
+            try statements.append(try self.declaration());
         }
 
         const list_start = try self.nodeListFromArray(statements.items);
@@ -401,7 +392,6 @@ pub const Parser = struct {
 
                 const extra_id = try self.ast.addExtra(CallExtra{
                     .callee = callee,
-                    .args_count = list.count,
                     .args_start = list.list_start,
                 });
                 callee = try self.ast.addNode(.{
@@ -442,7 +432,7 @@ pub const Parser = struct {
         }
         _ = try self.consume(end_token);
 
-        const list_start: NodeId = self.nodeListFromArray(expression_ids[0..count]);
+        const list_start: NodeId = try self.nodeListFromArray(expression_ids[0..count]);
 
         return .{
             .count = count,
@@ -488,7 +478,10 @@ pub const Parser = struct {
 
                 const lexeme = self.scanner.getLexeme(token);
                 if (std.mem.indexOfScalar(u8, lexeme, '.') != null) {
-                    const val = try std.fmt.parseFloat(f64, lexeme);
+                    const val = std.fmt.parseFloat(f64, lexeme) catch {
+                        self.error_reporter.parserError(self, Error.UnexpectedToken, token, "Invalid float literal");
+                        return Error.UnexpectedToken;
+                    };
                     break :case try self.ast.addNode(.{
                         .tag = .literal_float,
                         .token_position = token.location.start,
@@ -496,7 +489,10 @@ pub const Parser = struct {
                         .data = .{ .float_value = val },
                     });
                 } else {
-                    const val = try std.fmt.parseInt(i64, lexeme, 10);
+                    const val = std.fmt.parseInt(i64, lexeme, 10) catch {
+                        self.error_reporter.parserError(self, Error.UnexpectedToken, token, "Invalid integer literal");
+                        return Error.UnexpectedToken;
+                    };
                     break :case self.ast.addNode(.{
                         .tag = .literal_int,
                         .token_position = token.location.start,
@@ -544,15 +540,14 @@ pub const Parser = struct {
 
     // node list
     pub fn nodeListFromArray(self: *const Parser, node_ids: []NodeId) Error!NodeId {
-        var list_node: NodeId = undefined;
+        assert(node_ids.len > 0);
+        var list_node: ?NodeId = null;
         var index: usize = node_ids.len;
-        var is_last = true;
         while (index > 0) {
             index -= 1;
             const extra_id = try self.ast.addExtra(NodeListExtra{
                 .node_id = node_ids[index],
                 .next = list_node,
-                .is_last = is_last,
             });
 
             list_node = try self.ast.addNode(.{
@@ -561,10 +556,9 @@ pub const Parser = struct {
                 .resolved_type_id = TypePool.UNRESOLVED,
                 .data = .{ .extra_id = extra_id },
             });
-            is_last = false;
         }
 
-        return list_node;
+        return list_node.?;
     }
 
     // scanner interactions
@@ -588,6 +582,7 @@ pub const Parser = struct {
     }
 
     pub fn consume(self: *Parser, token_type: TokenType) Error!Token {
+        // TODO: schouldn't consume return Error!void?
         if (self.check(token_type)) {
             return self.advance();
         } else {
@@ -609,6 +604,7 @@ pub const Parser = struct {
 };
 
 const std = @import("std");
+const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 
 const as = @import("as");

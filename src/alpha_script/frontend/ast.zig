@@ -47,21 +47,17 @@ pub const NodeType = enum(u8) {
 pub const VarDeclarationExtra = struct {
     name_id: StringId,
     explicit_type: TypeId,
-    init_value: NodeId,
+    init_value: ?NodeId,
 };
 
 pub const IfExtra = struct {
     condition: NodeId,
 
-    has_then_capture: bool,
-    has_else_capture: bool,
-    has_else_branch: bool,
-
-    then_capture: NodeId,
+    then_capture: ?NodeId,
     then_branch: NodeId,
 
-    else_capture: NodeId,
-    else_branch: NodeId,
+    else_capture: ?NodeId,
+    else_branch: ?NodeId,
 };
 
 pub const BinaryOpExtra = struct {
@@ -71,14 +67,39 @@ pub const BinaryOpExtra = struct {
 
 pub const CallExtra = struct {
     callee: NodeId,
-    args_count: u8,
     args_start: NodeId,
 };
 
 pub const NodeListExtra = struct {
     node_id: NodeId,
-    next: NodeId,
-    is_last: bool,
+    next: ?NodeId,
+};
+
+pub const NodeListIterator = struct {
+    ast: *const AST,
+    current: ?NodeId,
+
+    pub fn init(ast: *const AST, first_node_id: NodeId) NodeListIterator {
+        return .{
+            .ast = ast,
+            .current = first_node_id,
+        };
+    }
+
+    pub fn hasNext(self: *NodeListIterator) bool {
+        return self.current != null;
+    }
+
+    pub fn next(self: *NodeListIterator) ?NodeId {
+        if (self.current == null) return null;
+
+        const current_node = self.ast.nodes.items[self.current.?];
+        assert(current_node.tag == .node_list);
+
+        const extra = self.ast.getExtra(current_node.data.extra_id, NodeListExtra);
+        self.current = extra.next;
+        return extra.node_id;
+    }
 };
 
 pub const Node = struct {
@@ -102,7 +123,7 @@ pub const AST = struct {
     scanner: *Scanner,
     roots: ArrayList(NodeId),
     nodes: ArrayList(Node),
-    extra_data: ArrayList(u32),
+    extra_data: ArrayList(u8),
     string_table: *StringTable,
     is_valid: bool,
 
@@ -112,7 +133,7 @@ pub const AST = struct {
             .scanner = scanner,
             .roots = ArrayList(NodeId).init(allocator),
             .nodes = ArrayList(Node).init(allocator),
-            .extra_data = ArrayList(u32).init(allocator),
+            .extra_data = ArrayList(u8).init(allocator),
             .string_table = string_table,
             .is_valid = true,
         };
@@ -147,28 +168,22 @@ pub const AST = struct {
 
     /// Stores each field of data as a separate element in self.extra_data
     pub fn addExtra(self: *AST, data: anytype) !u32 {
-        const fields = meta.fields(@TypeOf(data));
         const start_idx: u32 = @intCast(self.extra_data.items.len);
-        inline for (fields) |field| {
-            const data_value = @field(data, field.name);
-            // TODO this only works for data that can fit in u32, need a more general solution if we want to store more complex data
-            // maybe use @bitcast?
-            try self.extra_data.append(@intCast(data_value));
-        }
+
+        const extra_data = std.mem.toBytes(data);
+        try self.extra_data.appendSlice(&extra_data);
+
         return start_idx;
     }
 
     pub fn getExtra(self: AST, index: u32, comptime T: type) T {
-        const fields = std.meta.fields(T);
-        var result: T = undefined;
-        inline for (fields, 0..) |field, i| {
-            @field(result, field.name) = @intCast(self.extra_data.items[index + i]);
-        }
-        return result;
+        const bytes = self.extra_data.items[index .. index + @sizeOf(T)];
+        return std.mem.bytesToValue(T, bytes);
     }
 };
 
 const std = @import("std");
+const assert = std.debug.assert;
 const meta = std.meta;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;

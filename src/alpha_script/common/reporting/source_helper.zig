@@ -42,15 +42,12 @@ pub inline fn calcNodeLocation(source: []const u8, node: Node, ast: *AST) !Sourc
             const token_start = try token_stream.scanPosition(node.token_position);
             var token_end = token_start;
 
-            var arg_list = extra.args_start;
-            for (0..extra.args_count) |_| {
-                const list_node = ast.nodes.items[arg_list];
-                const list_extra = ast.getExtra(list_node.data.extra_id, NodeListExtra);
-
-                const arg_node = ast.nodes.items[list_extra.node_id];
-                token_end = try token_stream.scanPosition(arg_node.token_position);
-
-                arg_list = list_extra.next;
+            var iterator = NodeListIterator.init(ast, extra.args_start);
+            while (iterator.next()) |arg_node_id| {
+                if (!iterator.hasNext()) {
+                    const arg_node = ast.nodes.items[arg_node_id];
+                    token_end = try token_stream.scanPosition(arg_node.token_position);
+                }
             }
 
             const location_start = calcTokenLocation(source, token_start);
@@ -146,3 +143,4 @@ const VarDeclarationExtra = as.frontend.ast.VarDeclarationExtra;
 const CallExtra = as.frontend.ast.CallExtra;
 const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
 const NodeListExtra = as.frontend.ast.NodeListExtra;
+const NodeListIterator = as.frontend.ast.NodeListIterator;

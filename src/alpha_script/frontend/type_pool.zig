@@ -45,20 +45,20 @@ pub const TypePool = struct {
 
     pub fn init(allocator: Allocator) !TypePool {
         var pool = TypePool{
-            .allocatior = allocator,
+            .allocator = allocator,
             .types = ArrayList(Type).init(allocator),
             .type_list_buffer = std.ArrayList(TypeId).init(allocator),
             .union_cache = TypeListMap.init(allocator),
         };
 
-        try pool.types.append(.{ .tag = .unresolved, .data = undefined });
-        try pool.types.append(.{ .tag = .void, .data = undefined });
-        try pool.types.append(.{ .tag = .null, .data = undefined });
-        try pool.types.append(.{ .tag = .bool, .data = undefined });
-        try pool.types.append(.{ .tag = .int, .data = undefined });
-        try pool.types.append(.{ .tag = .float, .data = undefined });
-        try pool.types.append(.{ .tag = .string, .data = undefined });
-        try pool.types.append(.{ .tag = .module, .data = undefined });
+        try pool.types.append(.{ .unresolved = undefined });
+        try pool.types.append(.{ .void = undefined });
+        try pool.types.append(.{ .null = undefined });
+        try pool.types.append(.{ .bool = undefined });
+        try pool.types.append(.{ .int = undefined });
+        try pool.types.append(.{ .float = undefined });
+        try pool.types.append(.{ .string = undefined });
+        try pool.types.append(.{ .module = undefined });
 
         return pool;
     }
@@ -73,9 +73,9 @@ pub const TypePool = struct {
     pub fn isNullable(self: *const TypePool, type_id: TypeId) bool {
         if (type_id == TypePool.NULL) return true;
 
-        const ty = self.types.items[type_id];
-        if (ty.tag == .union_type) {
-            const members = self.getUnionMembers(ty);
+        const type_struct = self.types.items[type_id];
+        if (type_struct == .union_type) {
+            const members = self.getUnionMembers(type_struct);
             for (members) |member| {
                 // recursion for nested unions
                 if (self.isNullable(member)) {
@@ -150,12 +150,12 @@ pub const TypePool = struct {
         }
     }
 
-    pub fn getOrCreateUnionType(self: *TypePool, member_types: []const TypeId) TypeId {
+    pub fn getOrCreateUnionType(self: *TypePool, member_types: []const TypeId) Allocator.Error!TypeId {
         // sort / canonicalize member_type, so that (int|float) == (float|int)
         const sorted_members = try self.allocator.alloc(TypeId, member_types.len);
         defer self.allocator.free(sorted_members);
 
-        std.mem.copy(TypeId, sorted_members, member_types);
+        @memcpy(sorted_members, member_types);
         std.mem.sort(TypeId, sorted_members, {}, std.sort.asc(TypeId));
 
         // return type_id if cached
@@ -165,11 +165,12 @@ pub const TypePool = struct {
 
         // create type otherwise
         const list_index: u32 = @intCast(self.type_list_buffer.items.len);
-        try self.type_list_buffer.append(sorted_members);
+        try self.type_list_buffer.appendUnalignedSlice(sorted_members);
 
         const type_id: TypeId = @intCast(self.types.items.len);
         try self.types.append(.{ .union_type = .{
             .type_list_index = list_index,
+            .count = @intCast(sorted_members.len),
         } });
 
         // put union in cache
@@ -186,9 +187,15 @@ pub const TypePool = struct {
 
 const TypeListMap = std.HashMap([]const TypeId, TypeId, TypeListContext, 80);
 
-const TypeListContext = struct {
-    pub const eql = std.hash_map.getAutoEqlFn([]const TypeId, undefined);
-    pub const hash = std.hash_map.getAutoHashFn([]const TypeId, undefined);
+pub const TypeListContext = struct {
+    pub fn hash(self: @This(), key: []const TypeId) u64 {
+        _ = self;
+        return std.hash.Wyhash.hash(0, std.mem.sliceAsBytes(key));
+    }
+    pub fn eql(self: @This(), a: []const TypeId, b: []const TypeId) bool {
+        _ = self;
+        return std.mem.eql(TypeId, a, b);
+    }
 };
 
 const std = @import("std");
