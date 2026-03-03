@@ -99,8 +99,6 @@ pub const Compiler = struct {
         const node = self.ast.nodes.items[node_id];
 
         return switch (node.tag) {
-            // nodes needed ad compiletime (should not bleed into runtime!)
-            .comptime_uninitialized => unreachable,
             .node_list => unreachable,
 
             // statements
@@ -164,6 +162,7 @@ pub const Compiler = struct {
             },
 
             // expressions
+            .expression_grouping => try self.compileExpression(node.data.node_id),
             .expression_block => {
                 self.enterScope();
 

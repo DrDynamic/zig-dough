@@ -514,6 +514,22 @@ pub const Parser = struct {
                     .data = .{ .string_id = string_id },
                 });
             },
+            .left_paren => |_| case: {
+                const left_paren = try self.advance();
+                const group = try self.ast.addNode(.{
+                    .tag = .expression_grouping,
+                    .token_position = left_paren.location.start, //self.scanner.previous().location.start,
+                    .resolved_type_id = TypePool.UNRESOLVED,
+                    .data = .{ .node_id = try self.expression() },
+                });
+
+                _ = self.consume(.right_paren) catch {
+                    self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "expect ')' after group");
+                    return Error.UnexpectedToken;
+                };
+
+                break :case group;
+            },
             .identifier => |_| identifier_case: {
                 const string_id = try self.parseIdentifier();
                 break :identifier_case try self.ast.addNode(.{

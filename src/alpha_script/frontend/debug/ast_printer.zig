@@ -41,7 +41,6 @@ pub const ASTPrinter = struct {
 
         // 2. Spezifische Daten je nach Typ ausgeben
         switch (node.tag) {
-            .comptime_uninitialized => self.terminal.print(": -", .{}),
             .literal_null => self.terminal.print(": null\n", .{}),
             .literal_int => self.terminal.print(": {d}\n", .{node.data.int_value}),
             .literal_float => self.terminal.print(": {d:.4}\n", .{node.data.float_value}),
@@ -80,6 +79,7 @@ pub const ASTPrinter = struct {
             },
 
             // expressions
+            .expression_grouping,
             .expression_block,
             .expression_if,
             => {
@@ -116,13 +116,12 @@ pub const ASTPrinter = struct {
 
     fn printChildren(self: ASTPrinter, node: ast.Node, prefix: []const u8) !void {
         switch (node.tag) {
-            .comptime_uninitialized,
             .literal_null,
             .literal_int,
             .literal_float,
             .literal_bool,
             .identifier_expr,
-            => {}, // Blätter haben keine Kinder
+            => {}, // leaves don't have children
             .object_string => {},
 
             .negate, .logical_not => {
@@ -158,6 +157,9 @@ pub const ASTPrinter = struct {
                 try self.printNode(node.data.node_id, prefix, true);
             },
             // expressions
+            .expression_grouping => {
+                try self.printNode(node.data.node_id, prefix, true);
+            },
             .expression_block => {
                 var iterator = ast.NodeListIterator.init(self.ast, node.data.node_id);
                 while (iterator.next()) |statement_id| {

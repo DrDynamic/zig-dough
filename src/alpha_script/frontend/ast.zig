@@ -1,9 +1,6 @@
 pub const NodeId = u32;
 
 pub const NodeType = enum(u8) {
-    // nodes needed ad compiletime (should not bleed into runtime!)
-    comptime_uninitialized,
-
     // literals
     literal_null, // none
     literal_bool, // none
@@ -20,6 +17,7 @@ pub const NodeType = enum(u8) {
     // expressions
     expression_block, // node_id (the start of a NodeList of Satements)
     expression_if, // IfExtra
+    expression_grouping, // node_id (the expression, that is grouped)
 
     // access
     identifier_expr, // string_id

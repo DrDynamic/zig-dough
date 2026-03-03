@@ -46,6 +46,7 @@ pub const SemanticAnalyser = struct {
         var node = &self.ast.nodes.items[node_id];
 
         const resolved_type: TypeId = switch (node.tag) {
+            .node_list => unreachable,
             // literals
             .literal_null => TypePool.NULL,
             .literal_bool => TypePool.BOOL,
@@ -60,6 +61,7 @@ pub const SemanticAnalyser = struct {
             .declaration_const => try self.analyseDeclaration(node_id, false),
 
             // statements
+            .expression_grouping => try self.analyse(node.data.node_id),
             .expression_block => |_| case: {
                 var iterator = NodeListIterator.init(self.ast, node.data.node_id);
 
@@ -192,10 +194,6 @@ pub const SemanticAnalyser = struct {
                 }
 
                 break :case type_callee;
-            },
-            else => |_| {
-                std.debug.print("Unhandled node: {s}\n", .{@tagName(node.tag)});
-                return error.UnhandledNodeType;
             },
         };
 
