@@ -1,14 +1,25 @@
 pub const TypeId = u32;
 
 pub const TypeTag = enum(u8) {
+    /// the type is not resolved yet. (should only occur in before execution of the SemanticAnalyzer)
     unresolved,
+
+    // primitives
     void,
     null,
     bool,
     int,
     float,
     string,
+
+    // complex
     module,
+
+    // error
+    anyerror,
+    error_type,
+    error_set,
+
     /// mixed type like int|float or string|null
     union_type,
 };
@@ -22,6 +33,10 @@ pub const Type = union(TypeTag) {
     float,
     string,
     module,
+    anyerror,
+    error_type: StringId,
+    error_set,
+
     union_type: struct {
         type_list_index: u32,
         count: u32,
@@ -32,26 +47,30 @@ pub const TypePool = struct {
     allocator: std.mem.Allocator,
     types: ArrayList(Type),
     type_list_buffer: std.ArrayList(TypeId),
+    named_type_cache: std.AutoHashMap(StringId, TypeId),
     union_cache: TypeListMap,
 
     pub const UNRESOLVED = 0;
-    pub const VOID = 1;
-    pub const NULL = 2;
-    pub const BOOL = 3;
-    pub const INT = 4;
-    pub const FLOAT = 5;
-    pub const STRING = 6;
-    pub const MODULE = 7;
+    pub const ANYERROR = 1;
+    pub const VOID = 2;
+    pub const NULL = 3;
+    pub const BOOL = 4;
+    pub const INT = 5;
+    pub const FLOAT = 6;
+    pub const STRING = 7;
+    pub const MODULE = 8;
 
     pub fn init(allocator: Allocator) !TypePool {
         var pool = TypePool{
             .allocator = allocator,
             .types = ArrayList(Type).init(allocator),
             .type_list_buffer = std.ArrayList(TypeId).init(allocator),
+            .named_type_cache = std.AutoHashMap(StringId, TypeId).init(allocator),
             .union_cache = TypeListMap.init(allocator),
         };
 
         try pool.types.append(.{ .unresolved = undefined });
+        try pool.types.append(.{ .anyerror = undefined });
         try pool.types.append(.{ .void = undefined });
         try pool.types.append(.{ .null = undefined });
         try pool.types.append(.{ .bool = undefined });
@@ -66,6 +85,7 @@ pub const TypePool = struct {
     pub fn deinit(self: *TypePool) void {
         self.types.deinit();
         self.type_list_buffer.deinit();
+        self.named_type_cache.deinit();
         self.union_cache.deinit();
     }
 
@@ -74,41 +94,53 @@ pub const TypePool = struct {
         if (type_id == TypePool.NULL) return true;
 
         const type_struct = self.types.items[type_id];
-        if (type_struct == .union_type) {
-            const members = self.getUnionMembers(type_struct);
-            for (members) |member| {
-                // recursion for nested unions
-                if (self.isNullable(member)) {
-                    return true;
-                }
+        if (type_struct != .union_type) return false;
+
+        const members = self.getUnionMembers(type_struct);
+        for (members) |member| {
+            // recursion for nested unions
+            if (self.isNullable(member)) {
+                return true;
             }
         }
 
         return false;
     }
 
+    /// a type is numeric, when it is int, float or a union type containing only numeric types
     pub fn isNumeric(self: *const TypePool, type_id: TypeId) bool {
         if (type_id == TypePool.INT or type_id == TypePool.FLOAT) {
             return true;
         }
-        const ty = self.types.items[type_id];
-        if (ty.tag == .union_type) {
-            const members = self.getUnionMembers(ty);
-            for (members) |member| {
-                // recursion for nested unions
-                if (!self.isNumeric(member)) {
-                    return false;
-                }
+
+        const t = self.types.items[type_id];
+        if (t != .union_type) return false;
+
+        const members = self.getUnionMembers(t);
+        for (members) |member| {
+            // recursion for nested unions
+            if (!self.isNumeric(member)) {
+                return false;
             }
-            return true;
         }
-        return false;
+        return true;
     }
 
+    /// a type is an error union, when it is a type union that contains an ErrorSet
     pub fn isErrorUnion(self: *const TypePool, type_id: TypeId) bool {
-        _ = self;
-        _ = type_id;
-        return false; // TODO implement errors
+        const t = self.types.items[type_id];
+        if (t != .union_type) return false;
+
+        const members = self.getUnionMembers(t);
+        for (members) |member| {
+            if (self.types.items[member] == .error_set) {
+                return true;
+            } else if (self.isErrorUnion(member)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// a type is assignable to another type, when both type are the same or target is a superset of source
@@ -148,6 +180,30 @@ pub const TypePool = struct {
                 }
             },
         }
+    }
+
+    pub fn getOrCreateErrorType(self: *TypePool, name_id: StringId) Allocator.Error!TypeId {
+        // return type_id if cached
+        if (self.named_type_cache.get(name_id)) |error_type_id| {
+            return error_type_id;
+        }
+
+        // create error_type otherwise
+        const error_type_id = self.types.items.len;
+        try self.types.append(.{
+            .error_type = name_id,
+        });
+        try self.named_type_cache.put(name_id, error_type_id);
+
+        return error_type_id;
+    }
+
+    pub fn getType(self: *TypePool, name_id: StringId) !TypeId {
+        if (self.named_type_cache.get(name_id)) |error_type_id| {
+            return error_type_id;
+        }
+
+        return error.NotFound;
     }
 
     pub fn getOrCreateUnionType(self: *TypePool, member_types: []const TypeId) Allocator.Error!TypeId {
@@ -201,3 +257,6 @@ pub const TypeListContext = struct {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+
+const as = @import("as");
+const StringId = as.common.StringId;

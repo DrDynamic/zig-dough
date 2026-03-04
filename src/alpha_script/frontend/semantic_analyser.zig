@@ -13,15 +13,13 @@ pub const SemanticAnalyser = struct {
 
     allocator: std.mem.Allocator,
     ast: *AST,
-    type_pool: *TypePool,
     error_reporter: *ErrorReporter,
     symbol_table: SymbolTable,
 
-    pub fn init(allocator: std.mem.Allocator, type_pool: *TypePool, error_reporter: *ErrorReporter) !SemanticAnalyser {
+    pub fn init(allocator: std.mem.Allocator, error_reporter: *ErrorReporter) !SemanticAnalyser {
         return .{
             .allocator = allocator,
             .ast = undefined,
-            .type_pool = type_pool,
             .error_reporter = error_reporter,
             .symbol_table = try SymbolTable.init(allocator),
         };
@@ -88,7 +86,7 @@ pub const SemanticAnalyser = struct {
                         self.error_reporter.semanticAnalyserError(self, Error.PointlessCapture, else_capture, "else capture is pointless (it is always false)");
                         maybe_err = Error.PointlessCapture;
                     }
-                } else if (self.type_pool.isNullable(type_condition)) {
+                } else if (self.ast.type_pool.isNullable(type_condition)) {
                     if (extra.then_capture == null) {
                         const condition = self.ast.nodes.items[extra.condition];
                         self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing then capture for nullable condition");
@@ -99,7 +97,7 @@ pub const SemanticAnalyser = struct {
                         self.error_reporter.semanticAnalyserError(self, Error.PointlessCapture, else_capture, "capture is pointless for nullable condition (it is always null)");
                         maybe_err = Error.PointlessCapture;
                     }
-                } else if (self.type_pool.isErrorUnion(type_condition)) {
+                } else if (self.ast.type_pool.isErrorUnion(type_condition)) {
                     if (extra.then_capture == null) {
                         const condition = self.ast.nodes.items[extra.condition];
                         self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing then capture for nullable condition");
@@ -130,7 +128,7 @@ pub const SemanticAnalyser = struct {
                 if (type_then == type_else) {
                     break :case type_then;
                 } else {
-                    break :case try self.type_pool.getOrCreateUnionType(&[_]u32{ type_then, type_else });
+                    break :case try self.ast.type_pool.getOrCreateUnionType(&[_]u32{ type_then, type_else });
                 }
 
                 break :case TypePool.VOID;

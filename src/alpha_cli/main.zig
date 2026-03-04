@@ -96,7 +96,10 @@ pub fn main() !void {
             try scanner.reset();
         }
 
-        var ast = try as.frontend.AST.init(&scanner, &string_table, allocator);
+        var type_pool = try as.frontend.TypePool.init(allocator);
+        defer type_pool.deinit();
+
+        var ast = try as.frontend.AST.init(&scanner, &string_table, &type_pool, allocator);
         defer ast.deinit();
 
         var parser = as.frontend.Parser.init(
@@ -111,12 +114,8 @@ pub fn main() !void {
             std.process.exit(EXIT_CODE_COMPILER_ERROR);
         }
 
-        var type_pool = try as.frontend.TypePool.init(allocator);
-        defer type_pool.deinit();
-
         var semantic_analyzer = try as.frontend.SemanticAnalyzer.init(
             allocator,
-            &type_pool,
             &error_reporter,
         );
         defer semantic_analyzer.deinit();

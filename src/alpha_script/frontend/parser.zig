@@ -1,6 +1,8 @@
 pub const Parser = struct {
     pub const Error = error{
         UnexpectedToken,
+        UndefinedType,
+        UnexpectedType,
         //
         OutOfMemory,
         ScannerError,
@@ -60,18 +62,7 @@ pub const Parser = struct {
 
         var type_id: ?TypeId = TypePool.UNRESOLVED;
         if (try self.match(.colon)) {
-            _ = self.consume(.identifier) catch |err| switch (err) {
-                error.TokenMissMatch => {
-                    self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "Exprect type name");
-                    return error.ParserError;
-                },
-                else => {
-                    return err;
-                },
-            };
-
-            // TODO parse Type
-            type_id = null;
+            type_id = try self.typeReference();
         }
 
         var assignment_node_id: ?NodeId = null;
@@ -166,7 +157,7 @@ pub const Parser = struct {
         };
 
         var then_capture: ?NodeId = null;
-        if (try self.match(.vertical_line)) {
+        if (try self.match(.pipe)) {
             then_capture = self.capture();
         }
 
@@ -175,7 +166,7 @@ pub const Parser = struct {
         var else_capture: ?NodeId = null;
         var else_branch: ?NodeId = null;
         if (try self.match(.else_)) {
-            if (try self.match(.vertical_line)) {
+            if (try self.match(.pipe)) {
                 else_capture = try self.capture();
             }
             else_branch = self.statement();
@@ -220,7 +211,7 @@ pub const Parser = struct {
             .resolved_type_id = TypePool.UNRESOLVED,
             .data = .{ .string_id = capture_name },
         });
-        self.consume(.vertical_line) catch {
+        self.consume(.pipe) catch {
             self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "expect '|' after capture");
             return Error.UnexpectedToken;
         };
@@ -443,7 +434,7 @@ pub const Parser = struct {
     fn primary(self: *Parser) Error!NodeId {
         const token = self.scanner.current();
         return switch (token.tag) {
-            .null_ => |_| case: {
+            .null => |_| case: {
                 _ = try self.advance();
 
                 break :case try self.ast.addNode(.{
@@ -501,7 +492,7 @@ pub const Parser = struct {
                     });
                 }
             },
-            .string => |_| case: {
+            .string_double_quote => |_| case: {
                 _ = try self.advance();
 
                 const lexeme = self.scanner.getLexeme(token);
@@ -542,6 +533,121 @@ pub const Parser = struct {
             else => |_| {
                 self.error_reporter.parserError(self, Error.UnexpectedToken, token, "Expect expression");
                 _ = try self.advance();
+                return Error.UnexpectedToken;
+            },
+        };
+    }
+
+    // types
+    fn typeReference(self: *Parser) !TypeId {
+        // const a:Error!?int
+        // const a:Error!int|string
+        return try self.typeErrorUnion();
+    }
+
+    fn typeErrorUnion(self: *Parser) !TypeId {
+        var maybe_error_type: ?TypeId = null;
+
+        if (self.scanner.current().tag == .bang) {
+            maybe_error_type = TypePool.ANYERROR;
+            _ = self.consume(.bang) catch unreachable;
+        } else if (self.scanner.next().tag == .bang) {
+            maybe_error_type = try self.typeErrorSet();
+            _ = self.consume(.bang) catch unreachable;
+        }
+
+        if (maybe_error_type) |error_type| {
+            const members = [_]u32{
+                error_type,
+                try self.typeUnion(),
+            };
+
+            return try self.ast.type_pool.getOrCreateUnionType(&members);
+        } else {
+            return try self.typeUnion();
+        }
+    }
+
+    fn typeErrorSet(self: *Parser) !TypeId {
+        const error_name_id = self.parseIdentifier() catch {
+            self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "expect identifier or nothing as error type");
+            return Error.UnexpectedToken;
+        };
+
+        const error_set_id = self.ast.type_pool.getType(error_name_id) catch {
+            self.error_reporter.parserError(self, Error.UndefinedType, self.scanner.previous(), "Undefined ErrorSet");
+            return Error.UndefinedType;
+        };
+
+        if (self.ast.type_pool.types.items[error_set_id] != .error_set) {
+            self.error_reporter.parserError(self, Error.UnexpectedType, self.scanner.previous(), "expect ErrorSet");
+            return Error.UnexpectedType;
+        }
+
+        return error_set_id;
+    }
+
+    fn typeUnion(self: *Parser) !TypeId {
+        var members = std.ArrayList(TypeId).init(self.allocator);
+        defer members.deinit();
+
+        if (try self.match(.question_mark)) {
+            try members.append(TypePool.NULL);
+            try members.append(try self.typePrimary());
+        } else {
+            try members.append(try self.typePrimary());
+
+            while (try self.match(.pipe)) {
+                try members.append(try self.typePrimary());
+            }
+
+            if (members.items.len == 1) return members.items[0];
+        }
+
+        return self.ast.type_pool.getOrCreateUnionType(members.items);
+    }
+
+    fn typePrimary(self: *Parser) !TypeId {
+        const token = self.scanner.current();
+
+        return switch (token.tag) {
+            .void => case: {
+                _ = try self.advance();
+                break :case TypePool.VOID;
+            },
+            .null => case: {
+                _ = try self.advance();
+                break :case TypePool.NULL;
+            },
+            .bool => case: {
+                _ = try self.advance();
+                break :case TypePool.BOOL;
+            },
+            .int => case: {
+                _ = try self.advance();
+                break :case TypePool.INT;
+            },
+            .float => case: {
+                _ = try self.advance();
+                break :case TypePool.FLOAT;
+            },
+            .string => case: {
+                _ = try self.advance();
+                break :case TypePool.STRING;
+            },
+            .anyerror => case: {
+                _ = try self.advance();
+                break :case TypePool.ANYERROR;
+            },
+            .identifier => case: {
+                const name_id = try self.parseIdentifier();
+                break :case self.ast.type_pool.getType(name_id) catch {
+                    self.error_reporter.parserError(self, Error.UndefinedType, self.scanner.previous(), "Undefined type");
+                    return Error.UndefinedType;
+                };
+            },
+            else => {
+                self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "expect type");
                 return Error.UnexpectedToken;
             },
         };

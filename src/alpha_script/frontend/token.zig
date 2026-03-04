@@ -20,7 +20,7 @@ pub const TokenType = enum {
     semicolon,
     slash,
     star,
-    vertical_line,
+    pipe,
     // One or two character tokens.
     bang,
     bang_equal,
@@ -32,11 +32,20 @@ pub const TokenType = enum {
     less_equal,
     logical_and,
     logical_or,
+
     // Literals.
     identifier,
-    string,
+    string_double_quote,
     number,
+
     // Keywords.
+    void,
+    null,
+    bool,
+    int,
+    float,
+    string,
+    anyerror,
     const_,
     else_,
     error_,
@@ -44,7 +53,6 @@ pub const TokenType = enum {
     for_,
     function_,
     if_,
-    null_,
     return_,
     true_,
     type_,

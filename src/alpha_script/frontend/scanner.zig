@@ -132,7 +132,7 @@ pub const TokenStream = struct {
             ';' => .{ .tag = .semicolon, .location = .{ .start = start, .end = start + 1 } },
             '/' => .{ .tag = .slash, .location = .{ .start = start, .end = start + 1 } },
             '*' => .{ .tag = .star, .location = .{ .start = start, .end = start + 1 } },
-            '|' => .{ .tag = .vertical_line, .location = .{ .start = start, .end = start + 1 } },
+            '|' => .{ .tag = .pipe, .location = .{ .start = start, .end = start + 1 } },
 
             // One or two character tokens.
             '!' => if (self.matchChar('='))
@@ -193,7 +193,7 @@ pub const TokenStream = struct {
         }
 
         return .{
-            .tag = .string,
+            .tag = .string_double_quote,
             .location = .{
                 .start = token_start,
                 .end = self.pos - 1,
@@ -228,7 +228,25 @@ pub const TokenStream = struct {
         const token_end = self.pos;
 
         const tokenType = switch (self.source[token_start]) {
-            'a' => self.matchIdentifier("nd", 1, 2, token_start, token_end, .logical_and),
+            'a' => |_| a_case: {
+                if (token_end - token_start > 1) {
+                    break :a_case switch (self.source[token_start + 1]) {
+                        'n' => |_| an_case: {
+                            if (token_end - token_start > 2) {
+                                break :an_case switch (self.source[token_start + 2]) {
+                                    'd' => self.matchIdentifier("", 2, 1, token_start, token_end, .logical_and),
+                                    'y' => self.matchIdentifier("error", 2, 5, token_start, token_end, .anyerror),
+                                    else => .identifier,
+                                };
+                            }
+                            break :an_case .identifier;
+                        },
+                        else => .identifier,
+                    };
+                }
+                break :a_case .identifier;
+            },
+            'b' => self.matchIdentifier("ool", 1, 3, token_start, token_end, .bool),
             'c' => self.matchIdentifier("onst", 1, 4, token_start, token_end, .const_),
             'e' => |_| e_case: {
                 if (token_end - token_start > 1) {
@@ -244,6 +262,7 @@ pub const TokenStream = struct {
                 if (token_end - token_start > 1) {
                     break :f_case switch (self.source[token_start + 1]) {
                         'a' => self.matchIdentifier("lse", 2, 3, token_start, token_end, .false_),
+                        'l' => self.matchIdentifier("oat", 2, 3, token_start, token_end, .float),
                         'o' => self.matchIdentifier("r", 2, 1, token_start, token_end, .for_),
                         'u' => self.matchIdentifier("nction", 2, 6, token_start, token_end, .function_),
                         else => .identifier,
@@ -251,10 +270,20 @@ pub const TokenStream = struct {
                 }
                 break :f_case .identifier;
             },
-            'i' => self.matchIdentifier("f", 1, 1, token_start, token_end, .if_),
-            'n' => self.matchIdentifier("ull", 1, 3, token_start, token_end, .null_),
+            'i' => |_| case: {
+                if (token_end - token_start > 1) {
+                    break :case switch (self.source[token_start + 1]) {
+                        'f' => self.matchIdentifier("", 2, 0, token_start, token_end, .if_),
+                        'n' => self.matchIdentifier("t", 2, 1, token_start, token_end, .int),
+                        else => .identifier,
+                    };
+                }
+                break :case .identifier;
+            },
+            'n' => self.matchIdentifier("ull", 1, 3, token_start, token_end, .null),
             'o' => self.matchIdentifier("r", 1, 1, token_start, token_end, .logical_or),
             'r' => self.matchIdentifier("eturn", 1, 5, token_start, token_end, .return_),
+            's' => self.matchIdentifier("tring", 1, 5, token_start, token_end, .string),
             't' => |_| t_case: {
                 if (token_end - token_start > 1) {
                     break :t_case switch (self.source[token_start + 1]) {
@@ -266,7 +295,16 @@ pub const TokenStream = struct {
                 break :t_case .identifier;
             },
 
-            'v' => self.matchIdentifier("ar", 1, 2, token_start, token_end, .var_),
+            'v' => |_| case: {
+                if (token_end - token_start > 1) {
+                    break :case switch (self.source[token_start + 1]) {
+                        'a' => self.matchIdentifier("r", 2, 1, token_start, token_end, .var_),
+                        'o' => self.matchIdentifier("id", 2, 2, token_start, token_end, .void),
+                        else => .identifier,
+                    };
+                }
+                break :case .identifier;
+            },
             'w' => self.matchIdentifier("hile", 1, 4, token_start, token_end, .while_),
             else => .identifier,
         };
@@ -417,8 +455,9 @@ test "Scanns all tokens" {
         TokenType.logical_or,
         // Literals.
         TokenType.identifier,
-        TokenType.string,
-        TokenType.number,
+        TokenType.string_double_quote,
+        TokenType.int,
+        TokenType.float,
         // Keywords.
         TokenType.const_,
         TokenType.else_,
@@ -454,7 +493,7 @@ test "supports everything above ascii as identifiers" {
     try std.testing.expectEqualStrings("🥟", scanner.current.lexeme.?);
 
     scanner.scanToken();
-    try std.testing.expectEqual(scanner.current.tag, TokenType.string);
+    try std.testing.expectEqual(scanner.current.tag, TokenType.string_double_quote);
     try std.testing.expectEqualStrings("🍕", scanner.current.lexeme.?);
 
     scanner.scanToken();

@@ -123,9 +123,10 @@ pub const AST = struct {
     nodes: ArrayList(Node),
     extra_data: ArrayList(u8),
     string_table: *StringTable,
+    type_pool: *TypePool,
     is_valid: bool,
 
-    pub fn init(scanner: *Scanner, string_table: *StringTable, allocator: Allocator) !AST {
+    pub fn init(scanner: *Scanner, string_table: *StringTable, type_pool: *TypePool, allocator: Allocator) !AST {
         const ast: AST = .{
             .allocator = allocator,
             .scanner = scanner,
@@ -133,6 +134,7 @@ pub const AST = struct {
             .nodes = ArrayList(Node).init(allocator),
             .extra_data = ArrayList(u8).init(allocator),
             .string_table = string_table,
+            .type_pool = type_pool,
             .is_valid = true,
         };
 
@@ -190,5 +192,5 @@ const as = @import("as");
 const TypeId = as.frontend.TypeId;
 const StringId = as.common.StringId;
 const StringTable = as.common.StringTable;
-
 const Scanner = as.frontend.Scanner;
+const TypePool = as.frontend.TypePool;

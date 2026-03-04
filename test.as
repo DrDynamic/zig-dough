@@ -1,3 +1,15 @@
-print (-(3)); // expect: -3
-print (--(3)); // expect: 3
-print (---(3)); // expect: -3
+var a:?int = 42;
+
+if(a) |assured_number| {
+    print(assured_number); // expect: 42
+}else {
+    print("not a number");
+}
+
+a = null;
+
+if(a) |assured_number| {
+    print(assured_number);
+}else {
+    print("a is null"); // expect: a is null
+}
