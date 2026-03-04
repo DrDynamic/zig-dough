@@ -138,27 +138,29 @@ pub const Parser = struct {
 
     // expressions
     fn expression(self: *Parser) Error!NodeId {
-        if (try self.match(.if_)) {}
+        if (try self.match(.if_)) {
+            return try self.ifExpression();
+        }
         return try self.assignment();
     }
 
     fn ifExpression(self: *Parser) Error!NodeId {
         const token_start = self.scanner.previous();
-        self.consume(.left_paren) catch {
+        _ = self.consume(.left_paren) catch {
             self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "expect '(' after 'if'");
             return Error.UnexpectedToken;
         };
 
         const condition = try self.expression();
 
-        self.consume(.right_paren) catch {
+        _ = self.consume(.right_paren) catch {
             self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "expect ')' after condition");
             return Error.UnexpectedToken;
         };
 
         var then_capture: ?NodeId = null;
         if (try self.match(.pipe)) {
-            then_capture = self.capture();
+            then_capture = try self.capture();
         }
 
         const then_branch = try self.statement();
@@ -169,25 +171,21 @@ pub const Parser = struct {
             if (try self.match(.pipe)) {
                 else_capture = try self.capture();
             }
-            else_branch = self.statement();
+            else_branch = try self.statement();
         }
 
         const extra_id = try self.ast.addExtra(IfExtra{
             .condition = condition,
 
-            .has_then_capture = then_capture != null,
-            .has_else_capture = else_capture != null,
-            .has_else_branch = else_branch != null,
-
-            .then_capture = then_capture orelse undefined,
+            .then_capture = then_capture,
             .then_branch = then_branch,
 
-            .else_capture = else_capture orelse undefined,
-            .else_branch = else_branch orelse undefined,
+            .else_capture = else_capture,
+            .else_branch = else_branch,
         });
 
         return try self.ast.addNode(.{
-            .tag = .expression_ifif,
+            .tag = .expression_if,
             .token_position = token_start.location.start,
             .resolved_type_id = TypePool.UNRESOLVED,
             .data = .{ .extra_id = extra_id },
@@ -195,7 +193,7 @@ pub const Parser = struct {
     }
 
     fn capture(self: *Parser) Error!NodeId {
-        const capture_name = try self.parseIdentifier() catch |err| switch (err) {
+        const capture_name = self.parseIdentifier() catch |err| switch (err) {
             error.TokenMissMatch => {
                 self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "expect capture name");
                 _ = try self.advance();
@@ -211,7 +209,7 @@ pub const Parser = struct {
             .resolved_type_id = TypePool.UNRESOLVED,
             .data = .{ .string_id = capture_name },
         });
-        self.consume(.pipe) catch {
+        _ = self.consume(.pipe) catch {
             self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "expect '|' after capture");
             return Error.UnexpectedToken;
         };
