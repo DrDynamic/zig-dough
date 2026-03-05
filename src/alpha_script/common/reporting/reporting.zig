@@ -3,6 +3,7 @@ const error_reporter = @import("./error_reporter.zig");
 pub const ReportingModule = error_reporter.ReportingModule;
 pub const ReportedError = error_reporter.ReportedError;
 pub const ErrorReport = error_reporter.ErrorReport;
+pub const HintReport = error_reporter.HintReport;
 pub const ErrorReporter = error_reporter.ErrorReporter;
 pub const SourceInfo = error_reporter.SourceInfo;
 

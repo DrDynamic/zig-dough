@@ -23,37 +23,64 @@ pub const PrettyErrorOutput = struct {
     pub fn output(self: *PrettyErrorOutput) ErrorOutput {
         return .{
             .ptr = self,
-            .outputFn = printError,
+            .errorFn = printError,
+            .hintFn = printHint,
         };
     }
 
     fn printError(ptr: *anyopaque, report: ErrorReport) void {
         const self: *PrettyErrorOutput = @ptrCast(@alignCast(ptr));
 
-        if (report.source_info.node) |_| {
-            self.printNode(&report) catch {
-                self.printToken(&report);
-            };
+        const source = source_helper.sourceFromReportingModule(report.reporting_module);
+        const location = self.getSourceLocation(source, report.reporting_module, report.source_info);
+
+        self.printErrorMessage(report.error_code, report.source_info, location, report.message);
+        self.printMarkedSource(source, location);
+    }
+
+    fn printHint(ptr: *anyopaque, report: HintReport) void {
+        const self: *PrettyErrorOutput = @ptrCast(@alignCast(ptr));
+
+        if (report.source_info) |source_info| {
+            const source = source_helper.sourceFromReportingModule(report.reporting_module);
+            const location = self.getSourceLocation(source, report.reporting_module, source_info);
+
+            self.printHintMessage(source_info, location, report.message);
+            self.printMarkedSource(source, location);
         } else {
-            self.printToken(&report);
+            self.printHintMessage(null, null, report.message);
         }
     }
 
-    fn printToken(self: *const PrettyErrorOutput, report: *const ErrorReport) void {
-        const source = source_helper.sourceFromReportingModule(report.reporting_module);
-        const location = source_helper.calcTokenLocation(source, report.source_info.token);
+    fn getSourceLocation(self: *const PrettyErrorOutput, source: []const u8, reporting_module: ReportingModule, source_info: SourceInfo) SourceLocation {
+        _ = self;
 
-        self.printMessage(report.error_code, report.source_info, location, report.message);
-        self.printMarkedSource(source, location);
+        var location: SourceLocation = undefined;
+        if (source_info.node) |node| {
+            const ast = source_helper.astFromReportingModule(reporting_module);
+            location = source_helper.calcNodeLocation(source, node, ast.?) catch
+                source_helper.calcTokenLocation(source, source_info.token);
+        } else {
+            location = source_helper.calcTokenLocation(source, source_info.token);
+        }
+
+        return location;
     }
 
-    fn printNode(self: *const PrettyErrorOutput, report: *const ErrorReport) !void {
-        const source = source_helper.sourceFromReportingModule(report.reporting_module);
-        const ast = source_helper.astFromReportingModule(report.reporting_module);
-        const location = try source_helper.calcNodeLocation(source, report.source_info.node.?, ast.?);
+    fn printErrorMessage(self: *const PrettyErrorOutput, error_code: u32, source_info: SourceInfo, location: SourceLocation, message: []const u8) void {
+        self.terminal.printWithOptions("{?s}:{d}:{d} ", .{ source_info.file_path, location.line, location.column }, location_label_options);
+        self.terminal.printWithOptions("error[{d}]: ", .{error_code}, error_label_options);
+        self.terminal.printWithOptions("{s}\n", .{message}, location_label_options);
+        self.terminal.setStyle(Terminal.reset_options);
+    }
 
-        self.printMessage(report.error_code, report.source_info, location, report.message);
-        self.printMarkedSource(source, location);
+    fn printHintMessage(self: *const PrettyErrorOutput, maybe_source_info: ?SourceInfo, location: ?SourceLocation, message: []const u8) void {
+        if (maybe_source_info) |source_info| {
+            self.terminal.printWithOptions("{?s}:{d}:{d} ", .{ source_info.file_path, location.?.line, location.?.column }, location_label_options);
+        }
+        self.terminal.printWithOptions("note: ", .{}, error_label_options);
+        self.terminal.printWithOptions("{s}\n", .{message}, location_label_options);
+        self.terminal.setStyle(Terminal.reset_options);
     }
 
     fn printMarkedSource(self: *const PrettyErrorOutput, source: []const u8, location: SourceLocation) void {
@@ -74,18 +101,13 @@ pub const PrettyErrorOutput = struct {
         }
         self.terminal.printWithOptions("\n", .{}, Terminal.reset_options);
     }
-
-    fn printMessage(self: *const PrettyErrorOutput, error_code: u32, source_info: SourceInfo, location: SourceLocation, message: []const u8) void {
-        self.terminal.printWithOptions("{?s}:{d}:{d} ", .{ source_info.file_path, location.line, location.column }, location_label_options);
-        self.terminal.printWithOptions("error[{d}]: ", .{error_code}, error_label_options);
-        self.terminal.printWithOptions("{s}\n", .{message}, location_label_options);
-        self.terminal.setStyle(Terminal.reset_options);
-    }
 };
 
 const as = @import("as");
 const ErrorOutput = as.common.reporting.ErrorOutput;
 const ErrorReport = as.common.reporting.ErrorReport;
+const HintReport = as.common.reporting.HintReport;
+const ReportingModule = as.common.reporting.ReportingModule;
 const SourceInfo = as.common.reporting.SourceInfo;
 const source_helper = as.common.reporting.source_helper;
 const SourceLocation = as.common.reporting.source_helper.SourceLocation;

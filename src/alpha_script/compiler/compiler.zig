@@ -237,12 +237,15 @@ pub const Compiler = struct {
             },
 
             // access
-            .identifier_expr => {
-                return self.resolveLocal(node.data.string_id) catch {
-                    self.error_reporter.compilerError(self, Error.UndefinedIdentifier, node, "Undefined identifier");
-                    return Error.UndefinedIdentifier;
-                };
+            .assignment => {
+                const extra = self.ast.getExtra(node.data.extra_id, AssignmentExtra);
+                const target_node = self.ast.nodes.items[extra.target]; // semantic analyser assures that this is an identifier_expr
+                const reg_target = self.resolveLocal(target_node.data.string_id) catch unreachable; // assured by semyntc analyser
+
+                try self.compileExpressionEnsureRegister(extra.source, reg_target);
+                return reg_target;
             },
+            .identifier_expr => self.resolveLocal(node.data.string_id) catch unreachable, // assured by semyntc analyser
             .call => {
                 const extra = self.ast.getExtra(node.data.extra_id, ast.CallExtra);
 
@@ -428,3 +431,4 @@ const StringId = as.common.StringId;
 const NodeListExtra = as.frontend.ast.NodeListExtra;
 const NodeListIterator = as.frontend.ast.NodeListIterator;
 const IfExtra = as.frontend.ast.IfExtra;
+const AssignmentExtra = as.frontend.ast.AssignmentExtra;

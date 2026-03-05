@@ -217,10 +217,28 @@ pub const Parser = struct {
     }
 
     fn assignment(self: *Parser) Error!NodeId {
-        const assignment_target = self.or_();
-        // TODO implement assignment
+        const assignment_target_id = try self.or_();
 
-        return assignment_target;
+        if (try self.match(.equal)) {
+            const token_equal = self.scanner.previous();
+
+            // TODO: allow or deny chaning assignments?
+            const source_id = try self.assignment();
+
+            const extra_id = try self.ast.addExtra(AssignmentExtra{
+                .target = assignment_target_id,
+                .source = source_id,
+            });
+
+            return try self.ast.addNode(.{
+                .tag = .assignment,
+                .token_position = token_equal.location.start,
+                .resolved_type_id = TypePool.UNRESOLVED,
+                .data = .{ .extra_id = extra_id },
+            });
+        }
+
+        return assignment_target_id;
     }
 
     fn or_(self: *Parser) Error!NodeId {
@@ -745,3 +763,4 @@ const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
 const CallExtra = as.frontend.ast.CallExtra;
 const NodeListExtra = as.frontend.ast.NodeListExtra;
 const IfExtra = as.frontend.ast.IfExtra;
+const AssignmentExtra = as.frontend.ast.AssignmentExtra;

@@ -33,9 +33,13 @@ pub const Type = union(TypeTag) {
     float,
     string,
     module,
+
     anyerror,
     error_type: StringId,
-    error_set,
+    error_set: struct {
+        type_list_index: u32,
+        count: u32,
+    },
 
     union_type: struct {
         type_list_index: u32,
@@ -59,6 +63,7 @@ pub const TypePool = struct {
     pub const FLOAT = 6;
     pub const STRING = 7;
     pub const MODULE = 8;
+    pub const ERROR_TYPE = 9;
 
     pub fn init(allocator: Allocator) !TypePool {
         var pool = TypePool{
@@ -78,6 +83,7 @@ pub const TypePool = struct {
         try pool.types.append(.{ .float = undefined });
         try pool.types.append(.{ .string = undefined });
         try pool.types.append(.{ .module = undefined });
+        try pool.types.append(.{ .error_type = undefined });
 
         return pool;
     }
@@ -151,12 +157,26 @@ pub const TypePool = struct {
         switch (target) {
             .unresolved => unreachable,
             .void => unreachable,
-            .null => false, // null is only assignable to null. Since target_id != source_id , the source can not be of type null
-            .bool => false, // same with bool
-            .int => false, // and so on
-            .float => source_id == TypePool.INT, // int type can be promoted to float
-            .string => false,
+            .null => return false, // null is only assignable to null. Since target_id != source_id , the source can not be of type null
+            .bool => return false, // same with bool
+            .int => return false, // and so on
+            .float => return source_id == TypePool.INT, // int type can be promoted to float
+            .string => return false,
             .module => unreachable,
+            .anyerror => return source_id == TypePool.ERROR_TYPE,
+            .error_type => {
+                const source = self.types.items[source_id];
+                return target.error_type == source.error_type;
+            },
+            .error_set => {
+                const members = self.getErrorSetMembers(target);
+                for (members) |member| {
+                    if (self.isAssignable(member, source_id)) {
+                        return true;
+                    }
+                }
+                return false;
+            },
             .union_type => {
                 const source = self.types.items[source_id];
                 if (source != .union_type) {
@@ -238,6 +258,10 @@ pub const TypePool = struct {
 
     inline fn getUnionMembers(self: *const TypePool, union_type: Type) []const TypeId {
         return self.type_list_buffer.items[union_type.union_type.type_list_index .. union_type.union_type.type_list_index + union_type.union_type.count];
+    }
+
+    inline fn getErrorSetMembers(self: *const TypePool, error_set: Type) []const TypeId {
+        return self.type_list_buffer.items[error_set.error_set.type_list_index .. error_set.error_set.type_list_index + error_set.error_set.count];
     }
 };
 

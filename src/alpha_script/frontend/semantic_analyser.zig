@@ -9,6 +9,8 @@ pub const SemanticAnalyser = struct {
         UnsupportedOperand,
         PointlessCapture,
         MissingCapture,
+        IllegalMutation,
+        InvalidAssignmentTarget,
     };
 
     allocator: std.mem.Allocator,
@@ -135,6 +137,36 @@ pub const SemanticAnalyser = struct {
             },
 
             // access
+            .assignment => case: {
+                const extra = self.ast.getExtra(node.data.extra_id, AssignmentExtra);
+                // TODO chexck is assignable
+                // TODO check target allowd
+                const target_node = self.ast.nodes.items[extra.target];
+                if (target_node.tag != .identifier_expr) {
+                    self.error_reporter.semanticAnalyserError(self, Error.InvalidAssignmentTarget, target_node, "invalid assignment target");
+                    return Error.InvalidAssignmentTarget;
+                }
+
+                const maybe_symbol = self.symbol_table.lookup(target_node.data.string_id);
+
+                if (maybe_symbol == null) {
+                    self.error_reporter.semanticAnalyserError(self, Error.UnknownIdentifier, target_node, "unknown identifier");
+                    return Error.UnknownIdentifier;
+                }
+
+                if (!maybe_symbol.?.is_mutable) {
+                    self.error_reporter.semanticAnalyserError(self, Error.IllegalMutation, node.*, "mutation not allowd");
+                    return Error.IllegalMutation;
+                }
+
+                const source_type = try self.analyse(extra.source);
+                if (!self.ast.type_pool.isAssignable(maybe_symbol.?.type_id, source_type)) {
+                    self.error_reporter.semanticAnalyserError(self, Error.TypeMismatch, node.*, "incompatible types");
+                    return Error.TypeMismatch;
+                }
+
+                break :case source_type;
+            },
             .identifier_expr => |_| case: {
                 const maybe_symbol = self.symbol_table.lookup(node.data.string_id);
                 if (maybe_symbol) |symbol| {
@@ -311,3 +343,4 @@ const NodeListExtra = as.frontend.ast.NodeListExtra;
 const NodeListIterator = as.frontend.ast.NodeListIterator;
 const CallExtra = as.frontend.ast.CallExtra;
 const IfExtra = as.frontend.ast.IfExtra;
+const AssignmentExtra = as.frontend.ast.AssignmentExtra;

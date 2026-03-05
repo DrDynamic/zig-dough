@@ -87,6 +87,7 @@ pub const ASTPrinter = struct {
             },
 
             // access
+            .assignment => self.terminal.print("\n", .{}),
             .identifier_expr,
             => {
                 const str = self.ast.string_table.get(node.data.string_id);
@@ -183,6 +184,11 @@ pub const ASTPrinter = struct {
                 }
             },
             // access
+            .assignment => {
+                const extra = self.ast.getExtra(node.data.extra_id, ast.AssignmentExtra);
+                try self.printNode(extra.target, prefix, false);
+                try self.printNode(extra.source, prefix, true);
+            },
             .call,
             => {
                 const extra = self.ast.getExtra(node.data.extra_id, ast.CallExtra);

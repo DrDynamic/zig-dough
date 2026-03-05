@@ -11,7 +11,8 @@ pub const IntegrationTestErrorOutput = struct {
     pub fn output(self: *IntegrationTestErrorOutput) ErrorOutput {
         return .{
             .ptr = self,
-            .outputFn = printError,
+            .errorFn = printError,
+            .hintFn = printHint,
         };
     }
 
@@ -27,11 +28,14 @@ pub const IntegrationTestErrorOutput = struct {
             report.message,
         });
     }
+
+    fn printHint(_: *anyopaque, _: HintReport) void {}
 };
 
 const as = @import("as");
 const ErrorOutput = as.common.reporting.ErrorOutput;
 const ErrorReport = as.common.reporting.ErrorReport;
+const HintReport = as.common.reporting.HintReport;
 const SourceInfo = as.common.reporting.SourceInfo;
 const source_helper = as.common.reporting.source_helper;
 const SourceLocation = as.common.reporting.source_helper.SourceLocation;

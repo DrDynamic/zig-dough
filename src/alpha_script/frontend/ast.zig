@@ -20,6 +20,7 @@ pub const NodeType = enum(u8) {
     expression_grouping, // node_id (the expression, that is grouped)
 
     // access
+    assignment, // node_id (the expression that is assigned)
     identifier_expr, // string_id
     call, // CallExtra
     call_return,
@@ -46,6 +47,11 @@ pub const VarDeclarationExtra = struct {
     name_id: StringId,
     explicit_type: TypeId,
     init_value: ?NodeId,
+};
+
+pub const AssignmentExtra = struct {
+    target: NodeId,
+    source: NodeId,
 };
 
 pub const IfExtra = struct {

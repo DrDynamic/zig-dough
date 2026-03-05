@@ -29,6 +29,13 @@ pub const ErrorReport = struct {
     message: []const u8,
 };
 
+pub const HintReport = struct {
+    reporting_module: ReportingModule,
+
+    source_info: ?SourceInfo,
+    message: []const u8,
+};
+
 pub const ErrorReporter = struct {
     error_output: ErrorOutput, // the output, where the error is reported to (typicaly to stderr in human readable format)
 
@@ -88,6 +95,25 @@ pub const ErrorReporter = struct {
                 .token = semantic_analyser.ast.scanner.token_stream.scanPosition(node.token_position) catch return,
                 .node = node,
             },
+            .message = message,
+        });
+    }
+
+    pub fn semanticAnalyserHint(self: *ErrorReporter, semantic_analyser: *const SemanticAnalyser, node: ?Node, message: []const u8) void {
+        const reporting_module: ReportingModule = .{ .SemanticAnalyser = semantic_analyser };
+
+        var source_info: ?SourceInfo = null;
+        if (node) |assured_node| {
+            source_info = .{
+                .file_path = semantic_analyser.ast.scanner.token_stream.getFilePath(),
+                .token = semantic_analyser.ast.scanner.token_stream.scanPosition(assured_node.token_position) catch return,
+                .node = assured_node,
+            };
+        }
+
+        self.error_output.reportHint(.{
+            .reporting_module = reporting_module,
+            .source_info = source_info,
             .message = message,
         });
     }
