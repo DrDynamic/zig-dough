@@ -7,6 +7,11 @@ const error_label_options: Terminal.PrintOptions = .{
     .styles = &.{.bold},
 };
 
+const hint_label_options: Terminal.PrintOptions = .{
+    .color = .{ .ansi = .blue },
+    .styles = &.{.bold},
+};
+
 const marker_options: Terminal.PrintOptions = .{
     .color = .{ .ansi = .green },
 };
@@ -78,7 +83,7 @@ pub const PrettyErrorOutput = struct {
         if (maybe_source_info) |source_info| {
             self.terminal.printWithOptions("{?s}:{d}:{d} ", .{ source_info.file_path, location.?.line, location.?.column }, location_label_options);
         }
-        self.terminal.printWithOptions("note: ", .{}, error_label_options);
+        self.terminal.printWithOptions("note: ", .{}, hint_label_options);
         self.terminal.printWithOptions("{s}\n", .{message}, location_label_options);
         self.terminal.setStyle(Terminal.reset_options);
     }

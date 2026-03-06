@@ -166,6 +166,7 @@ fn registerNatives(ast: *as.frontend.AST, semantic_analyser: *as.frontend.Semant
         .name_id = name_id,
         .depth = 0,
         .reg_slot = 0,
+        .owns_register = true,
         .is_captured = false,
         .is_initialized = true,
     });

@@ -1,3 +1,4 @@
+
 var a:?int = 42;
 
 if(a) |assured_number| {

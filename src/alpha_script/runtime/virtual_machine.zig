@@ -52,7 +52,7 @@ pub const VirtualMachine = struct {
     }
 
     fn run(self: *VirtualMachine) !void {
-        const debug = false;
+        const debug: bool = false;
 
         var ip = self.current_ip;
         const chunk = self.current_chunk;
@@ -229,20 +229,20 @@ pub const VirtualMachine = struct {
                 // control flow
                 .jump => {
                     const offset = instruction.ab.b;
-                    ip += offset;
+                    ip += offset - 1;
                 },
                 .jump_if_false => {
                     const reg_condition = base + instruction.ab.a;
                     if (stack[reg_condition].isFalsey()) {
                         const offset = instruction.ab.b;
-                        ip += offset;
+                        ip += offset - 1;
                     }
                 },
                 .jump_if_true => {
                     const reg_condition = base + instruction.ab.a;
                     if (!stack[reg_condition].isFalsey()) {
                         const offset = instruction.ab.b;
-                        ip += offset;
+                        ip += offset - 1;
                     }
                 },
             }

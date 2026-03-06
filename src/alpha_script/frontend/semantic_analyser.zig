@@ -3,6 +3,7 @@ pub const SemanticAnalyser = struct {
         OutOfMemory,
         UnhandledNodeType,
         TypeMismatch,
+        TypeMissing,
         IncompatibleTypes,
         RedeclarationError,
         UnknownIdentifier,
@@ -77,6 +78,8 @@ pub const SemanticAnalyser = struct {
 
                 const type_condition = try self.analyse(extra.condition);
 
+                try self.symbol_table.enterScope();
+
                 if (type_condition == TypePool.BOOL) {
                     if (extra.then_capture) |then_capture_id| {
                         const then_capture = self.ast.nodes.items[then_capture_id];
@@ -89,23 +92,84 @@ pub const SemanticAnalyser = struct {
                         maybe_err = Error.PointlessCapture;
                     }
                 } else if (self.ast.type_pool.isNullable(type_condition)) {
-                    if (extra.then_capture == null) {
+                    if (extra.then_capture) |then_capture| {
+                        const capture_node = &self.ast.nodes.items[then_capture];
+                        const capture_type = try self.ast.type_pool.getOrCreateNotNullableType(type_condition);
+                        const capture_extra = self.ast.getExtra(capture_node.data.extra_id, VarDeclarationExtra);
+
+                        capture_node.resolved_type_id = capture_type;
+
+                        self.symbol_table.declare(capture_extra.name_id, .{
+                            .name_id = capture_extra.name_id,
+                            .type_id = capture_type,
+                            .is_mutable = false,
+                            .node_id = then_capture,
+                        }) catch |err| switch (err) {
+                            error.RedeclarationError => {
+                                self.emitRedeclarationError(capture_node.*, capture_node.data.string_id);
+                                return err;
+                            },
+                            else => return err,
+                        };
+                    } else {
                         const condition = self.ast.nodes.items[extra.condition];
                         self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing then capture for nullable condition");
                         maybe_err = Error.MissingCapture;
                     }
+
                     if (extra.else_capture) |else_capture_id| {
                         const else_capture = self.ast.nodes.items[else_capture_id];
                         self.error_reporter.semanticAnalyserError(self, Error.PointlessCapture, else_capture, "capture is pointless for nullable condition (it is always null)");
                         maybe_err = Error.PointlessCapture;
                     }
                 } else if (self.ast.type_pool.isErrorUnion(type_condition)) {
-                    if (extra.then_capture == null) {
+                    if (extra.then_capture) |then_capture| {
+                        const capture_node = &self.ast.nodes.items[then_capture];
+                        const capture_type = try self.ast.type_pool.getOrCreateNotErrorUnionType(type_condition);
+                        const capture_extra = self.ast.getExtra(capture_node.data.extra_id, VarDeclarationExtra);
+
+                        capture_node.resolved_type_id = capture_type;
+
+                        self.symbol_table.declare(capture_extra.name_id, .{
+                            .name_id = capture_extra.name_id,
+                            .type_id = capture_type,
+                            .is_mutable = false,
+                            .node_id = then_capture,
+                        }) catch |err| switch (err) {
+                            error.RedeclarationError => {
+                                self.emitRedeclarationError(capture_node.*, capture_node.data.string_id);
+                                return err;
+                            },
+                            else => return err,
+                        };
+                    } else {
                         const condition = self.ast.nodes.items[extra.condition];
                         self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing then capture for nullable condition");
                         maybe_err = Error.MissingCapture;
                     }
-                    if (extra.else_branch != null and extra.else_capture == null) {
+
+                    if (extra.else_branch != null) {
+                        if (extra.else_capture) |else_capture| {
+                            const capture_node = &self.ast.nodes.items[else_capture];
+                            const capture_type = self.ast.type_pool.getErrorSetFromTypeUnion(type_condition) catch unreachable; // assured ErrorUnion by parent:  else if (self.ast.type_pool.isErrorUnion(type_condition))
+                            const capture_extra = self.ast.getExtra(capture_node.data.extra_id, VarDeclarationExtra);
+
+                            capture_node.resolved_type_id = capture_type;
+
+                            self.symbol_table.declare(capture_extra.name_id, .{
+                                .name_id = capture_node.data.string_id,
+                                .type_id = capture_type,
+                                .is_mutable = false,
+                                .node_id = else_capture,
+                            }) catch |err| switch (err) {
+                                error.RedeclarationError => {
+                                    self.emitRedeclarationError(capture_node.*, capture_node.data.string_id);
+                                    return err;
+                                },
+                                else => return err,
+                            };
+                        }
+
                         const condition = self.ast.nodes.items[extra.condition];
                         self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing else capture for error union condition");
                         maybe_err = Error.MissingCapture;
@@ -113,6 +177,14 @@ pub const SemanticAnalyser = struct {
                 } else {
                     const condition = self.ast.nodes.items[extra.condition];
                     self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, condition, "condition needs to evaluate to bool, nullable type or error union");
+
+                    const type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, type_condition, self.ast.string_table);
+                    defer self.allocator.free(type_name);
+
+                    const hint_message = try std.fmt.allocPrint(self.allocator, "condition evaluates to {s}", .{type_name});
+                    defer self.allocator.free(hint_message);
+
+                    self.error_reporter.semanticAnalyserHint(self, condition, hint_message);
                     maybe_err = Error.IncompatibleTypes;
                 }
 
@@ -122,6 +194,8 @@ pub const SemanticAnalyser = struct {
                 if (extra.else_branch) |else_branch_id| {
                     type_else = try self.analyse(else_branch_id);
                 }
+
+                self.symbol_table.exitScope();
 
                 if (maybe_err) |err| {
                     return err;
@@ -241,23 +315,60 @@ pub const SemanticAnalyser = struct {
             inferred_type = try self.analyse(init_value_id);
         }
 
-        if (extra.explicit_type != TypePool.UNRESOLVED) {
-            if (extra.explicit_type != inferred_type) {
-                // TODO add implicit casts (type promotions)
-                return error.TypeMismatch;
-            }
-        } else {
-            // TODO is there is no explicit type, there needs to be an initializer
+        var type_id: TypeId = undefined;
 
+        if (inferred_type != TypePool.UNRESOLVED and extra.explicit_type != TypePool.UNRESOLVED) {
+            // both types are present
+
+            if (!self.ast.type_pool.isAssignable(extra.explicit_type, inferred_type)) {
+                const init_node = self.ast.nodes.items[extra.init_value.?];
+
+                const inferred_type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, inferred_type, self.ast.string_table);
+                defer self.allocator.free(inferred_type_name);
+                const explicit_type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, extra.explicit_type, self.ast.string_table);
+                defer self.allocator.free(explicit_type_name);
+
+                const error_message = try std.fmt.allocPrint(self.allocator, "can not assign {s} to {s}", .{ inferred_type_name, explicit_type_name });
+
+                self.error_reporter.semanticAnalyserError(self, Error.TypeMismatch, init_node, error_message);
+                return Error.TypeMismatch;
+            }
+
+            type_id = extra.explicit_type;
+        } else if (inferred_type != TypePool.UNRESOLVED and extra.explicit_type == TypePool.UNRESOLVED) {
+            // only inferred type is present (Variable has no explicit type set)
+            type_id = inferred_type;
+        } else if (inferred_type == TypePool.UNRESOLVED and extra.explicit_type != TypePool.UNRESOLVED) {
+            // only explicit type is present (variable has no initializer)
+            type_id = extra.explicit_type;
+        } else {
+            // no type is present (variable has no initializer but the explicit ty<pe isn't set either)
+
+            self.error_reporter.semanticAnalyserError(self, Error.TypeMissing, node, "if type can not be inferred, it must be set explicit");
+
+            const hint_fmt = "explicit type: '{[keyword]s} {[name]s}:string;' or Implicit by assignment: '{[keyword]s} {[name]s} = \"\";' ";
+            const hint_message = if (is_mutable)
+                try std.fmt.allocPrint(self.allocator, hint_fmt, .{ .keyword = "var", .name = self.ast.string_table.get(extra.name_id) })
+            else
+                try std.fmt.allocPrint(self.allocator, hint_fmt, .{ .keyword = "const", .name = self.ast.string_table.get(extra.name_id) });
+            defer self.allocator.free(hint_message);
+
+            self.error_reporter.semanticAnalyserHint(self, node, hint_message);
         }
 
         // add variable to symbol table
-        try self.symbol_table.declare(extra.name_id, .{
+        self.symbol_table.declare(extra.name_id, .{
             .name_id = extra.name_id,
-            .type_id = inferred_type,
+            .type_id = type_id,
             .is_mutable = is_mutable,
             .node_id = node_id,
-        });
+        }) catch |err| switch (err) {
+            error.RedeclarationError => {
+                self.emitRedeclarationError(node, extra.name_id);
+                return err;
+            },
+            else => return err,
+        };
 
         return TypePool.VOID;
     }
@@ -322,6 +433,14 @@ pub const SemanticAnalyser = struct {
 
         return error.IncompatibleTypes;
     }
+
+    fn emitRedeclarationError(self: *const SemanticAnalyser, node: Node, identifier_name: StringId) void {
+        self.error_reporter.semanticAnalyserError(self, Error.RedeclarationError, node, "name is already in use");
+
+        const symbol_collision = self.symbol_table.lookup(identifier_name);
+        const node_collision = self.ast.nodes.items[symbol_collision.?.node_id];
+        self.error_reporter.semanticAnalyserHint(self, node_collision, "name is already declared here:");
+    }
 };
 
 const std = @import("std");
@@ -334,8 +453,10 @@ const TypePool = as.frontend.TypePool;
 const SymbolTable = as.frontend.SymbolTable;
 
 const Symbol = as.frontend.Symbol;
+const StringId = as.common.StringId;
 const TypeId = as.frontend.TypeId;
 const NodeId = as.frontend.ast.NodeId;
+const Node = as.frontend.ast.Node;
 
 const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
 const VarDeclarationExtra = as.frontend.ast.VarDeclarationExtra;

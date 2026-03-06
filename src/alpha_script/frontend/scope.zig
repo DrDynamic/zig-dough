@@ -1,8 +1,3 @@
-pub const Error = error{
-    RedeclarationError,
-    OutOfMemory,
-};
-
 pub const Symbol = struct {
     name_id: StringId,
     type_id: TypeId,
@@ -27,10 +22,15 @@ pub const Scope = struct {
 };
 
 pub const SymbolTable = struct {
+    pub const Error = error{
+        RedeclarationError,
+        OutOfMemory,
+    };
+
     allocator: std.mem.Allocator,
     current_scope: *Scope,
 
-    pub fn init(allocator: std.mem.Allocator) Error!SymbolTable {
+    pub fn init(allocator: std.mem.Allocator) std.mem.Allocator.Error!SymbolTable {
         const global_scope = try allocator.create(Scope);
         global_scope.* = Scope.init(allocator, null);
         return SymbolTable{
@@ -68,7 +68,7 @@ pub const SymbolTable = struct {
     /// Declare a new symbol in the current scope
     pub fn declare(self: *SymbolTable, name_id: StringId, symbol: Symbol) Error!void {
         if (self.current_scope.symbols.contains(name_id)) {
-            return error.RedeclarationError;
+            return Error.RedeclarationError;
         }
 
         try self.current_scope.symbols.put(name_id, symbol);
@@ -76,7 +76,7 @@ pub const SymbolTable = struct {
 
     /// Lookup a symbol by name, searching through parent scopes if necessary
     /// Returns null if the symbol is not found
-    pub fn lookup(self: *SymbolTable, name_id: StringId) ?*Symbol {
+    pub fn lookup(self: *const SymbolTable, name_id: StringId) ?*Symbol {
         var scope: ?*Scope = self.current_scope;
         while (scope) |s| : (scope = scope.?.*.parent) {
             if (s.symbols.contains(name_id)) return s.symbols.getPtr(name_id).?;

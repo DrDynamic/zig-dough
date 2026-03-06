@@ -54,18 +54,30 @@ pub const Disassambler = struct {
             .call => self.printCall(instruction),
             .call_return => self.printA(instruction),
             // controlflow
-            .jump,
+            .jump => {
+                self.terminal.print(
+                    "{s:<16}    , +{d:<3}    ; ",
+                    .{
+                        @tagName(instruction.ab.opcode),
+                        instruction.ab.b,
+                    },
+                );
+                self.terminal.printWithOptions("#{d:0>4}", .{instruction.ab.b + offset}, value_options);
+                self.terminal.print("\n", .{});
+            },
             .jump_if_false,
             .jump_if_true,
             => {
                 self.terminal.print(
-                    "{s:<16} R{d:<2}, +{d:<3}   ; \n",
+                    "{s:<16} R{d:<2}, +{d:<3}    ; ",
                     .{
                         @tagName(instruction.ab.opcode),
                         instruction.ab.a,
                         instruction.ab.b,
                     },
                 );
+                self.terminal.printWithOptions("#{d:0>4}", .{instruction.ab.b + offset}, value_options);
+                self.terminal.print("\n", .{});
             },
         }
     }

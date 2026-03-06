@@ -5,6 +5,7 @@ pub const Local = struct {
     name_id: StringId,
     depth: i32,
     reg_slot: RegisterId,
+    owns_register: bool,
     is_captured: bool,
     is_initialized: bool,
 };
@@ -68,7 +69,7 @@ pub const Compiler = struct {
                 if (extra.init_value) |init_value_id| {
                     // create the local before initializing it, so compileExpression can reference the variable
                     const local_index = self.locals.items.len;
-                    try self.addLocal(extra.name_id, self.next_free_reg, false);
+                    try self.addLocal(extra.name_id, self.next_free_reg, false, true);
 
                     try self.compileExpressionEnsureRegister(init_value_id, self.next_free_reg);
                     _ = self.allocateRegister();
@@ -82,7 +83,7 @@ pub const Compiler = struct {
                         init_reg,
                         Value.makeUninitialized(),
                     );
-                    try self.addLocal(extra.name_id, init_reg, true);
+                    try self.addLocal(extra.name_id, init_reg, true, true);
                 }
             },
             else => { // expression statements
@@ -108,7 +109,7 @@ pub const Compiler = struct {
 
             // literals
             .literal_null => {
-                const register = self.allocateRegister();
+                const register = self.next_free_reg;
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -118,7 +119,7 @@ pub const Compiler = struct {
                 return register;
             },
             .literal_bool => {
-                const register = self.allocateRegister();
+                const register = self.next_free_reg;
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -128,7 +129,7 @@ pub const Compiler = struct {
                 return register;
             },
             .literal_int => {
-                const register = self.allocateRegister();
+                const register = self.next_free_reg;
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -138,7 +139,7 @@ pub const Compiler = struct {
                 return register;
             },
             .literal_float => {
-                const register = self.allocateRegister();
+                const register = self.next_free_reg;
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -150,7 +151,7 @@ pub const Compiler = struct {
 
             // objects
             .object_string => {
-                const register = self.allocateRegister();
+                const register = self.next_free_reg;
                 const string_data = self.ast.string_table.get(node.data.string_id);
                 try self.emitLoadConstant(
                     .load_const,
@@ -189,13 +190,14 @@ pub const Compiler = struct {
                 self.enterScope();
                 if (extra.then_capture) |then_capture_id| {
                     const node_capture = self.ast.nodes.items[then_capture_id];
-                    assert(node_capture.tag == .identifier_expr);
+                    assert(node_capture.tag == .declaration_const);
 
-                    const capture_name_id = node_capture.data.string_id;
+                    const capture_extra = self.ast.getExtra(node_capture.data.extra_id, VarDeclarationExtra);
+                    const capture_name_id = capture_extra.name_id;
                     const void_identifier_id = try self.ast.string_table.add("_");
 
                     if (capture_name_id != void_identifier_id) {
-                        try self.addLocal(capture_name_id, reg_condition, true);
+                        try self.addLocal(capture_name_id, reg_condition, true, false);
                     }
                 }
 
@@ -212,13 +214,14 @@ pub const Compiler = struct {
                     self.enterScope();
                     if (extra.else_capture) |else_capture_id| {
                         const node_capture = self.ast.nodes.items[else_capture_id];
-                        assert(node_capture.tag == .identifier_expr);
+                        assert(node_capture.tag == .declaration_const);
 
-                        const capture_name_id = node_capture.data.string_id;
+                        const capture_extra = self.ast.getExtra(node_capture.data.extra_id, VarDeclarationExtra);
+                        const capture_name_id = capture_extra.name_id;
                         const void_identifier_id = try self.ast.string_table.add("_");
 
                         if (capture_name_id != void_identifier_id) {
-                            try self.addLocal(capture_name_id, reg_condition, true);
+                            try self.addLocal(capture_name_id, reg_condition, true, false);
                         }
                     }
 
@@ -232,7 +235,6 @@ pub const Compiler = struct {
                 // patch jump at the end of then branch to jump to the end of else branch
                 self.patchJump(pos_jump_end);
 
-                self.exitScope();
                 return reg_then;
             },
 
@@ -247,7 +249,7 @@ pub const Compiler = struct {
             },
             .identifier_expr => self.resolveLocal(node.data.string_id) catch unreachable, // assured by semyntc analyser
             .call => {
-                const extra = self.ast.getExtra(node.data.extra_id, ast.CallExtra);
+                const extra = self.ast.getExtra(node.data.extra_id, CallExtra);
 
                 const reg_callee = self.allocateRegister();
 
@@ -360,18 +362,27 @@ pub const Compiler = struct {
     }
 
     /// bind a variable to a register
-    fn addLocal(self: *Compiler, name_id: StringId, register: RegisterId, is_initialized: bool) !void {
+    fn addLocal(self: *Compiler, name_id: StringId, register: RegisterId, is_initialized: bool, owns_register: bool) !void {
+        // std.debug.print("## addLocal {{\n", .{});
+        // std.debug.print("##   name: {s}\n", .{self.ast.string_table.get(name_id)});
+        // std.debug.print("##   depth: {d}\n", .{self.scope_depth});
+        // std.debug.print("##   reg_slot: {d}\n", .{register});
+        // std.debug.print("##   is_initialized: {}\n", .{is_initialized});
+        // std.debug.print("## }}\n", .{});
+        // std.debug.print("\n", .{});
+
         try self.locals.append(.{
             .name_id = name_id,
             .depth = self.scope_depth,
             .reg_slot = register,
+            .owns_register = owns_register,
             .is_captured = false,
             .is_initialized = is_initialized,
         });
     }
 
     /// searches for the register of a variable
-    fn resolveLocal(self: *const Compiler, name_id: StringId) error{NotFound}!RegisterId {
+    fn resolveLocal(self: *const Compiler, name_id: StringId) Error!RegisterId {
         const str = self.ast.string_table.get(name_id);
 
         _ = str;
@@ -381,7 +392,7 @@ pub const Compiler = struct {
             if (local.name_id == name_id) return local.reg_slot;
         }
 
-        return error.NotFound;
+        return Error.UndefinedIdentifier;
     }
 
     fn enterScope(self: *Compiler) void {
@@ -393,9 +404,19 @@ pub const Compiler = struct {
         self.scope_depth -= 1;
         // TODO error handlich (underflow of scopes?)
         while (self.locals.items.len > 0 and self.locals.items[self.locals.items.len - 1].depth > self.scope_depth) {
-            _ = self.locals.pop();
-            self.next_free_reg -= 1;
-            // TODO free register in the vm?
+            const local = self.locals.pop();
+
+            // std.debug.print("## popLocal {{\n", .{});
+            // std.debug.print("##   name: {s}\n", .{self.ast.string_table.get(local.?.name_id)});
+            // std.debug.print("##   depth: {d}\n", .{local.?.depth});
+            // std.debug.print("##   reg_slot: {d}\n", .{local.?.reg_slot});
+            // std.debug.print("##   is_initialized: {}\n", .{local.?.is_initialized});
+            // std.debug.print("## }}\n", .{});
+            // std.debug.print("\n", .{});
+
+            if (local.?.owns_register) {
+                self.next_free_reg = local.?.reg_slot;
+            }
         }
     }
 };
@@ -432,3 +453,5 @@ const NodeListExtra = as.frontend.ast.NodeListExtra;
 const NodeListIterator = as.frontend.ast.NodeListIterator;
 const IfExtra = as.frontend.ast.IfExtra;
 const AssignmentExtra = as.frontend.ast.AssignmentExtra;
+const VarDeclarationExtra = as.frontend.ast.VarDeclarationExtra;
+const CallExtra = as.frontend.ast.CallExtra;

@@ -37,6 +37,7 @@ pub const Type = union(TypeTag) {
     anyerror,
     error_type: StringId,
     error_set: struct {
+        name_id: StringId,
         type_list_index: u32,
         count: u32,
     },
@@ -48,6 +49,9 @@ pub const Type = union(TypeTag) {
 };
 
 pub const TypePool = struct {
+    const Error = error{
+        NotFound,
+    };
     allocator: std.mem.Allocator,
     types: ArrayList(Type),
     type_list_buffer: std.ArrayList(TypeId),
@@ -93,6 +97,44 @@ pub const TypePool = struct {
         self.type_list_buffer.deinit();
         self.named_type_cache.deinit();
         self.union_cache.deinit();
+    }
+
+    pub fn getTypeNameAlloc(
+        self: *const TypePool,
+        allocator: std.mem.Allocator,
+        type_id: TypeId,
+        string_table: *const StringTable,
+    ) ![]u8 {
+        const t = self.types.items[type_id];
+        var type_name = std.ArrayList(u8).init(allocator);
+
+        switch (t) {
+            .unresolved => try type_name.appendSlice("unresolved"),
+            .void => try type_name.appendSlice("void"),
+            .null => try type_name.appendSlice("null"),
+            .bool => try type_name.appendSlice("bool"),
+            .int => try type_name.appendSlice("int"),
+            .float => try type_name.appendSlice("float"),
+            .string => try type_name.appendSlice("string"),
+            .module => try type_name.appendSlice("module"),
+            .anyerror => try type_name.appendSlice("anyerror"),
+            .error_type => try type_name.appendSlice(string_table.get(self.types.items[type_id].error_type)),
+            .error_set => try type_name.appendSlice(string_table.get(self.types.items[type_id].error_set.name_id)),
+            .union_type => {
+                const members = self.getUnionMembers(t);
+
+                for (members) |member| {
+                    const name = try self.getTypeNameAlloc(allocator, member, string_table);
+                    try type_name.appendSlice(name);
+                    try type_name.append('|');
+                }
+
+                if (type_name.items.len > 0) {
+                    _ = type_name.pop();
+                }
+            },
+        }
+        return type_name.items;
     }
 
     /// a type is nullable when the type is null or a union type that contains null
@@ -202,6 +244,79 @@ pub const TypePool = struct {
         }
     }
 
+    pub fn getOrCreateNotNullableType(self: *TypePool, type_id: TypeId) !TypeId {
+        const t = self.types.items[type_id];
+
+        switch (t) {
+            .null => return TypePool.VOID,
+            .union_type => {
+                var new_members = std.ArrayList(TypeId).init(self.allocator);
+                defer new_members.deinit();
+
+                const members = self.getUnionMembers(t);
+                for (members) |member| {
+                    const member_type = self.types.items[member];
+                    if (member_type == .null) continue;
+                    try new_members.append(member);
+                }
+                if (new_members.items.len == 1) {
+                    return new_members.items[0];
+                } else {
+                    return try self.getOrCreateUnionType(new_members.items);
+                }
+            },
+            else => {
+                return type_id;
+            },
+        }
+    }
+
+    pub fn getErrorSetFromTypeUnion(self: *const TypePool, type_id: TypeId) Error!TypeId {
+        const t = self.types.items[type_id];
+
+        switch (t) {
+            .error_set => return type_id,
+            .union_type => {
+                const members = self.getUnionMembers(t);
+                for (members) |member| {
+                    const member_type = self.types.items[member];
+                    if (member_type == .error_set) return member;
+                }
+                return Error.NotFound;
+            },
+            else => {
+                return Error.NotFound;
+            },
+        }
+    }
+
+    pub fn getOrCreateNotErrorUnionType(self: *TypePool, type_id: TypeId) !TypeId {
+        const t = self.types.items[type_id];
+
+        switch (t) {
+            .error_set => return TypePool.VOID,
+            .union_type => {
+                var new_members = std.ArrayList(TypeId).init(self.allocator);
+                defer new_members.deinit();
+
+                const members = self.getUnionMembers(t);
+                for (members) |member| {
+                    const member_type = self.types.items[member];
+                    if (member_type == .error_set) continue;
+                    try new_members.append(member);
+                }
+                if (new_members.items.len == 1) {
+                    return new_members.items[0];
+                } else {
+                    return try self.getOrCreateUnionType(new_members.items);
+                }
+            },
+            else => {
+                return type_id;
+            },
+        }
+    }
+
     pub fn getOrCreateErrorType(self: *TypePool, name_id: StringId) Allocator.Error!TypeId {
         // return type_id if cached
         if (self.named_type_cache.get(name_id)) |error_type_id| {
@@ -218,12 +333,12 @@ pub const TypePool = struct {
         return error_type_id;
     }
 
-    pub fn getType(self: *TypePool, name_id: StringId) !TypeId {
+    pub fn getType(self: *TypePool, name_id: StringId) Error!TypeId {
         if (self.named_type_cache.get(name_id)) |error_type_id| {
             return error_type_id;
         }
 
-        return error.NotFound;
+        return Error.NotFound;
     }
 
     pub fn getOrCreateUnionType(self: *TypePool, member_types: []const TypeId) Allocator.Error!TypeId {
@@ -284,3 +399,4 @@ const ArrayList = std.ArrayList;
 
 const as = @import("as");
 const StringId = as.common.StringId;
+const StringTable = as.common.StringTable;

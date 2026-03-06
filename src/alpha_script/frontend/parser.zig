@@ -60,7 +60,7 @@ pub const Parser = struct {
         };
         const identifier_token = self.scanner.previous();
 
-        var type_id: ?TypeId = TypePool.UNRESOLVED;
+        var type_id: TypeId = TypePool.UNRESOLVED;
         if (try self.match(.colon)) {
             type_id = try self.typeReference();
         }
@@ -74,7 +74,7 @@ pub const Parser = struct {
 
         const extra_id = try self.ast.addExtra(VarDeclarationExtra{
             .name_id = name_id,
-            .explicit_type = TypePool.UNRESOLVED,
+            .explicit_type = type_id,
             .init_value = assignment_node_id,
         });
 
@@ -203,11 +203,18 @@ pub const Parser = struct {
                 return err;
             },
         };
+
+        const extra_id = try self.ast.addExtra(VarDeclarationExtra{
+            .name_id = capture_name,
+            .explicit_type = TypePool.UNRESOLVED,
+            .init_value = null,
+        });
+
         const node_id = try self.ast.addNode(.{
             .tag = .declaration_const,
             .token_position = self.scanner.previous().location.start,
             .resolved_type_id = TypePool.UNRESOLVED,
-            .data = .{ .string_id = capture_name },
+            .data = .{ .extra_id = extra_id },
         });
         _ = self.consume(.pipe) catch {
             self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "expect '|' after capture");
