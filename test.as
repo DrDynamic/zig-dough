@@ -1,8 +1,4 @@
-var a = "";
-var b = 0;
-
-var c; // expect if type can not be inferred, it must be set explici
-c = a;
-c = b; // expect compile error: Error at 'b': can not assign Number to String
-
-print(c);
+// A dangling else binds to the right-most if.
+if (false) print("bad"); else print("good");
+//if (true) if (false) print("bad"); else print("good"); // expect: good
+//if (false) if (true) print("bad"); else print("bad");

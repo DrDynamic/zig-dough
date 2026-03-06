@@ -251,6 +251,8 @@ pub const Compiler = struct {
             .call => {
                 const extra = self.ast.getExtra(node.data.extra_id, CallExtra);
 
+                const snapshot = self.next_free_reg;
+
                 const reg_callee = self.allocateRegister();
 
                 try self.compileExpressionEnsureRegister(extra.callee, reg_callee);
@@ -264,6 +266,7 @@ pub const Compiler = struct {
                 }
 
                 try self.chunk.emit(Instruction.fromABC(.call, reg_callee, reg_callee, arg_count));
+                self.next_free_reg = snapshot;
                 return reg_callee;
             },
 
