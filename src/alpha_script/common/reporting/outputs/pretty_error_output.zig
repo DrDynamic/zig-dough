@@ -84,7 +84,7 @@ pub const PrettyErrorOutput = struct {
             self.terminal.printWithOptions("{?s}:{d}:{d} ", .{ source_info.file_path, location.?.line, location.?.column }, location_label_options);
         }
         self.terminal.printWithOptions("note: ", .{}, hint_label_options);
-        self.terminal.printWithOptions("{s}\n", .{message}, location_label_options);
+        self.terminal.printWithOptions("{s}\n\n", .{message}, location_label_options);
         self.terminal.setStyle(Terminal.reset_options);
     }
 

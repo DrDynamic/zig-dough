@@ -11,6 +11,7 @@ pub const NodeType = enum(u8) {
     object_string, // string_id
 
     // declarations
+    declaration_type, // VarDeclarationExtra
     declaration_var, // VarDeclarationExtra
     declaration_const, // VarDeclarationExtra
 

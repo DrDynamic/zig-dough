@@ -58,6 +58,7 @@ pub const SemanticAnalyser = struct {
             .object_string => TypePool.STRING,
 
             // declarations
+            .declaration_type => node.resolved_type_id,
             .declaration_var => try self.analyseDeclaration(node_id, true),
             .declaration_const => try self.analyseDeclaration(node_id, false),
 
@@ -106,7 +107,7 @@ pub const SemanticAnalyser = struct {
                             .node_id = then_capture,
                         }) catch |err| switch (err) {
                             error.RedeclarationError => {
-                                self.emitRedeclarationError(capture_node.*, capture_node.data.string_id);
+                                try self.emitRedeclarationError(capture_node.*, capture_node.data.string_id);
                                 return err;
                             },
                             else => return err,
@@ -137,7 +138,7 @@ pub const SemanticAnalyser = struct {
                             .node_id = then_capture,
                         }) catch |err| switch (err) {
                             error.RedeclarationError => {
-                                self.emitRedeclarationError(capture_node.*, capture_node.data.string_id);
+                                try self.emitRedeclarationError(capture_node.*, capture_node.data.string_id);
                                 return err;
                             },
                             else => return err,
@@ -163,7 +164,7 @@ pub const SemanticAnalyser = struct {
                                 .node_id = else_capture,
                             }) catch |err| switch (err) {
                                 error.RedeclarationError => {
-                                    self.emitRedeclarationError(capture_node.*, capture_node.data.string_id);
+                                    try self.emitRedeclarationError(capture_node.*, capture_node.data.string_id);
                                     return err;
                                 },
                                 else => return err,
@@ -365,7 +366,7 @@ pub const SemanticAnalyser = struct {
             .node_id = node_id,
         }) catch |err| switch (err) {
             error.RedeclarationError => {
-                self.emitRedeclarationError(node, extra.name_id);
+                try self.emitRedeclarationError(node, extra.name_id);
                 return err;
             },
             else => return err,
@@ -435,8 +436,11 @@ pub const SemanticAnalyser = struct {
         return error.IncompatibleTypes;
     }
 
-    fn emitRedeclarationError(self: *const SemanticAnalyser, node: Node, identifier_name: StringId) void {
-        self.error_reporter.semanticAnalyserError(self, Error.RedeclarationError, node, "name is already in use");
+    fn emitRedeclarationError(self: *const SemanticAnalyser, node: Node, identifier_name: StringId) !void {
+        const error_message = try std.fmt.allocPrint(self.allocator, "identifier '{s}' has already been declared", .{self.ast.string_table.get(identifier_name)});
+        defer self.allocator.free(error_message);
+
+        self.error_reporter.semanticAnalyserError(self, Error.RedeclarationError, node, error_message);
 
         const symbol_collision = self.symbol_table.lookup(identifier_name);
         const node_collision = self.ast.nodes.items[symbol_collision.?.node_id];

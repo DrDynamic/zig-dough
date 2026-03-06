@@ -50,12 +50,14 @@ pub const Type = union(TypeTag) {
 
 pub const TypePool = struct {
     const Error = error{
+        RedaclarationError,
         NotFound,
     };
     allocator: std.mem.Allocator,
     types: ArrayList(Type),
     type_list_buffer: std.ArrayList(TypeId),
     named_type_cache: std.AutoHashMap(StringId, TypeId),
+    error_type_cache: std.AutoHashMap(StringId, TypeId),
     union_cache: TypeListMap,
 
     pub const UNRESOLVED = 0;
@@ -75,6 +77,7 @@ pub const TypePool = struct {
             .types = ArrayList(Type).init(allocator),
             .type_list_buffer = std.ArrayList(TypeId).init(allocator),
             .named_type_cache = std.AutoHashMap(StringId, TypeId).init(allocator),
+            .error_type_cache = std.AutoHashMap(StringId, TypeId).init(allocator),
             .union_cache = TypeListMap.init(allocator),
         };
 
@@ -96,6 +99,7 @@ pub const TypePool = struct {
         self.types.deinit();
         self.type_list_buffer.deinit();
         self.named_type_cache.deinit();
+        self.error_type_cache.deinit();
         self.union_cache.deinit();
     }
 
@@ -244,6 +248,13 @@ pub const TypePool = struct {
         }
     }
 
+    pub fn declareNamedType(self: *TypePool, name_id: StringId, type_id: TypeId) !void {
+        if (self.named_type_cache.contains(name_id)) {
+            return Error.RedaclarationError;
+        }
+        try self.named_type_cache.put(name_id, type_id);
+    }
+
     pub fn getOrCreateNotNullableType(self: *TypePool, type_id: TypeId) !TypeId {
         const t = self.types.items[type_id];
 
@@ -319,7 +330,7 @@ pub const TypePool = struct {
 
     pub fn getOrCreateErrorType(self: *TypePool, name_id: StringId) Allocator.Error!TypeId {
         // return type_id if cached
-        if (self.named_type_cache.get(name_id)) |error_type_id| {
+        if (self.error_type_cache.get(name_id)) |error_type_id| {
             return error_type_id;
         }
 
@@ -328,7 +339,7 @@ pub const TypePool = struct {
         try self.types.append(.{
             .error_type = name_id,
         });
-        try self.named_type_cache.put(name_id, error_type_id);
+        try self.error_type_cache.put(name_id, error_type_id);
 
         return error_type_id;
     }

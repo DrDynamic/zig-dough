@@ -61,6 +61,7 @@ pub const Compiler = struct {
 
         switch (node.tag) {
             // declarations
+            .declaration_type => {},
             .declaration_const,
             .declaration_var,
             => {
@@ -103,6 +104,7 @@ pub const Compiler = struct {
             .node_list => unreachable,
 
             // statements
+            .declaration_type,
             .declaration_const,
             .declaration_var,
             => unreachable,

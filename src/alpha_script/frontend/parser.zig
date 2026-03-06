@@ -3,6 +3,7 @@ pub const Parser = struct {
         UnexpectedToken,
         UndefinedType,
         UnexpectedType,
+        TypeRedeclaration,
         //
         OutOfMemory,
         ScannerError,
@@ -39,13 +40,60 @@ pub const Parser = struct {
     }
 
     fn declaration(self: *Parser) !NodeId {
-        if (try self.match(.var_)) {
-            return try self.varDeclaration();
+        if (try self.match(.type_)) {
+            return self.declarationType();
+        } else if (try self.match(.var_)) {
+            return try self.declarationVar();
         }
         return try self.statement();
     }
 
-    fn varDeclaration(self: *Parser) !NodeId {
+    fn declarationType(self: *Parser) !NodeId {
+        const type_token = self.scanner.previous();
+        const identifier_token = self.scanner.current();
+        const name_id = self.parseIdentifier() catch {
+            self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "expect identifier as typename");
+            return Error.UnexpectedToken;
+        };
+
+        _ = self.consume(.equal) catch {
+            self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "expect '=' after typename");
+            return Error.UnexpectedToken;
+        };
+
+        const type_id = try self.parseTypeDeclaration();
+
+        self.ast.type_pool.declareNamedType(name_id, type_id) catch {
+            const error_message = try std.fmt.allocPrint(self.allocator, "type '{s}' has already been declared", .{self.ast.string_table.get(name_id)});
+            defer self.allocator.free(error_message);
+            self.error_reporter.parserError(self, Error.TypeRedeclaration, identifier_token, error_message);
+
+            for (self.ast.nodes.items) |node| {
+                if (node.tag == .declaration_type) {
+                    const extra = self.ast.getExtra(node.data.extra_id, VarDeclarationExtra);
+                    if (extra.name_id == name_id) {
+                        const token = self.ast.scanner.token_stream.scanPosition(node.token_position) catch unreachable;
+                        self.error_reporter.parserHint(self, token, "type is already declared here:");
+                    }
+                }
+            }
+            return Error.TypeRedeclaration;
+        };
+
+        const extra_id = try self.ast.addExtra(VarDeclarationExtra{
+            .name_id = name_id,
+            .explicit_type = type_id,
+            .init_value = null,
+        });
+        return try self.ast.addNode(.{
+            .tag = .declaration_type,
+            .token_position = type_token.location.start,
+            .resolved_type_id = type_id,
+            .data = .{ .extra_id = extra_id },
+        });
+    }
+
+    fn declarationVar(self: *Parser) !NodeId {
         const name_id: StringId = self.parseIdentifier() catch |err| switch (err) {
             error.TokenMissMatch => {
                 self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "Expect variable name");
@@ -62,7 +110,7 @@ pub const Parser = struct {
 
         var type_id: TypeId = TypePool.UNRESOLVED;
         if (try self.match(.colon)) {
-            type_id = try self.typeReference();
+            type_id = try self.parseTypeReference();
         }
 
         var assignment_node_id: ?NodeId = null;
@@ -562,36 +610,41 @@ pub const Parser = struct {
     }
 
     // types
-    fn typeReference(self: *Parser) !TypeId {
-        // const a:Error!?int
-        // const a:Error!int|string
-        return try self.typeErrorUnion();
+
+    fn parseTypeDeclaration(self: *Parser) !TypeId {
+        return try self.parseTypeUnion();
     }
 
-    fn typeErrorUnion(self: *Parser) !TypeId {
+    fn parseTypeReference(self: *Parser) !TypeId {
+        // const a:Error!?int
+        // const a:Error!int|string
+        return try self.parseTypeErrorUnion();
+    }
+
+    fn parseTypeErrorUnion(self: *Parser) !TypeId {
         var maybe_error_type: ?TypeId = null;
 
         if (self.scanner.current().tag == .bang) {
             maybe_error_type = TypePool.ANYERROR;
             _ = self.consume(.bang) catch unreachable;
         } else if (self.scanner.next().tag == .bang) {
-            maybe_error_type = try self.typeErrorSet();
+            maybe_error_type = try self.parseTypeErrorSet();
             _ = self.consume(.bang) catch unreachable;
         }
 
         if (maybe_error_type) |error_type| {
             const members = [_]u32{
                 error_type,
-                try self.typeUnion(),
+                try self.parseTypeUnion(),
             };
 
             return try self.ast.type_pool.getOrCreateUnionType(&members);
         } else {
-            return try self.typeUnion();
+            return try self.parseTypeUnion();
         }
     }
 
-    fn typeErrorSet(self: *Parser) !TypeId {
+    fn parseTypeErrorSet(self: *Parser) !TypeId {
         const error_name_id = self.parseIdentifier() catch {
             self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "expect identifier or nothing as error type");
             return Error.UnexpectedToken;
@@ -610,18 +663,37 @@ pub const Parser = struct {
         return error_set_id;
     }
 
-    fn typeUnion(self: *Parser) !TypeId {
+    fn parseTypeUnion(self: *Parser) !TypeId {
         var members = std.ArrayList(TypeId).init(self.allocator);
         defer members.deinit();
 
         if (try self.match(.question_mark)) {
+            const nullable_token = self.scanner.previous();
+
             try members.append(TypePool.NULL);
-            try members.append(try self.typePrimary());
+            try members.append(try self.parseTypePrimary());
+
+            if (try self.match(.pipe)) {
+                self.error_reporter.parserError(self, Error.UnexpectedToken, nullable_token, "nullable keyword '?' can only be applied to single types");
+
+                const first_type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, members.items[1], self.ast.string_table);
+                defer self.allocator.free(first_type_name);
+
+                const other_types = try self.parseTypeUnion();
+                const other_types_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, other_types, self.ast.string_table);
+                defer self.allocator.free(other_types_name);
+
+                const hint_message = try std.fmt.allocPrint(self.allocator, "try 'null|{s}|{s}' instead", .{ first_type_name, other_types_name });
+                defer self.allocator.free(hint_message);
+
+                self.error_reporter.parserHint(self, null, hint_message);
+                return Error.UnexpectedToken;
+            }
         } else {
-            try members.append(try self.typePrimary());
+            try members.append(try self.parseTypePrimary());
 
             while (try self.match(.pipe)) {
-                try members.append(try self.typePrimary());
+                try members.append(try self.parseTypePrimary());
             }
 
             if (members.items.len == 1) return members.items[0];
@@ -630,7 +702,7 @@ pub const Parser = struct {
         return self.ast.type_pool.getOrCreateUnionType(members.items);
     }
 
-    fn typePrimary(self: *Parser) !TypeId {
+    fn parseTypePrimary(self: *Parser) !TypeId {
         const token = self.scanner.current();
 
         return switch (token.tag) {

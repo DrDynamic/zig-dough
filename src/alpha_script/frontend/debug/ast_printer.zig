@@ -51,7 +51,9 @@ pub const ASTPrinter = struct {
                 const str = self.ast.string_table.get(node.data.string_id);
                 self.terminal.print(": '{s}'\n", .{str});
             },
-            .negate, .logical_not => {
+            .negate,
+            .logical_not,
+            => {
                 self.terminal.print("\n", .{});
             },
             .binary_add,
@@ -70,6 +72,7 @@ pub const ASTPrinter = struct {
             => {
                 self.terminal.print("\n", .{});
             },
+            .declaration_type,
             .declaration_var,
             .declaration_const,
             => {
@@ -125,7 +128,9 @@ pub const ASTPrinter = struct {
             => {}, // leaves don't have children
             .object_string => {},
 
-            .negate, .logical_not => {
+            .negate,
+            .logical_not,
+            => {
                 try self.printNode(node.data.node_id, prefix, true);
             },
 
@@ -144,6 +149,7 @@ pub const ASTPrinter = struct {
                 try self.printNode(extra.lhs, prefix, false);
                 try self.printNode(extra.rhs, prefix, true);
             },
+            .declaration_type,
             .declaration_const,
             .declaration_var,
             => {

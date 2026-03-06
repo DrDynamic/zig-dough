@@ -83,6 +83,23 @@ pub const ErrorReporter = struct {
         });
     }
 
+    pub fn parserHint(self: *const ErrorReporter, parser: *const Parser, token: ?Token, message: []const u8) void {
+        var source_info: ?SourceInfo = null;
+        if (token) |assured_token| {
+            source_info = .{
+                .file_path = parser.ast.scanner.token_stream.getFilePath(),
+                .token = assured_token,
+                .node = null,
+            };
+        }
+
+        self.error_output.reportHint(.{
+            .reporting_module = .{ .Parser = parser },
+            .source_info = source_info,
+            .message = message,
+        });
+    }
+
     pub fn semanticAnalyserError(self: *ErrorReporter, semantic_analyser: *const SemanticAnalyser, err: SemanticAnalyser.Error, node: Node, message: []const u8) void {
         const reporting_module: ReportingModule = .{ .SemanticAnalyser = semantic_analyser };
 
@@ -92,7 +109,7 @@ pub const ErrorReporter = struct {
             .error_code = self.calcErrorCode(reporting_module, @intFromError(err)),
             .source_info = .{
                 .file_path = semantic_analyser.ast.scanner.token_stream.getFilePath(),
-                .token = semantic_analyser.ast.scanner.token_stream.scanPosition(node.token_position) catch return,
+                .token = semantic_analyser.ast.scanner.token_stream.scanPosition(node.token_position) catch unreachable,
                 .node = node,
             },
             .message = message,
@@ -100,8 +117,6 @@ pub const ErrorReporter = struct {
     }
 
     pub fn semanticAnalyserHint(self: *ErrorReporter, semantic_analyser: *const SemanticAnalyser, node: ?Node, message: []const u8) void {
-        const reporting_module: ReportingModule = .{ .SemanticAnalyser = semantic_analyser };
-
         var source_info: ?SourceInfo = null;
         if (node) |assured_node| {
             source_info = .{
@@ -112,7 +127,7 @@ pub const ErrorReporter = struct {
         }
 
         self.error_output.reportHint(.{
-            .reporting_module = reporting_module,
+            .reporting_module = .{ .SemanticAnalyser = semantic_analyser },
             .source_info = source_info,
             .message = message,
         });
