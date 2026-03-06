@@ -6,7 +6,7 @@ pub const SemanticAnalyser = struct {
         TypeMissing,
         IncompatibleTypes,
         RedeclarationError,
-        UnknownIdentifier,
+        UndefinedIdentifier,
         UnsupportedOperand,
         PointlessCapture,
         MissingCapture,
@@ -224,8 +224,8 @@ pub const SemanticAnalyser = struct {
                 const maybe_symbol = self.symbol_table.lookup(target_node.data.string_id);
 
                 if (maybe_symbol == null) {
-                    self.error_reporter.semanticAnalyserError(self, Error.UnknownIdentifier, target_node, "unknown identifier");
-                    return Error.UnknownIdentifier;
+                    self.error_reporter.semanticAnalyserError(self, Error.UndefinedIdentifier, target_node, "undefined identifier");
+                    return Error.UndefinedIdentifier;
                 }
 
                 if (!maybe_symbol.?.is_mutable) {
@@ -247,8 +247,8 @@ pub const SemanticAnalyser = struct {
                     break :case symbol.type_id;
                 }
 
-                self.error_reporter.semanticAnalyserError(self, Error.UnknownIdentifier, node.*, "unknown identifier");
-                return Error.UnknownIdentifier;
+                self.error_reporter.semanticAnalyserError(self, Error.UndefinedIdentifier, node.*, "undefined identifier");
+                return Error.UndefinedIdentifier;
             },
             // unary operations
             .negate => |_| case: {

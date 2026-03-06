@@ -87,7 +87,9 @@ pub fn main() !void {
         defer allocator.free(source);
 
         const token_stream = as.frontend.TokenStream.init(path, source, error_reporter);
-        var scanner = as.frontend.Scanner.init(token_stream, &error_reporter) catch return;
+        var scanner = as.frontend.Scanner.init(token_stream, &error_reporter) catch {
+            std.process.exit(EXIT_CODE_COMPILER_ERROR);
+        };
 
         var string_table = as.common.StringTable.init(allocator);
 
@@ -108,6 +110,7 @@ pub fn main() !void {
             &error_reporter,
             allocator,
         );
+
         try parser.parse();
 
         if (!ast.is_valid) {
