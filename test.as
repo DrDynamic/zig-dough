@@ -1,16 +1,8 @@
+var a = "";
+var b = 0;
 
-var a:?int = 42;
+var c; // expect if type can not be inferred, it must be set explici
+c = a;
+c = b; // expect compile error: Error at 'b': can not assign Number to String
 
-if(a) |assured_number| {
-    print(assured_number); // expect: 42
-}else {
-    print("not a number");
-}
-
-a = null;
-
-if(a) |assured_number| {
-    print(assured_number);
-}else {
-    print("a is null"); // expect: a is null
-}
+print(c);

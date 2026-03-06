@@ -344,9 +344,9 @@ pub const SemanticAnalyser = struct {
         } else {
             // no type is present (variable has no initializer but the explicit ty<pe isn't set either)
 
-            self.error_reporter.semanticAnalyserError(self, Error.TypeMissing, node, "if type can not be inferred, it must be set explicit");
+            self.error_reporter.semanticAnalyserError(self, Error.TypeMissing, node, "declaration must have a type");
 
-            const hint_fmt = "explicit type: '{[keyword]s} {[name]s}:string;' or Implicit by assignment: '{[keyword]s} {[name]s} = \"\";' ";
+            const hint_fmt = "either explicit: e.g. '{[keyword]s} {[name]s}:string;' or implicit by assignment: e.g.'{[keyword]s} {[name]s} = \"\";' ";
             const hint_message = if (is_mutable)
                 try std.fmt.allocPrint(self.allocator, hint_fmt, .{ .keyword = "var", .name = self.ast.string_table.get(extra.name_id) })
             else
@@ -354,6 +354,7 @@ pub const SemanticAnalyser = struct {
             defer self.allocator.free(hint_message);
 
             self.error_reporter.semanticAnalyserHint(self, node, hint_message);
+            return Error.TypeMissing;
         }
 
         // add variable to symbol table
