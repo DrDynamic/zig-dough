@@ -201,7 +201,9 @@ pub const Compiler = struct {
                     }
                 }
 
-                const reg_then = try self.compileExpression(extra.then_branch);
+                const reg_then = self.next_free_reg;
+                try self.compileExpressionEnsureRegister(extra.then_branch, self.next_free_reg);
+
                 self.exitScope();
 
                 const pos_jump_end = self.chunk.code.items.len;
@@ -225,7 +227,8 @@ pub const Compiler = struct {
                         }
                     }
 
-                    const reg_else = try self.compileExpression(else_branch_id);
+                    const reg_else = self.next_free_reg;
+                    try self.compileExpressionEnsureRegister(else_branch_id, self.next_free_reg);
                     self.exitScope();
 
                     // both branches should produce the same register, since the result of the if expression is in that register

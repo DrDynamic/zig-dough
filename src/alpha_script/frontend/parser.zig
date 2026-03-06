@@ -416,7 +416,7 @@ pub const Parser = struct {
                 });
             } else if (try self.match(.dot)) {
                 _ = self.consume(.identifier) catch {
-                    self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "Expect property name after '.'");
+                    self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.previous(), "Expect property name after '.'");
                     _ = try self.advance();
                     return Error.UnexpectedToken;
                 };
