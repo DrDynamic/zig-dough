@@ -1,8 +1,5 @@
-{
-  var a = "outer";
-  {
-    print(a); // expect: outer
-    var a = "inner";
-    print(a); // expect: inner
-  }
-}
+var a:?Int = null;
+print(a); // expect: null
+
+a = 42;
+print(a); // expect: 42

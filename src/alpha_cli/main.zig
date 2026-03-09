@@ -163,6 +163,7 @@ fn registerNatives(ast: *as.frontend.AST, semantic_analyser: *as.frontend.Semant
         .type_id = as.frontend.TypePool.VOID,
         .is_mutable = false,
         .node_id = 0,
+        .defined = true,
     });
 
     try compiler.locals.append(.{

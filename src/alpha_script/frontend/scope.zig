@@ -3,6 +3,7 @@ pub const Symbol = struct {
     type_id: TypeId,
     is_mutable: bool,
     node_id: NodeId,
+    defined: bool,
 };
 
 pub const Scope = struct {
@@ -24,6 +25,7 @@ pub const Scope = struct {
 pub const SymbolTable = struct {
     pub const Error = error{
         RedeclarationError,
+        NotFound,
         OutOfMemory,
     };
 
@@ -50,7 +52,7 @@ pub const SymbolTable = struct {
     }
 
     /// Create a new scope nested within the current scope and set it as current
-    pub fn enterScope(self: *SymbolTable) Error!void {
+    pub fn enterScope(self: *SymbolTable) std.mem.Allocator.Error!void {
         const new_scope = try self.allocator.create(Scope);
         new_scope.* = Scope.init(self.allocator, self.current_scope);
         self.current_scope = new_scope;
@@ -72,6 +74,15 @@ pub const SymbolTable = struct {
         }
 
         try self.current_scope.symbols.put(name_id, symbol);
+    }
+
+    pub fn define(self: *SymbolTable, name_id: StringId, type_id: TypeId) Error!void {
+        if (self.current_scope.symbols.getPtr(name_id)) |symbol| {
+            symbol.defined = true;
+            symbol.type_id = type_id;
+            return;
+        }
+        return Error.NotFound;
     }
 
     /// Lookup a symbol by name, searching through parent scopes if necessary
