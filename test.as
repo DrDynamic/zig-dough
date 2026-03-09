@@ -1,5 +1,3 @@
-type OptionalString = ?string | int | float; // expect compile error: Error at 'or': nullables can only be applied to single literals.
-type OptionalString = ?string | int | float; // expect compile error: Error at 'or': nullables can only be applied to single literals.
-type OptionalString = ?string | int | float; // expect compile error: Error at 'or': nullables can only be applied to single literals.
+type OptionalString = ?string | float; // expect compile error: Error at '?': nullable shorthand '?' cannot be applied to type unions
 
-var a:OptionalString = "a"; 
+var a:OptionalString = "a"; // expect compile error: Error at 'OptionalString': Undefined type
