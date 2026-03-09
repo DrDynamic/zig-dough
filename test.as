@@ -1,3 +1,8 @@
-type OptionalString = string | ?float;
-
-var a:OptionalString = "a"; 
+{
+  var a = "outer";
+  {
+    print(a); // expect: outer
+    var a = "inner";
+    print(a); // expect: inner
+  }
+}

@@ -65,11 +65,14 @@ pub const SemanticAnalyser = struct {
             // statements
             .expression_grouping => try self.analyse(node.data.node_id),
             .expression_block => |_| case: {
-                var iterator = NodeListIterator.init(self.ast, node.data.node_id);
+                try self.symbol_table.enterScope();
 
+                var iterator = NodeListIterator.init(self.ast, node.data.node_id);
                 while (iterator.next()) |list_node_id| {
                     _ = try self.analyse(list_node_id);
                 }
+
+                self.symbol_table.exitScope();
 
                 break :case TypePool.VOID;
             },
@@ -214,9 +217,8 @@ pub const SemanticAnalyser = struct {
             // access
             .assignment => case: {
                 const extra = self.ast.getExtra(node.data.extra_id, AssignmentExtra);
-                // TODO chexck is assignable
-                // TODO check target allowd
                 const target_node = self.ast.nodes.items[extra.target];
+
                 if (target_node.tag != .identifier_expr) {
                     self.error_reporter.semanticAnalyserError(self, Error.InvalidAssignmentTarget, target_node, "invalid assignment target");
                     return Error.InvalidAssignmentTarget;
@@ -236,7 +238,12 @@ pub const SemanticAnalyser = struct {
 
                 const source_type = try self.analyse(extra.source);
                 if (!self.ast.type_pool.isAssignable(maybe_symbol.?.type_id, source_type)) {
-                    self.error_reporter.semanticAnalyserError(self, Error.TypeMismatch, node.*, "incompatible types");
+                    const source_node = self.ast.nodes.items[extra.source];
+                    try self.reportNotAssignable(source_node, maybe_symbol.?.type_id, source_type);
+
+                    const declaration_node = self.ast.nodes.items[maybe_symbol.?.node_id];
+                    self.error_reporter.semanticAnalyserHint(self, declaration_node, "declared here:");
+
                     return Error.TypeMismatch;
                 }
 
@@ -323,15 +330,7 @@ pub const SemanticAnalyser = struct {
 
             if (!self.ast.type_pool.isAssignable(extra.explicit_type, inferred_type)) {
                 const init_node = self.ast.nodes.items[extra.init_value.?];
-
-                const inferred_type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, inferred_type, self.ast.string_table);
-                defer self.allocator.free(inferred_type_name);
-                const explicit_type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, extra.explicit_type, self.ast.string_table);
-                defer self.allocator.free(explicit_type_name);
-
-                const error_message = try std.fmt.allocPrint(self.allocator, "can not assign {s} to {s}", .{ inferred_type_name, explicit_type_name });
-
-                self.error_reporter.semanticAnalyserError(self, Error.TypeMismatch, init_node, error_message);
+                try self.reportNotAssignable(init_node, extra.explicit_type, inferred_type);
                 return Error.TypeMismatch;
             }
 
@@ -434,6 +433,18 @@ pub const SemanticAnalyser = struct {
         self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, node, "Incompatible types");
 
         return error.IncompatibleTypes;
+    }
+
+    fn reportNotAssignable(self: *const SemanticAnalyser, node: Node, target_type_id: TypeId, sourceType_id: TypeId) !void {
+        const target_type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, target_type_id, self.ast.string_table);
+        defer self.allocator.free(target_type_name);
+        const source_type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, sourceType_id, self.ast.string_table);
+        defer self.allocator.free(source_type_name);
+
+        const error_message = try std.fmt.allocPrint(self.allocator, "can not assign {s} to {s}", .{ source_type_name, target_type_name });
+        defer self.allocator.free(error_message);
+
+        self.error_reporter.semanticAnalyserError(self, Error.TypeMismatch, node, error_message);
     }
 
     fn emitRedeclarationError(self: *const SemanticAnalyser, node: Node, identifier_name: StringId) !void {

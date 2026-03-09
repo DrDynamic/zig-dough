@@ -228,25 +228,15 @@ pub const TokenStream = struct {
         const token_end = self.pos;
 
         const tokenType = switch (self.source[token_start]) {
-            'a' => |_| a_case: {
-                if (token_end - token_start > 1) {
-                    break :a_case switch (self.source[token_start + 1]) {
-                        'n' => |_| an_case: {
-                            if (token_end - token_start > 2) {
-                                break :an_case switch (self.source[token_start + 2]) {
-                                    'd' => self.matchIdentifier("", 2, 1, token_start, token_end, .logical_and),
-                                    'y' => self.matchIdentifier("error", 2, 5, token_start, token_end, .anyerror),
-                                    else => .identifier,
-                                };
-                            }
-                            break :an_case .identifier;
-                        },
-                        else => .identifier,
-                    };
-                }
-                break :a_case .identifier;
-            },
-            'b' => self.matchIdentifier("ool", 1, 3, token_start, token_end, .bool),
+            'A' => self.matchIdentifier("nyerror", 1, 7, token_start, token_end, .Anyerror),
+            'B' => self.matchIdentifier("ool", 1, 3, token_start, token_end, .Bool),
+            'F' => self.matchIdentifier("oat", 1, 3, token_start, token_end, .Float),
+            'I' => self.matchIdentifier("nt", 1, 2, token_start, token_end, .Int),
+            'N' => self.matchIdentifier("ull", 1, 3, token_start, token_end, .Null),
+            'S' => self.matchIdentifier("tring", 1, 5, token_start, token_end, .String),
+            'V' => self.matchIdentifier("oid", 1, 3, token_start, token_end, .Void),
+
+            'a' => self.matchIdentifier("nd", 1, 2, token_start, token_end, .logical_and),
             'c' => self.matchIdentifier("onst", 1, 4, token_start, token_end, .const_),
             'e' => |_| e_case: {
                 if (token_end - token_start > 1) {
@@ -261,50 +251,30 @@ pub const TokenStream = struct {
             'f' => |_| f_case: {
                 if (token_end - token_start > 1) {
                     break :f_case switch (self.source[token_start + 1]) {
-                        'a' => self.matchIdentifier("lse", 2, 3, token_start, token_end, .false_),
-                        'l' => self.matchIdentifier("oat", 2, 3, token_start, token_end, .float),
+                        'a' => self.matchIdentifier("lse", 2, 3, token_start, token_end, .false),
                         'o' => self.matchIdentifier("r", 2, 1, token_start, token_end, .for_),
-                        'u' => self.matchIdentifier("nction", 2, 6, token_start, token_end, .function_),
+                        'u' => self.matchIdentifier("nction", 2, 6, token_start, token_end, .function),
                         else => .identifier,
                     };
                 }
                 break :f_case .identifier;
             },
-            'i' => |_| case: {
-                if (token_end - token_start > 1) {
-                    break :case switch (self.source[token_start + 1]) {
-                        'f' => self.matchIdentifier("", 2, 0, token_start, token_end, .if_),
-                        'n' => self.matchIdentifier("t", 2, 1, token_start, token_end, .int),
-                        else => .identifier,
-                    };
-                }
-                break :case .identifier;
-            },
+            'i' => self.matchIdentifier("f", 1, 1, token_start, token_end, .if_),
             'n' => self.matchIdentifier("ull", 1, 3, token_start, token_end, .null),
             'o' => self.matchIdentifier("r", 1, 1, token_start, token_end, .logical_or),
             'r' => self.matchIdentifier("eturn", 1, 5, token_start, token_end, .return_),
-            's' => self.matchIdentifier("tring", 1, 5, token_start, token_end, .string),
             't' => |_| t_case: {
                 if (token_end - token_start > 1) {
                     break :t_case switch (self.source[token_start + 1]) {
-                        'r' => self.matchIdentifier("ue", 2, 2, token_start, token_end, .true_),
-                        'y' => self.matchIdentifier("pe", 2, 2, token_start, token_end, .type_),
+                        'r' => self.matchIdentifier("ue", 2, 2, token_start, token_end, .true),
+                        'y' => self.matchIdentifier("pe", 2, 2, token_start, token_end, .type),
                         else => .identifier,
                     };
                 }
                 break :t_case .identifier;
             },
 
-            'v' => |_| case: {
-                if (token_end - token_start > 1) {
-                    break :case switch (self.source[token_start + 1]) {
-                        'a' => self.matchIdentifier("r", 2, 1, token_start, token_end, .var_),
-                        'o' => self.matchIdentifier("id", 2, 2, token_start, token_end, .void),
-                        else => .identifier,
-                    };
-                }
-                break :case .identifier;
-            },
+            'v' => self.matchIdentifier("ar", 1, 2, token_start, token_end, .var_),
             'w' => self.matchIdentifier("hile", 1, 4, token_start, token_end, .while_),
             else => .identifier,
         };

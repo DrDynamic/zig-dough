@@ -1,3 +1,3 @@
-type OptionalString = ?string | int; // expect compile error: Error at '?': nullable shorthand '?' cannot be applied to type unions
+type OptionalString = ?String | Int; // expect compile error: Error at '?': nullable shorthand '?' cannot be applied to type unions
 
 var a:OptionalString = "a"; 

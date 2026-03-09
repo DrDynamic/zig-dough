@@ -41,7 +41,7 @@ pub const Parser = struct {
     }
 
     fn declaration(self: *Parser) !NodeId {
-        if (try self.match(.type_)) {
+        if (try self.match(.type)) {
             return self.declarationType();
         } else if (try self.match(.var_)) {
             return try self.declarationVar();
@@ -523,7 +523,7 @@ pub const Parser = struct {
                     .data = undefined,
                 });
             },
-            .true_ => |_| case: {
+            .true => |_| case: {
                 _ = try self.advance();
 
                 break :case try self.ast.addNode(.{
@@ -533,7 +533,7 @@ pub const Parser = struct {
                     .data = .{ .bool_value = true },
                 });
             },
-            .false_ => |_| case: {
+            .false => |_| case: {
                 _ = try self.advance();
 
                 break :case try self.ast.addNode(.{
@@ -723,31 +723,31 @@ pub const Parser = struct {
         const token = self.scanner.current();
 
         return switch (token.tag) {
-            .void => case: {
+            .Void => case: {
                 _ = try self.advance();
                 break :case TypePool.VOID;
             },
-            .null => case: {
+            .Null => case: {
                 _ = try self.advance();
                 break :case TypePool.NULL;
             },
-            .bool => case: {
+            .Bool => case: {
                 _ = try self.advance();
                 break :case TypePool.BOOL;
             },
-            .int => case: {
+            .Int => case: {
                 _ = try self.advance();
                 break :case TypePool.INT;
             },
-            .float => case: {
+            .Float => case: {
                 _ = try self.advance();
                 break :case TypePool.FLOAT;
             },
-            .string => case: {
+            .String => case: {
                 _ = try self.advance();
                 break :case TypePool.STRING;
             },
-            .anyerror => case: {
+            .Anyerror => case: {
                 _ = try self.advance();
                 break :case TypePool.ANYERROR;
             },
@@ -844,10 +844,10 @@ pub const Parser = struct {
                 .left_bracket,
                 .const_,
                 .for_,
-                .function_,
+                .function,
                 .if_,
                 .return_,
-                .type_,
+                .type,
                 .var_,
                 .while_,
                 => return,

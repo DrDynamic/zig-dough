@@ -1,3 +1,3 @@
 var a:String;
-var c;
-a = c; // expect compile error: Error at 'c': Variable not initialized
+var c; // expect compile error: Error at 'c': declaration must have a type
+a = c;

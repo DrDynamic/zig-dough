@@ -113,15 +113,15 @@ pub const TypePool = struct {
         var type_name = std.ArrayList(u8).init(allocator);
 
         switch (t) {
-            .unresolved => try type_name.appendSlice("unresolved"),
-            .void => try type_name.appendSlice("void"),
-            .null => try type_name.appendSlice("null"),
-            .bool => try type_name.appendSlice("bool"),
-            .int => try type_name.appendSlice("int"),
-            .float => try type_name.appendSlice("float"),
-            .string => try type_name.appendSlice("string"),
-            .module => try type_name.appendSlice("module"),
-            .anyerror => try type_name.appendSlice("anyerror"),
+            .unresolved => try type_name.appendSlice("Unresolved"),
+            .void => try type_name.appendSlice("Void"),
+            .null => try type_name.appendSlice("Null"),
+            .bool => try type_name.appendSlice("Bool"),
+            .int => try type_name.appendSlice("Int"),
+            .float => try type_name.appendSlice("Float"),
+            .string => try type_name.appendSlice("String"),
+            .module => try type_name.appendSlice("Module"),
+            .anyerror => try type_name.appendSlice("Anyerror"),
             .error_type => try type_name.appendSlice(string_table.get(self.types.items[type_id].error_type)),
             .error_set => try type_name.appendSlice(string_table.get(self.types.items[type_id].error_set.name_id)),
             .union_type => {
