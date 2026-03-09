@@ -1,3 +1,3 @@
-type OptionalString = ?string | float; // expect compile error: Error at '?': nullable shorthand '?' cannot be applied to type unions
+type OptionalString = string | ?float;
 
-var a:OptionalString = "a"; // expect compile error: Error at 'OptionalString': Undefined type
+var a:OptionalString = "a"; 

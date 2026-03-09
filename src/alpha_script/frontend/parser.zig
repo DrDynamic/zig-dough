@@ -675,39 +675,48 @@ pub const Parser = struct {
         var members = std.ArrayList(TypeId).init(self.allocator);
         defer members.deinit();
 
+        var nullable_token: ?Token = null;
         if (try self.match(.question_mark)) {
-            const nullable_token = self.scanner.previous();
+            nullable_token = self.scanner.previous();
+        }
+        try members.append(try self.parseTypePrimary());
 
-            try members.append(TypePool.NULL);
+        while (try self.match(.pipe)) {
+            if (try self.match(.question_mark)) {
+                nullable_token = self.scanner.previous();
+            }
             try members.append(try self.parseTypePrimary());
+        }
 
-            if (try self.match(.pipe)) {
-                const first_type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, members.items[1], self.ast.string_table);
-                defer self.allocator.free(first_type_name);
+        if (members.items.len == 1) {
+            // its a single type with nullable shorthand
+            if (nullable_token != null) {
+                try members.append(TypePool.NULL);
+                return self.ast.type_pool.getOrCreateUnionType(members.items);
+            }
 
-                const other_types = try self.parseTypeUnion();
-                const other_types_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, other_types, self.ast.string_table);
-                defer self.allocator.free(other_types_name);
+            // its just a single type
+            return members.items[0];
+        } else {
+            const union_type_id = try self.ast.type_pool.getOrCreateUnionType(members.items);
 
-                self.reportError(Error.UnexpectedToken, nullable_token, "nullable shorthand '?' cannot be applied to type unions");
+            // its a type union with nullable shorthand somewhere
+            if (nullable_token) |token| {
+                const union_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, union_type_id, self.ast.string_table);
+                defer self.allocator.free(union_name);
 
-                const hint_message = try std.fmt.allocPrint(self.allocator, "but you can just add the null type like: null|{s}|{s}", .{ first_type_name, other_types_name });
+                self.reportError(Error.UnexpectedToken, token, "nullable shorthand '?' cannot be applied to type unions");
+
+                const hint_message = try std.fmt.allocPrint(self.allocator, "but you can just add the null type like: null|{s}", .{union_name});
                 defer self.allocator.free(hint_message);
 
                 self.reportHint(null, hint_message);
+
                 return Error.UnexpectedToken;
             }
-        } else {
-            try members.append(try self.parseTypePrimary());
 
-            while (try self.match(.pipe)) {
-                try members.append(try self.parseTypePrimary());
-            }
-
-            if (members.items.len == 1) return members.items[0];
+            return union_type_id;
         }
-
-        return self.ast.type_pool.getOrCreateUnionType(members.items);
     }
 
     fn parseTypePrimary(self: *Parser) !TypeId {
