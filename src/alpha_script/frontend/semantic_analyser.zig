@@ -110,7 +110,7 @@ pub const SemanticAnalyser = struct {
                             .type_id = capture_type,
                             .is_mutable = false,
                             .node_id = then_capture,
-                            .defined = true,
+                            .initialized = true,
                         }) catch |err| switch (err) {
                             error.RedeclarationError => {
                                 try self.emitRedeclarationError(capture_node.*, capture_node.data.string_id);
@@ -142,7 +142,7 @@ pub const SemanticAnalyser = struct {
                             .type_id = capture_type,
                             .is_mutable = false,
                             .node_id = then_capture,
-                            .defined = true,
+                            .initialized = true,
                         }) catch |err| switch (err) {
                             error.RedeclarationError => {
                                 try self.emitRedeclarationError(capture_node.*, capture_node.data.string_id);
@@ -169,7 +169,7 @@ pub const SemanticAnalyser = struct {
                                 .type_id = capture_type,
                                 .is_mutable = false,
                                 .node_id = else_capture,
-                                .defined = true,
+                                .initialized = true,
                             }) catch |err| switch (err) {
                                 error.RedeclarationError => {
                                     try self.emitRedeclarationError(capture_node.*, capture_node.data.string_id);
@@ -252,14 +252,18 @@ pub const SemanticAnalyser = struct {
                     return Error.TypeMismatch;
                 }
 
+                try self.symbol_table.initialize(maybe_symbol.?.name_id);
+
                 break :case source_type;
             },
             .identifier_expr => |_| case: {
                 const maybe_symbol = self.symbol_table.lookup(node.data.string_id);
                 if (maybe_symbol) |symbol| {
-                    if (symbol.defined == false) {
+                    if (symbol.initialized == false) {
+                        self.error_reporter.semanticAnalyserError(self, Error.IllegalMutation, node.*, "can not read uninitialized variable");
+
                         const symbol_node = self.ast.nodes.items[symbol.node_id];
-                        self.error_reporter.semanticAnalyserError(self, Error.IllegalMutation, symbol_node, "can not read variable in its own initializer");
+                        self.error_reporter.semanticAnalyserHint(self, symbol_node, "variable is declared here:");
                         return Error.IllegalMutation;
                     }
                     break :case symbol.type_id;
@@ -333,7 +337,7 @@ pub const SemanticAnalyser = struct {
             .type_id = TypePool.UNRESOLVED,
             .is_mutable = is_mutable,
             .node_id = node_id,
-            .defined = false,
+            .initialized = false,
         }) catch |err| switch (err) {
             error.RedeclarationError => {
                 try self.emitRedeclarationError(node, extra.name_id);
@@ -346,6 +350,7 @@ pub const SemanticAnalyser = struct {
         var inferred_type: TypeId = TypePool.UNRESOLVED;
         if (extra.init_value) |init_value_id| {
             inferred_type = try self.analyse(init_value_id);
+            try self.symbol_table.initialize(extra.name_id);
         }
 
         var type_id: TypeId = undefined;
@@ -382,8 +387,7 @@ pub const SemanticAnalyser = struct {
             return Error.TypeMissing;
         }
 
-        // define variable
-        try self.symbol_table.define(extra.name_id, type_id);
+        try self.symbol_table.setType(extra.name_id, type_id);
 
         return TypePool.VOID;
     }

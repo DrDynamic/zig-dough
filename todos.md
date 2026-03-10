@@ -5,6 +5,9 @@
 - error when identifier is never read
 - strict types (alias for an int, that can only be written by the same alias or a literal)
 - type casts
+- type assertions 
+  - union types should be resolved by an assert or if, that asserts its Value type
+  - could be implemented with a new property in Symbol (asserted_teype_id)
 
 - loops (need iteratable interface)
 - shapes (need classes or objects or arrays)

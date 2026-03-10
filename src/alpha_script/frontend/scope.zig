@@ -3,7 +3,7 @@ pub const Symbol = struct {
     type_id: TypeId,
     is_mutable: bool,
     node_id: NodeId,
-    defined: bool,
+    initialized: bool,
 };
 
 pub const Scope = struct {
@@ -76,10 +76,17 @@ pub const SymbolTable = struct {
         try self.current_scope.symbols.put(name_id, symbol);
     }
 
-    pub fn define(self: *SymbolTable, name_id: StringId, type_id: TypeId) Error!void {
+    pub inline fn setType(self: *SymbolTable, name_id: StringId, type_id: TypeId) Error!void {
         if (self.current_scope.symbols.getPtr(name_id)) |symbol| {
-            symbol.defined = true;
             symbol.type_id = type_id;
+            return;
+        }
+        return Error.NotFound;
+    }
+
+    pub inline fn initialize(self: *SymbolTable, name_id: StringId) Error!void {
+        if (self.current_scope.symbols.getPtr(name_id)) |symbol| {
+            symbol.initialized = true;
             return;
         }
         return Error.NotFound;

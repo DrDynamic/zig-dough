@@ -1,5 +1,2 @@
-var a:?Int = null;
-print(a); // expect: null
-
-a = 42;
-print(a); // expect: 42
+var a:Int; 
+print(a); // expect compile error: Error at 'a': can not read uninitialized variable
