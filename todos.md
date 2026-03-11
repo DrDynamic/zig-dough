@@ -9,6 +9,9 @@
 - type assertions 
   - union types should be resolved by an assert or if, that asserts its Value type
   - could be implemented with a new property in Symbol (asserted_teype_id)
+- @assert builtin
+  - assert isType
+  - assert hasValue (or isInitialized)
 
 - loops (need iteratable interface)
 - shapes (need classes or objects or arrays)

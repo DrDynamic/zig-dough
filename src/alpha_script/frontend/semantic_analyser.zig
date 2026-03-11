@@ -87,16 +87,12 @@ pub const SemanticAnalyser = struct {
                 try self.symbol_table.enterScope();
 
                 if (type_condition == TypePool.BOOL) {
-                    if (extra.then_capture) |then_capture_id| {
-                        const then_capture = self.ast.nodes.items[then_capture_id];
-                        self.error_reporter.semanticAnalyserError(self, Error.PointlessCapture, then_capture, "then capture is pointless (capture is always true)");
-                        maybe_err = Error.PointlessCapture;
-                    }
-                    if (extra.else_capture) |else_capture_id| {
-                        const else_capture = self.ast.nodes.items[else_capture_id];
-                        self.error_reporter.semanticAnalyserError(self, Error.PointlessCapture, else_capture, "else capture is pointless (it is always false)");
-                        maybe_err = Error.PointlessCapture;
-                    }
+                    self.assertHasNode(extra.then_capture, Error.PointlessCapture, "then capture is pointless (capture is always true)") catch |err| {
+                        maybe_err = err;
+                    };
+                    self.assertHasNode(extra.else_capture, Error.PointlessCapture, "else capture is pointless (capture is always false)") catch |err| {
+                        maybe_err = err;
+                    };
                 } else if (self.ast.type_pool.isNullable(type_condition)) {
                     if (extra.then_capture) |then_capture| {
                         const capture_node = &self.ast.nodes.items[then_capture];
@@ -113,7 +109,7 @@ pub const SemanticAnalyser = struct {
                             .initialized = true,
                         }) catch |err| switch (err) {
                             error.RedeclarationError => {
-                                try self.emitRedeclarationError(capture_node.*, capture_node.data.string_id);
+                                try self.reportRedeclarationError(capture_node.*, capture_node.data.string_id);
                                 return err;
                             },
                             else => return err,
@@ -124,11 +120,9 @@ pub const SemanticAnalyser = struct {
                         maybe_err = Error.MissingCapture;
                     }
 
-                    if (extra.else_capture) |else_capture_id| {
-                        const else_capture = self.ast.nodes.items[else_capture_id];
-                        self.error_reporter.semanticAnalyserError(self, Error.PointlessCapture, else_capture, "capture is pointless for nullable condition (it is always null)");
-                        maybe_err = Error.PointlessCapture;
-                    }
+                    self.assertHasNode(extra.else_capture, Error.PointlessCapture, "capture is pointless for nullable condition (it is always null)") catch |err| {
+                        maybe_err = err;
+                    };
                 } else if (self.ast.type_pool.isErrorUnion(type_condition)) {
                     if (extra.then_capture) |then_capture| {
                         const capture_node = &self.ast.nodes.items[then_capture];
@@ -145,7 +139,7 @@ pub const SemanticAnalyser = struct {
                             .initialized = true,
                         }) catch |err| switch (err) {
                             error.RedeclarationError => {
-                                try self.emitRedeclarationError(capture_node.*, capture_node.data.string_id);
+                                try self.reportRedeclarationError(capture_node.*, capture_node.data.string_id);
                                 return err;
                             },
                             else => return err,
@@ -172,7 +166,7 @@ pub const SemanticAnalyser = struct {
                                 .initialized = true,
                             }) catch |err| switch (err) {
                                 error.RedeclarationError => {
-                                    try self.emitRedeclarationError(capture_node.*, capture_node.data.string_id);
+                                    try self.reportRedeclarationError(capture_node.*, capture_node.data.string_id);
                                     return err;
                                 },
                                 else => return err,
@@ -197,11 +191,21 @@ pub const SemanticAnalyser = struct {
                     maybe_err = Error.IncompatibleTypes;
                 }
 
+                const initial_scope = try self.symbol_table.copy();
+
                 const type_then = try self.analyse(extra.then_branch);
                 var type_else = type_then;
 
+                var then_scope = try self.symbol_table.copy();
+                defer then_scope.deinit();
+
+                self.symbol_table.deinit();
+                self.symbol_table = initial_scope;
+
                 if (extra.else_branch) |else_branch_id| {
                     type_else = try self.analyse(else_branch_id);
+
+                    try self.symbol_table.mergeInitialized(&then_scope);
                 }
 
                 self.symbol_table.exitScope();
@@ -340,7 +344,7 @@ pub const SemanticAnalyser = struct {
             .initialized = false,
         }) catch |err| switch (err) {
             error.RedeclarationError => {
-                try self.emitRedeclarationError(node, extra.name_id);
+                try self.reportRedeclarationError(node, extra.name_id);
                 return err;
             },
             else => return err,
@@ -453,6 +457,14 @@ pub const SemanticAnalyser = struct {
         return error.IncompatibleTypes;
     }
 
+    fn assertHasNode(self: *SemanticAnalyser, node_id: ?NodeId, err: Error, message: []const u8) Error!void {
+        if (node_id) |id| {
+            const node = self.ast.nodes.items[id];
+            self.error_reporter.semanticAnalyserError(self, err, node, message);
+            return err;
+        }
+    }
+
     fn reportNotAssignable(self: *const SemanticAnalyser, node: Node, target_type_id: TypeId, sourceType_id: TypeId) !void {
         const target_type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, target_type_id, self.ast.string_table);
         defer self.allocator.free(target_type_name);
@@ -465,7 +477,7 @@ pub const SemanticAnalyser = struct {
         self.error_reporter.semanticAnalyserError(self, Error.TypeMismatch, node, error_message);
     }
 
-    fn emitRedeclarationError(self: *const SemanticAnalyser, node: Node, identifier_name: StringId) !void {
+    fn reportRedeclarationError(self: *const SemanticAnalyser, node: Node, identifier_name: StringId) !void {
         const error_message = try std.fmt.allocPrint(self.allocator, "identifier '{s}' has already been declared", .{self.ast.string_table.get(identifier_name)});
         defer self.allocator.free(error_message);
 

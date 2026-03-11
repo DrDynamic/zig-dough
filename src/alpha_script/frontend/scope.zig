@@ -8,12 +8,12 @@ pub const Symbol = struct {
 
 pub const Scope = struct {
     parent: ?*Scope,
-    symbols: std.AutoHashMap(u32, Symbol),
+    symbols: std.AutoArrayHashMap(u32, Symbol),
 
     pub fn init(allocator: std.mem.Allocator, parent: ?*Scope) Scope {
         return Scope{
             .parent = parent,
-            .symbols = std.AutoHashMap(u32, Symbol).init(allocator),
+            .symbols = std.AutoArrayHashMap(u32, Symbol).init(allocator),
         };
     }
 
@@ -48,6 +48,39 @@ pub const SymbolTable = struct {
             scope.deinit();
             self.allocator.destroy(scope);
             maybe_scope = parent;
+        }
+    }
+
+    pub fn copy(self: *SymbolTable) std.mem.Allocator.Error!SymbolTable {
+        var new_table = try SymbolTable.init(self.allocator);
+        var maybe_scope: ?*Scope = self.current_scope;
+        while (maybe_scope) |scope| {
+            try new_table.enterScope();
+            for (scope.symbols.iterator()) |entry| {
+                try new_table.declare(entry.key, entry.value);
+            }
+            maybe_scope = scope.parent;
+        }
+        return new_table;
+    }
+
+    pub fn mergeInitialized(self: *SymbolTable, other: *const SymbolTable) std.mem.Allocator.Error!void {
+        var maybe_self_scope: ?*Scope = self.current_scope;
+        var maybe_other_scope: ?*Scope = other.current_scope;
+
+        while (maybe_self_scope) |self_scope| {
+            if (maybe_other_scope) |other_scope| {
+                // Merge symbols on the same scope level
+                for (other_scope.symbols.iterator()) |entry| {
+                    if (self_scope.symbols.getPtr(entry.key)) |symbol| {
+                        if (!entry.value.initialized or !symbol.initialized) {
+                            symbol.initialized = false;
+                        }
+                    }
+                }
+                maybe_other_scope = other_scope.parent;
+            }
+            maybe_self_scope = self_scope.parent;
         }
     }
 
