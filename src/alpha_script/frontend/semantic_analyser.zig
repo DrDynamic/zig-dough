@@ -101,19 +101,16 @@ pub const SemanticAnalyser = struct {
 
                         capture_node.resolved_type_id = capture_type;
 
-                        self.symbol_table.declare(capture_extra.name_id, .{
-                            .name_id = capture_extra.name_id,
-                            .type_id = capture_type,
-                            .is_mutable = false,
-                            .node_id = then_capture,
-                            .initialized = true,
-                        }) catch |err| switch (err) {
-                            error.RedeclarationError => {
-                                try self.reportRedeclarationError(capture_node.*, capture_node.data.string_id);
-                                return err;
-                            },
-                            else => return err,
+                        self.symbol_table.declare(
+                            capture_extra.name_id,
+                            capture_type,
+                            then_capture,
+                            false,
+                        ) catch |err| {
+                            try self.reportRedeclarationError(capture_node.*, capture_node.data.string_id);
+                            return err;
                         };
+                        self.symbol_table.initialize(capture_extra.name_id);
                     } else {
                         const condition = self.ast.nodes.items[extra.condition];
                         self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing then capture for nullable condition");
@@ -131,19 +128,16 @@ pub const SemanticAnalyser = struct {
 
                         capture_node.resolved_type_id = capture_type;
 
-                        self.symbol_table.declare(capture_extra.name_id, .{
-                            .name_id = capture_extra.name_id,
-                            .type_id = capture_type,
-                            .is_mutable = false,
-                            .node_id = then_capture,
-                            .initialized = true,
-                        }) catch |err| switch (err) {
-                            error.RedeclarationError => {
-                                try self.reportRedeclarationError(capture_node.*, capture_node.data.string_id);
-                                return err;
-                            },
-                            else => return err,
+                        self.symbol_table.declare(
+                            capture_extra.name_id,
+                            capture_type,
+                            then_capture,
+                            false,
+                        ) catch |err| {
+                            try self.reportRedeclarationError(capture_node.*, capture_node.data.string_id);
+                            return err;
                         };
+                        self.symbol_table.initialize(capture_extra.name_id);
                     } else {
                         const condition = self.ast.nodes.items[extra.condition];
                         self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing then capture for nullable condition");
@@ -158,19 +152,16 @@ pub const SemanticAnalyser = struct {
 
                             capture_node.resolved_type_id = capture_type;
 
-                            self.symbol_table.declare(capture_extra.name_id, .{
-                                .name_id = capture_node.data.string_id,
-                                .type_id = capture_type,
-                                .is_mutable = false,
-                                .node_id = else_capture,
-                                .initialized = true,
-                            }) catch |err| switch (err) {
-                                error.RedeclarationError => {
-                                    try self.reportRedeclarationError(capture_node.*, capture_node.data.string_id);
-                                    return err;
-                                },
-                                else => return err,
+                            self.symbol_table.declare(
+                                capture_extra.name_id,
+                                capture_type,
+                                else_capture,
+                                false,
+                            ) catch |err| {
+                                try self.reportRedeclarationError(capture_node.*, capture_node.data.string_id);
+                                return err;
                             };
+                            self.symbol_table.initialize(capture_extra.name_id);
                         }
 
                         const condition = self.ast.nodes.items[extra.condition];
@@ -336,18 +327,14 @@ pub const SemanticAnalyser = struct {
         const extra = self.ast.getExtra(node.data.extra_id, VarDeclarationExtra);
 
         // add variable to symbol table
-        self.symbol_table.declare(extra.name_id, .{
-            .name_id = extra.name_id,
-            .type_id = TypePool.UNRESOLVED,
-            .is_mutable = is_mutable,
-            .node_id = node_id,
-            .initialized = false,
-        }) catch |err| switch (err) {
-            error.RedeclarationError => {
-                try self.reportRedeclarationError(node, extra.name_id);
-                return err;
-            },
-            else => return err,
+        self.symbol_table.declare(
+            extra.name_id,
+            TypePool.UNRESOLVED,
+            node_id,
+            is_mutable,
+        ) catch |err| {
+            try self.reportRedeclarationError(node, extra.name_id);
+            return err;
         };
 
         // analyse the initializer

@@ -1,9 +1,13 @@
+pub const SymbolId = u32;
+
 pub const Symbol = struct {
     name_id: StringId,
     type_id: TypeId,
-    is_mutable: bool,
     node_id: NodeId,
+    is_mutable: bool,
+    scope_depth: u32,
     initialized: bool,
+    shadows_symbol: ?SymbolId,
 };
 
 pub const Scope = struct {
@@ -30,109 +34,107 @@ pub const SymbolTable = struct {
     };
 
     allocator: std.mem.Allocator,
-    current_scope: *Scope,
 
-    pub fn init(allocator: std.mem.Allocator) std.mem.Allocator.Error!SymbolTable {
-        const global_scope = try allocator.create(Scope);
-        global_scope.* = Scope.init(allocator, null);
-        return SymbolTable{
+    scope_depth: u32,
+    symbols: std.ArrayList(Symbol),
+    symbol_ids: std.AutoHashMap(StringId, SymbolId),
+
+    //    current_scope: *Scope,
+
+    pub fn init(allocator: std.mem.Allocator) SymbolTable {
+        return .{
             .allocator = allocator,
-            .current_scope = global_scope,
+            .scope_depth = 0,
+            .symbols = std.ArrayList(Symbol).init(allocator),
+            .symbol_ids = std.AutoHashMap(StringId, SymbolId).init(allocator),
         };
     }
 
     pub fn deinit(self: *SymbolTable) void {
-        var maybe_scope: ?*Scope = self.current_scope;
-        while (maybe_scope) |scope| {
-            const parent = scope.parent;
-            scope.deinit();
-            self.allocator.destroy(scope);
-            maybe_scope = parent;
-        }
+        self.symbols.deinit();
+        self.symbol_ids.deinit();
     }
 
-    pub fn copy(self: *SymbolTable) std.mem.Allocator.Error!SymbolTable {
-        var new_table = try SymbolTable.init(self.allocator);
-        var maybe_scope: ?*Scope = self.current_scope;
-        while (maybe_scope) |scope| {
-            try new_table.enterScope();
-            for (scope.symbols.iterator()) |entry| {
-                try new_table.declare(entry.key, entry.value);
-            }
-            maybe_scope = scope.parent;
-        }
-        return new_table;
+    pub fn clone(self: *SymbolTable) std.mem.Allocator.Error!SymbolTable {
+        return .{
+            .allocator = self.allocator,
+            .scope_depth = self.scope_depth,
+            .symbols = try self.symbols.clone(),
+            .symbol_ids = try self.symbol_ids.clone(),
+        };
     }
 
     pub fn mergeInitialized(self: *SymbolTable, other: *const SymbolTable) std.mem.Allocator.Error!void {
-        var maybe_self_scope: ?*Scope = self.current_scope;
-        var maybe_other_scope: ?*Scope = other.current_scope;
+        const id_map = self.symbol_ids.keyIterator();
+        while (id_map.next()) |name_id| {
+            const self_symbol = self.lookup(name_id.*) orelse unreachable; // iterating over own symbols, so it must exist
+            const other_symbol = other.lookup(name_id.*) orelse continue; // don't make changes, when other symbol does not exist
 
-        while (maybe_self_scope) |self_scope| {
-            if (maybe_other_scope) |other_scope| {
-                // Merge symbols on the same scope level
-                for (other_scope.symbols.iterator()) |entry| {
-                    if (self_scope.symbols.getPtr(entry.key)) |symbol| {
-                        if (!entry.value.initialized or !symbol.initialized) {
-                            symbol.initialized = false;
-                        }
-                    }
-                }
-                maybe_other_scope = other_scope.parent;
+            if (!self_symbol.initialized or !other_symbol.initialized) {
+                self_symbol.initialized = false;
             }
-            maybe_self_scope = self_scope.parent;
         }
     }
 
     /// Create a new scope nested within the current scope and set it as current
-    pub fn enterScope(self: *SymbolTable) std.mem.Allocator.Error!void {
-        const new_scope = try self.allocator.create(Scope);
-        new_scope.* = Scope.init(self.allocator, self.current_scope);
-        self.current_scope = new_scope;
+    pub fn enterScope(self: *SymbolTable) void {
+        self.scope_depth += 1;
     }
 
     /// Exit the current scope and return to the parent scope
     pub fn exitScope(self: *SymbolTable) void {
-        const parent = self.current_scope.parent orelse return;
-        const old_scope = self.current_scope;
-        old_scope.deinit();
-        self.allocator.destroy(old_scope);
-        self.current_scope = parent;
+        self.scope_depth -= 1;
+
+        while (self.symbols.items.len > 0 and self.symbols.getLast().scope_depth > self.scope_depth) {
+            self.pop();
+        }
     }
 
     /// Declare a new symbol in the current scope
-    pub fn declare(self: *SymbolTable, name_id: StringId, symbol: Symbol) Error!void {
-        if (self.current_scope.symbols.contains(name_id)) {
-            return Error.RedeclarationError;
+    pub fn declare(self: *SymbolTable, name_id: StringId, type_id: TypeId, node_id: NodeId, is_mutable: bool) Error!void {
+        const maybe_shadowed_id = self.symbol_ids.get(name_id);
+
+        if (maybe_shadowed_id) |shadowed_id| {
+            const shadowed_symbol = self.symbols.items[shadowed_id];
+            if (shadowed_symbol.scope_depth == self.scope_depth) return Error.RedeclarationError;
         }
 
-        try self.current_scope.symbols.put(name_id, symbol);
+        self.symbol_ids.put(name_id, self.symbols.items.len);
+        self.symbols.append(.{
+            .name_id = name_id,
+            .type_id = type_id,
+            .node_id = node_id,
+            .is_mutable = is_mutable,
+            .scope_depth = self.scope_depth,
+            .initialized = false,
+            .shadows_symbol = maybe_shadowed_id,
+        });
     }
 
     pub inline fn setType(self: *SymbolTable, name_id: StringId, type_id: TypeId) Error!void {
-        if (self.current_scope.symbols.getPtr(name_id)) |symbol| {
-            symbol.type_id = type_id;
-            return;
-        }
-        return Error.NotFound;
+        const symbol = self.lookup(name_id) orelse {
+            return Error.NotFound;
+        };
+
+        symbol.type_id = type_id;
     }
 
     pub inline fn initialize(self: *SymbolTable, name_id: StringId) Error!void {
-        if (self.current_scope.symbols.getPtr(name_id)) |symbol| {
-            symbol.initialized = true;
-            return;
-        }
-        return Error.NotFound;
+        const symbol = self.lookup(name_id) orelse {
+            return Error.NotFound;
+        };
+
+        symbol.initialized = true;
     }
 
     /// Lookup a symbol by name, searching through parent scopes if necessary
     /// Returns null if the symbol is not found
     pub fn lookup(self: *const SymbolTable, name_id: StringId) ?*Symbol {
-        var scope: ?*Scope = self.current_scope;
-        while (scope) |s| : (scope = scope.?.*.parent) {
-            if (s.symbols.contains(name_id)) return s.symbols.getPtr(name_id).?;
-        }
-        return null;
+        const symbol_id = self.symbol_ids.get(name_id) orelse {
+            return null;
+        };
+
+        return &self.symbols.items[symbol_id];
     }
 };
 
