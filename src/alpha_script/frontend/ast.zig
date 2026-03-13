@@ -6,11 +6,13 @@ pub const NodeType = enum(u8) {
     literal_bool, // none
     literal_int, // int_value
     literal_float, // float_value
+    literal_error, // error_value
 
     // objects
     object_string, // string_id
 
     // declarations
+    declaration_error_set, // VarDeclarationExtra
     declaration_type, // VarDeclarationExtra
     declaration_var, // VarDeclarationExtra
     declaration_const, // VarDeclarationExtra
@@ -116,6 +118,7 @@ pub const Node = struct {
         bool_value: bool,
         int_value: i64,
         float_value: f64,
+        error_value: TypeId,
         string_id: StringId,
         node_id: NodeId,
         extra_id: u32,

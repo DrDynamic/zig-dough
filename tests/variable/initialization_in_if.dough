@@ -1,0 +1,8 @@
+
+var a:?String;
+
+if(false) {
+    a = "Some Value";
+}
+
+print("a") // expect compile error: access of possibly uninitialized variable

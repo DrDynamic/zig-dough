@@ -45,6 +45,11 @@ pub const ASTPrinter = struct {
             .literal_int => self.terminal.print(": {d}\n", .{node.data.int_value}),
             .literal_float => self.terminal.print(": {d:.4}\n", .{node.data.float_value}),
             .literal_bool => self.terminal.print(": {}\n", .{node.data.bool_value}),
+            .literal_error => {
+                const error_type = self.ast.type_pool.types.items[node.data.error_value];
+                const error_name = self.ast.string_table.get(error_type.error_type);
+                self.terminal.print(": {s}\n", .{error_name});
+            },
 
             // TODO print the actual string
             .object_string => {
@@ -72,6 +77,7 @@ pub const ASTPrinter = struct {
             => {
                 self.terminal.print("\n", .{});
             },
+            .declaration_error_set,
             .declaration_type,
             .declaration_var,
             .declaration_const,
@@ -124,6 +130,7 @@ pub const ASTPrinter = struct {
             .literal_int,
             .literal_float,
             .literal_bool,
+            .literal_error,
             .identifier_expr,
             => {}, // leaves don't have children
             .object_string => {},
@@ -149,6 +156,7 @@ pub const ASTPrinter = struct {
                 try self.printNode(extra.lhs, prefix, false);
                 try self.printNode(extra.rhs, prefix, true);
             },
+            .declaration_error_set,
             .declaration_type,
             .declaration_const,
             .declaration_var,

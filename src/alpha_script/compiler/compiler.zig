@@ -61,6 +61,7 @@ pub const Compiler = struct {
 
         switch (node.tag) {
             // declarations
+            .declaration_error_set => {},
             .declaration_type => {},
             .declaration_const,
             .declaration_var,
@@ -104,6 +105,7 @@ pub const Compiler = struct {
             .node_list => unreachable,
 
             // statements
+            .declaration_error_set,
             .declaration_type,
             .declaration_const,
             .declaration_var,
@@ -147,6 +149,16 @@ pub const Compiler = struct {
                     .load_const,
                     register,
                     Value.makeFloat(node.data.float_value),
+                );
+                return register;
+            },
+            .literal_error => {
+                const register = self.next_free_reg;
+
+                try self.emitLoadConstant(
+                    .load_const,
+                    register,
+                    Value.makeErrorValue(node.data.error_value),
                 );
                 return register;
             },

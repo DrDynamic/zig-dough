@@ -55,11 +55,13 @@ pub const SemanticAnalyser = struct {
             .literal_bool => TypePool.BOOL,
             .literal_int => TypePool.INT,
             .literal_float => TypePool.FLOAT,
+            .literal_error => node.data.error_value,
 
             // objects
             .object_string => TypePool.STRING,
 
             // declarations
+            .declaration_error_set => TypePool.VOID,
             .declaration_type => node.resolved_type_id,
             .declaration_var => try self.analyseDeclaration(node_id, true),
             .declaration_const => try self.analyseDeclaration(node_id, false),
@@ -252,8 +254,7 @@ pub const SemanticAnalyser = struct {
                 break :case source_type;
             },
             .identifier_expr => |_| case: {
-                const maybe_symbol = self.symbol_table.lookup(node.data.string_id);
-                if (maybe_symbol) |symbol| {
+                if (self.symbol_table.lookup(node.data.string_id)) |symbol| {
                     if (symbol.initialized == false) {
                         self.error_reporter.semanticAnalyserError(self, Error.IllegalMutation, node.*, "can not read uninitialized variable");
 

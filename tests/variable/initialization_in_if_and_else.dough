@@ -1,0 +1,10 @@
+
+var a:?String;
+
+if(false) {
+    a = "Some Value";
+}else {
+    a = "Some Value";
+}
+
+print("a") // expect: Some Value

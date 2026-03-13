@@ -41,12 +41,62 @@ pub const Parser = struct {
     }
 
     fn declaration(self: *Parser) !NodeId {
-        if (try self.match(.type)) {
+        if (try self.match(.error_)) {
+            return self.declarationErrorSet();
+        } else if (try self.match(.type)) {
             return self.declarationType();
         } else if (try self.match(.var_)) {
             return try self.declarationVar();
         }
         return try self.statement();
+    }
+
+    fn declarationErrorSet(self: *Parser) Error!NodeId {
+        const start_token = self.scanner.previous();
+        const set_name_id = try self.parseIdentifier();
+
+        _ = self.consume(.left_brace) catch {
+            self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "expect '{{' after ErrorSet name");
+            return Error.UnexpectedToken;
+        };
+
+        var error_list = std.ArrayList(TypeId).init(self.allocator);
+        while (!self.check(.right_brace)) {
+            const error_name_id = try self.parseIdentifier();
+            const error_id = try self.ast.type_pool.getOrCreateErrorType(error_name_id);
+            try error_list.append(error_id);
+
+            if (!try self.match(.comma)) break;
+        }
+
+        _ = self.consume(.right_brace) catch {
+            self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.previous(), "expecting ',' after error name");
+            return Error.UnexpectedToken;
+        };
+
+        const set_id = try self.ast.type_pool.getOrCreateErrorSet(error_list.items);
+        self.ast.type_pool.declareNamedType(set_name_id, set_id) catch {
+            const set_name = self.ast.string_table.get(set_name_id);
+            const error_message = try std.fmt.allocPrint(self.allocator, "redaclaraction of type '{s}'", .{set_name});
+            defer self.allocator.free(error_message);
+
+            self.reportError(Error.TypeRedeclaration, start_token, error_message);
+            self.reportHintToTypeDeclaration(set_name_id, "type is already declared here:");
+
+            return Error.TypeRedeclaration;
+        };
+
+        const extra_id = try self.ast.addExtra(VarDeclarationExtra{
+            .name_id = set_name_id,
+            .explicit_type = set_id,
+            .init_value = null,
+        });
+        return try self.ast.addNode(.{
+            .tag = .declaration_error_set,
+            .token_position = start_token.location.start,
+            .resolved_type_id = set_id,
+            .data = .{ .extra_id = extra_id },
+        });
     }
 
     fn declarationType(self: *Parser) !NodeId {
@@ -73,16 +123,8 @@ pub const Parser = struct {
             const error_message = try std.fmt.allocPrint(self.allocator, "type '{s}' has already been declared", .{self.ast.string_table.get(name_id)});
             defer self.allocator.free(error_message);
             self.reportError(Error.TypeRedeclaration, identifier_token, error_message);
+            self.reportHintToTypeDeclaration(name_id, "type is already declared here:");
 
-            for (self.ast.nodes.items) |node| {
-                if (node.tag == .declaration_type) {
-                    const extra = self.ast.getExtra(node.data.extra_id, VarDeclarationExtra);
-                    if (extra.name_id == name_id) {
-                        const token = self.ast.scanner.token_stream.scanPosition(node.token_position) catch unreachable;
-                        self.reportHint(token, "type is already declared here:");
-                    }
-                }
-            }
             return Error.TypeRedeclaration;
         };
 
@@ -513,7 +555,28 @@ pub const Parser = struct {
     fn primary(self: *Parser) Error!NodeId {
         const token = self.scanner.current();
         return switch (token.tag) {
-            .null => |_| case: {
+            .error_ => case: {
+                _ = try self.advance();
+                _ = self.consume(.dot) catch {
+                    self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "expect '.' after error expression");
+                    return Error.UnexpectedToken;
+                };
+
+                const error_name_id = self.parseIdentifier() catch {
+                    self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "expect identifier for error expression");
+                    return Error.UnexpectedToken;
+                };
+
+                const error_type_id = try self.ast.type_pool.getOrCreateErrorType(error_name_id);
+
+                break :case self.ast.addNode(.{
+                    .tag = .literal_error,
+                    .token_position = self.scanner.previous().location.start,
+                    .resolved_type_id = error_type_id,
+                    .data = .{ .error_value = error_type_id },
+                });
+            },
+            .null => case: {
                 _ = try self.advance();
 
                 break :case try self.ast.addNode(.{
@@ -601,7 +664,43 @@ pub const Parser = struct {
                 break :case group;
             },
             .identifier => |_| identifier_case: {
-                const string_id = try self.parseIdentifier();
+                const string_id = self.parseIdentifier() catch unreachable; // switch ensures that the next token is an identifier
+
+                if (self.ast.type_pool.getType(string_id)) |set_id| {
+                    if (self.ast.type_pool.isErrorSet(set_id)) {
+                        _ = self.consume(.dot) catch {
+                            self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect '.' in ErrorSet expression");
+                            self.reportHintToTypeDeclaration(string_id, "ErrorSet is declared here:");
+
+                            return Error.UnexpectedToken;
+                        };
+                        const error_name_id = self.parseIdentifier() catch {
+                            self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect identifier as error name");
+                            return Error.UnexpectedToken;
+                        };
+                        const error_type_id = try self.ast.type_pool.getOrCreateErrorType(error_name_id);
+
+                        if (!self.ast.type_pool.isErrorInSet(set_id, error_type_id)) {
+                            const error_message = try std.fmt.allocPrint(self.allocator, "Error '{s}' does not exists in ErrorSet '{s}'", .{
+                                self.ast.string_table.get(error_name_id),
+                                self.ast.string_table.get(string_id),
+                            });
+                            defer self.allocator.free(error_message);
+
+                            self.reportError(Error.UndefinedType, self.scanner.previous(), error_message);
+                            self.reportHintToTypeDeclaration(string_id, "ErrorSet:");
+                            return Error.UndefinedType;
+                        }
+
+                        break :identifier_case try self.ast.addNode(.{
+                            .tag = .literal_error,
+                            .token_position = token.location.start,
+                            .resolved_type_id = error_type_id,
+                            .data = .{ .error_value = error_type_id },
+                        });
+                    }
+                }
+
                 break :identifier_case try self.ast.addNode(.{
                     .tag = .identifier_expr,
                     .token_position = token.location.start,
@@ -658,7 +757,7 @@ pub const Parser = struct {
             return Error.UnexpectedToken;
         };
 
-        const error_set_id = self.ast.type_pool.getType(error_name_id) catch {
+        const error_set_id = self.ast.type_pool.getType(error_name_id) orelse {
             self.reportError(Error.UndefinedType, self.scanner.previous(), "Undefined ErrorSet");
             return Error.UndefinedType;
         };
@@ -753,7 +852,7 @@ pub const Parser = struct {
             },
             .identifier => case: {
                 const name_id = try self.parseIdentifier();
-                break :case self.ast.type_pool.getType(name_id) catch {
+                break :case self.ast.type_pool.getType(name_id) orelse {
                     self.reportError(Error.UndefinedType, self.scanner.previous(), "Undefined type");
                     return Error.UndefinedType;
                 };
@@ -867,6 +966,18 @@ pub const Parser = struct {
 
     pub inline fn reportHint(self: *const Parser, token: ?Token, message: []const u8) void {
         self.error_reporter.parserHint(self, token, message);
+    }
+
+    pub inline fn reportHintToTypeDeclaration(self: *const Parser, type_name_id: StringId, message: []const u8) void {
+        for (self.ast.nodes.items) |node| {
+            if (node.tag == .declaration_type or node.tag == .declaration_error_set) {
+                const extra = self.ast.getExtra(node.data.extra_id, VarDeclarationExtra);
+                if (extra.name_id == type_name_id) {
+                    const token = self.ast.scanner.token_stream.scanPosition(node.token_position) catch unreachable;
+                    self.reportHint(token, message);
+                }
+            }
+        }
     }
 };
 

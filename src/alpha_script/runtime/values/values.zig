@@ -4,6 +4,7 @@ pub const ValueType = enum(u8) {
     bool,
     integer,
     float,
+    error_value,
     object,
 };
 pub const Value = UnionValue;
@@ -13,6 +14,7 @@ pub const UnionValue = union(ValueType) {
     bool: bool,
     integer: i64,
     float: f64,
+    error_value: TypeId,
     object: *ObjectHeader,
 
     pub fn equals(self: UnionValue, other: Value) bool {
@@ -20,11 +22,13 @@ pub const UnionValue = union(ValueType) {
         const both_bool = self.isBool() and other.isBool();
         const both_numeric = self.isNumeric() and other.isNumeric();
         const both_object = self.isObject() and other.isObject();
+        const both_error_value = self.isErrorValue() and other.isErrorValue();
 
         if (!both_null and
             !both_bool and
             !both_numeric and
-            !both_object)
+            !both_object and
+            !both_error_value)
         {
             return false;
         }
@@ -41,6 +45,7 @@ pub const UnionValue = union(ValueType) {
             .null => true,
             .bool => self.bool == other.bool,
             .object => self.toObject().equals(other),
+            .error_value => self.error_value == other.error_value,
             else => unreachable,
         };
     }
@@ -63,6 +68,10 @@ pub const UnionValue = union(ValueType) {
             .bool => try writer.print("{s}", .{if (self.bool) "true" else "false"}),
             .integer => try writer.print("{d}", .{self.integer}),
             .float => try writer.print("{d}", .{self.float}),
+            .error_value => {
+                // TODO: needs access to strings table
+                try writer.print("ErrorValue (name serialization not implemented yet)", .{});
+            },
             .object => try self.object.format(fmt, options, writer),
         }
     }
@@ -149,6 +158,21 @@ pub const UnionValue = union(ValueType) {
         };
     }
 
+    pub inline fn makeErrorValue(value: TypeId) UnionValue {
+        return .{ .error_value = value };
+    }
+
+    pub inline fn toErrorType(self: *const UnionValue) TypeId {
+        return self.error_value;
+    }
+
+    pub inline fn isErrorValue(self: UnionValue) bool {
+        return switch (self) {
+            .error_value => true,
+            else => false,
+        };
+    }
+
     pub inline fn fromObject(value: *ObjectHeader) UnionValue {
         return .{ .object = value };
     }
@@ -175,3 +199,6 @@ pub const ObjFunction = objects.ObjFunction;
 pub const ObjModule = objects.ObjModule;
 pub const ObjNative = natives.ObjNative;
 pub const ObjString = objects.ObjString;
+
+const as = @import("as");
+const TypeId = as.frontend.TypeId;
