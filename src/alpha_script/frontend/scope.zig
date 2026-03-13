@@ -30,6 +30,7 @@ pub const SymbolTable = struct {
     pub const Error = error{
         RedeclarationError,
         NotFound,
+        Underflow,
         OutOfMemory,
     };
 
@@ -65,7 +66,7 @@ pub const SymbolTable = struct {
     }
 
     pub fn mergeInitialized(self: *SymbolTable, other: *const SymbolTable) std.mem.Allocator.Error!void {
-        const id_map = self.symbol_ids.keyIterator();
+        var id_map = self.symbol_ids.keyIterator();
         while (id_map.next()) |name_id| {
             const self_symbol = self.lookup(name_id.*) orelse unreachable; // iterating over own symbols, so it must exist
             const other_symbol = other.lookup(name_id.*) orelse continue; // don't make changes, when other symbol does not exist
@@ -86,8 +87,18 @@ pub const SymbolTable = struct {
         self.scope_depth -= 1;
 
         while (self.symbols.items.len > 0 and self.symbols.getLast().scope_depth > self.scope_depth) {
-            self.pop();
+            _ = self.pop();
         }
+    }
+
+    pub fn pop(self: *SymbolTable) ?Symbol {
+        const symbol = self.symbols.pop() orelse return null;
+        if (symbol.shadows_symbol) |shadow_id| {
+            self.symbol_ids.putAssumeCapacity(symbol.name_id, shadow_id); // space shoukd already be allocated, since this is only a value replacement
+        } else {
+            _ = self.symbol_ids.remove(symbol.name_id);
+        }
+        return symbol;
     }
 
     /// Declare a new symbol in the current scope
@@ -99,8 +110,8 @@ pub const SymbolTable = struct {
             if (shadowed_symbol.scope_depth == self.scope_depth) return Error.RedeclarationError;
         }
 
-        self.symbol_ids.put(name_id, self.symbols.items.len);
-        self.symbols.append(.{
+        try self.symbol_ids.put(name_id, @intCast(self.symbols.items.len));
+        try self.symbols.append(.{
             .name_id = name_id,
             .type_id = type_id,
             .node_id = node_id,

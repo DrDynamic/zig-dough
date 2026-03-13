@@ -26,7 +26,7 @@ pub const SemanticAnalyser = struct {
             .allocator = allocator,
             .ast = undefined,
             .error_reporter = error_reporter,
-            .symbol_table = try SymbolTable.init(allocator),
+            .symbol_table = SymbolTable.init(allocator),
         };
     }
 
@@ -67,7 +67,7 @@ pub const SemanticAnalyser = struct {
             // statements
             .expression_grouping => try self.analyse(node.data.node_id),
             .expression_block => |_| case: {
-                try self.symbol_table.enterScope();
+                self.symbol_table.enterScope();
 
                 var iterator = NodeListIterator.init(self.ast, node.data.node_id);
                 while (iterator.next()) |list_node_id| {
@@ -84,7 +84,7 @@ pub const SemanticAnalyser = struct {
 
                 const type_condition = try self.analyse(extra.condition);
 
-                try self.symbol_table.enterScope();
+                self.symbol_table.enterScope();
 
                 if (type_condition == TypePool.BOOL) {
                     self.assertHasNode(extra.then_capture, Error.PointlessCapture, "then capture is pointless (capture is always true)") catch |err| {
@@ -106,11 +106,11 @@ pub const SemanticAnalyser = struct {
                             capture_type,
                             then_capture,
                             false,
-                        ) catch |err| {
+                        ) catch {
                             try self.reportRedeclarationError(capture_node.*, capture_node.data.string_id);
-                            return err;
+                            return Error.RedeclarationError;
                         };
-                        self.symbol_table.initialize(capture_extra.name_id);
+                        self.symbol_table.initialize(capture_extra.name_id) catch unreachable; // declared above
                     } else {
                         const condition = self.ast.nodes.items[extra.condition];
                         self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing then capture for nullable condition");
@@ -133,11 +133,11 @@ pub const SemanticAnalyser = struct {
                             capture_type,
                             then_capture,
                             false,
-                        ) catch |err| {
+                        ) catch {
                             try self.reportRedeclarationError(capture_node.*, capture_node.data.string_id);
-                            return err;
+                            return Error.RedeclarationError;
                         };
-                        self.symbol_table.initialize(capture_extra.name_id);
+                        self.symbol_table.initialize(capture_extra.name_id) catch unreachable; // existence is checked above
                     } else {
                         const condition = self.ast.nodes.items[extra.condition];
                         self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing then capture for nullable condition");
@@ -157,11 +157,11 @@ pub const SemanticAnalyser = struct {
                                 capture_type,
                                 else_capture,
                                 false,
-                            ) catch |err| {
+                            ) catch {
                                 try self.reportRedeclarationError(capture_node.*, capture_node.data.string_id);
-                                return err;
+                                return Error.RedeclarationError;
                             };
-                            self.symbol_table.initialize(capture_extra.name_id);
+                            self.symbol_table.initialize(capture_extra.name_id) catch unreachable; // existence is checked above
                         }
 
                         const condition = self.ast.nodes.items[extra.condition];
@@ -182,12 +182,12 @@ pub const SemanticAnalyser = struct {
                     maybe_err = Error.IncompatibleTypes;
                 }
 
-                const initial_scope = try self.symbol_table.copy();
+                const initial_scope = try self.symbol_table.clone();
 
                 const type_then = try self.analyse(extra.then_branch);
                 var type_else = type_then;
 
-                var then_scope = try self.symbol_table.copy();
+                var then_scope = try self.symbol_table.clone();
                 defer then_scope.deinit();
 
                 self.symbol_table.deinit();
@@ -247,7 +247,7 @@ pub const SemanticAnalyser = struct {
                     return Error.TypeMismatch;
                 }
 
-                try self.symbol_table.initialize(maybe_symbol.?.name_id);
+                self.symbol_table.initialize(maybe_symbol.?.name_id) catch unreachable; // existence is checked above
 
                 break :case source_type;
             },
@@ -332,16 +332,16 @@ pub const SemanticAnalyser = struct {
             TypePool.UNRESOLVED,
             node_id,
             is_mutable,
-        ) catch |err| {
+        ) catch {
             try self.reportRedeclarationError(node, extra.name_id);
-            return err;
+            return Error.RedeclarationError;
         };
 
         // analyse the initializer
         var inferred_type: TypeId = TypePool.UNRESOLVED;
         if (extra.init_value) |init_value_id| {
             inferred_type = try self.analyse(init_value_id);
-            try self.symbol_table.initialize(extra.name_id);
+            self.symbol_table.initialize(extra.name_id) catch unreachable; // will always be found (declared directly above)
         }
 
         var type_id: TypeId = undefined;
@@ -378,7 +378,7 @@ pub const SemanticAnalyser = struct {
             return Error.TypeMissing;
         }
 
-        try self.symbol_table.setType(extra.name_id, type_id);
+        self.symbol_table.setType(extra.name_id, type_id) catch unreachable; // declared above
 
         return TypePool.VOID;
     }

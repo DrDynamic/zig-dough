@@ -158,13 +158,13 @@ pub fn main() !void {
 fn registerNatives(ast: *as.frontend.AST, semantic_analyser: *as.frontend.SemanticAnalyzer, compiler: *as.compiler.Compiler, vm: *as.runtime.VirtualMachine) !void {
     const name_id = try ast.string_table.add("print");
 
-    try semantic_analyser.symbol_table.declare(name_id, .{
-        .name_id = name_id,
-        .type_id = as.frontend.TypePool.VOID,
-        .is_mutable = false,
-        .node_id = 0,
-        .initialized = true,
-    });
+    try semantic_analyser.symbol_table.declare(
+        name_id,
+        as.frontend.TypePool.VOID,
+        0,
+        false,
+    );
+    try semantic_analyser.symbol_table.initialize(name_id);
 
     try compiler.locals.append(.{
         .name_id = name_id,
