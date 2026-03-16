@@ -78,66 +78,16 @@ pub fn main() !void {
             },
         };
 
-        var error_reporter = as.common.reporting.ErrorReporter.init(output);
+        const error_reporter = as.common.reporting.ErrorReporter.init(output);
+        var interpreter = as.Interpreter.init(error_reporter, allocator);
+        interpreter.register_natives_hook = registerNatives;
+        defer interpreter.deinit();
 
-        var garbage_collector = as.common.memory.GarbageCollector.init(allocator);
-        var vm = as.runtime.VirtualMachine.init(&error_reporter, &garbage_collector, allocator);
-
-        const source = try getFile(path, allocator);
-        defer allocator.free(source);
-
-        const token_stream = as.frontend.TokenStream.init(path, source, error_reporter);
-        var scanner = as.frontend.Scanner.init(token_stream, &error_reporter) catch {
-            std.process.exit(EXIT_CODE_COMPILER_ERROR);
-        };
-
-        var string_table = as.common.StringTable.init(allocator);
-
-        if (start_options.print_tokens) {
-            try as.frontend.debug.TokenPrinter.printTokens(&scanner, stdout_terminal.writer);
-            try scanner.reset();
-        }
-
-        var type_pool = try as.frontend.TypePool.init(allocator);
-        defer type_pool.deinit();
-
-        var ast = try as.frontend.AST.init(&scanner, &string_table, &type_pool, allocator);
-        defer ast.deinit();
-
-        var parser = as.frontend.Parser.init(
-            &scanner,
-            &ast,
-            &error_reporter,
-            allocator,
-        );
-
-        try parser.parse();
-
-        if (!ast.is_valid) {
-            std.process.exit(EXIT_CODE_COMPILER_ERROR);
-        }
-
-        var semantic_analyzer = try as.frontend.SemanticAnalyzer.init(
-            allocator,
-            &error_reporter,
-        );
-        defer semantic_analyzer.deinit();
-
-        var compiler = as.compiler.Compiler.init(&error_reporter, &garbage_collector, allocator);
-
-        try registerNatives(&ast, &semantic_analyzer, &compiler, &vm);
-
-        semantic_analyzer.analyseAst(&ast) catch {};
-
-        if (!ast.is_valid) {
-            std.process.exit(EXIT_CODE_COMPILER_ERROR);
-        }
-
-        if (start_options.print_ast) {
-            try as.frontend.debug.ASTPrinter.printAST(&ast, &type_pool, &stdout_terminal);
-        }
-
-        const module = compiler.compile(&ast) catch {
+        const module = interpreter.compileModule(path, .{
+            .terminal = stdout_terminal,
+            .print_tokens = start_options.print_tokens,
+            .print_ast = start_options.print_ast,
+        }) catch {
             std.process.exit(EXIT_CODE_COMPILER_ERROR);
         };
 
@@ -146,37 +96,48 @@ pub fn main() !void {
             disassambler.disassambleChunk(&module.function.chunk, "debug");
         }
 
-        vm.execute(module) catch |err| {
-            return err;
-            //            std.process.exit(EXIT_CODE_RUNTIME_ERROR);
+        interpreter.runModule(module) catch {
+            std.process.exit(EXIT_CODE_RUNTIME_ERROR);
         };
     } else {
         stderr_terminal.print("no file specified!\n", .{});
     }
 }
 
-fn registerNatives(ast: *as.frontend.AST, semantic_analyser: *as.frontend.SemanticAnalyzer, compiler: *as.compiler.Compiler, vm: *as.runtime.VirtualMachine) !void {
-    const name_id = try ast.string_table.add("print");
+fn registerNatives(ast: *as.frontend.AST, semantic_analyser: *as.frontend.SemanticAnalyzer, compiler: *as.compiler.Compiler, vm: *as.runtime.VirtualMachine) void {
+    const name_id = ast.string_table.add("print") catch {
+        @panic("failed to register natives");
+    };
 
-    try semantic_analyser.symbol_table.declare(
+    semantic_analyser.symbol_table.declare(
         name_id,
         as.frontend.TypePool.VOID,
         0,
         false,
-    );
-    try semantic_analyser.symbol_table.initialize(name_id);
+    ) catch {
+        @panic("failed to register natives");
+    };
+    semantic_analyser.symbol_table.initialize(name_id) catch {
+        @panic("failed to register natives");
+    };
 
-    try compiler.locals.append(.{
+    compiler.locals.append(.{
         .name_id = name_id,
         .depth = 0,
         .reg_slot = 0,
         .owns_register = true,
         .is_captured = false,
         .is_initialized = true,
-    });
+    }) catch {
+        @panic("failed to register natives");
+    };
+
     compiler.next_free_reg += 1;
 
-    const native_print = try vm.allocator.create(as.runtime.values.ObjNative);
+    const native_print = vm.allocator.create(as.runtime.values.ObjNative) catch {
+        @panic("failed to register natives");
+    };
+
     native_print.* = .{
         .header = .{ .tag = .native_function, .is_marked = false, .next = null, .next_gray = null },
         .name_id = name_id,

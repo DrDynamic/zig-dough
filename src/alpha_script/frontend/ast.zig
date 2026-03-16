@@ -133,10 +133,10 @@ pub const AST = struct {
     nodes: ArrayList(Node),
     extra_data: ArrayList(u8),
     string_table: *StringTable,
-    type_pool: *TypePool,
+    type_pool: TypePool,
     is_valid: bool,
 
-    pub fn init(scanner: *Scanner, string_table: *StringTable, type_pool: *TypePool, allocator: Allocator) !AST {
+    pub fn init(scanner: *Scanner, string_table: *StringTable, type_pool: TypePool, allocator: Allocator) !AST {
         const ast: AST = .{
             .allocator = allocator,
             .scanner = scanner,

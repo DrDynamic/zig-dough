@@ -7,10 +7,10 @@ pub const SourceLocation = struct {
     line_end: usize,
 };
 
-pub inline fn astFromReportingModule(reporting_module: ReportingModule) ?*AST {
+pub inline fn astFromReportingModule(reporting_module: ReportingModule) ?*const AST {
     return switch (reporting_module) {
         .TokenStream => |_| null,
-        .Parser => |parser| parser.ast,
+        .Parser => |parser| &parser.ast,
         .SemanticAnalyser => |semantic_analyser| semantic_analyser.ast,
         .Compiler => |compiler| compiler.ast,
         .VirtualMachine => |_| unreachable,
@@ -27,7 +27,7 @@ pub inline fn sourceFromReportingModule(reporting_module: ReportingModule) []con
     };
 }
 
-pub inline fn calcNodeLocation(source: []const u8, node: Node, ast: *AST) !SourceLocation {
+pub inline fn calcNodeLocation(source: []const u8, node: Node, ast: *const AST) !SourceLocation {
     switch (node.tag) {
         .declaration_var => {
             // TODO: find start and end position of var declaration. It contains a dynamic set of tokens (var <identifier> [:type] [=])

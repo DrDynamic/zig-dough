@@ -7,10 +7,10 @@ pub const ASTPrinter = struct {
     type_pool: *const TypePool,
     terminal: *const Terminal,
 
-    pub fn printAST(ast_: *const AST, type_pool: *const TypePool, terminal: *const Terminal) !void {
+    pub fn printAST(ast_: *const AST, terminal: *const Terminal) !void {
         var printer = ASTPrinter{
             .ast = ast_,
-            .type_pool = type_pool,
+            .type_pool = &ast_.type_pool,
             .terminal = terminal,
         };
 

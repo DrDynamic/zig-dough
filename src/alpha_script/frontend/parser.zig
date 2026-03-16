@@ -14,20 +14,23 @@ pub const Parser = struct {
     };
 
     allocator: Allocator,
-    scanner: *Scanner,
-    ast: *AST,
+    scanner: *Scanner = undefined,
+    ast: AST = undefined,
+    string_table: *StringTable,
     error_reporter: *const ErrorReporter,
 
-    pub fn init(scanner: *Scanner, ast: *AST, error_reporter: *const ErrorReporter, allocator: Allocator) Parser {
+    pub fn init(string_table: *StringTable, error_reporter: *const ErrorReporter, allocator: Allocator) Parser {
         return .{
-            .scanner = scanner,
-            .ast = ast,
+            .string_table = string_table,
             .error_reporter = error_reporter,
             .allocator = allocator,
         };
     }
 
-    pub fn parse(self: *Parser) !void {
+    pub fn parse(self: *Parser, scanner: *Scanner) !AST {
+        self.scanner = scanner;
+        self.ast = try AST.init(self.scanner, self.string_table, try TypePool.init(self.allocator), self.allocator);
+
         while (!self.check(.eof)) {
             const maybe_node_id = self.declaration();
             if (maybe_node_id) |node_id| {
@@ -38,6 +41,7 @@ pub const Parser = struct {
                 self.synchronize();
             }
         }
+        return self.ast;
     }
 
     fn declaration(self: *Parser) !NodeId {
@@ -61,6 +65,8 @@ pub const Parser = struct {
         };
 
         var error_list = std.ArrayList(TypeId).init(self.allocator);
+        defer error_list.deinit();
+
         while (!self.check(.right_brace)) {
             const error_name_id = try self.parseIdentifier();
             const error_id = try self.ast.type_pool.getOrCreateErrorType(error_name_id);
@@ -872,7 +878,7 @@ pub const Parser = struct {
     }
 
     // node list
-    pub fn nodeListFromArray(self: *const Parser, node_ids: []NodeId) Error!NodeId {
+    pub fn nodeListFromArray(self: *Parser, node_ids: []NodeId) Error!NodeId {
         assert(node_ids.len > 0);
         var list_node: ?NodeId = null;
         var index: usize = node_ids.len;
@@ -988,7 +994,9 @@ const Allocator = std.mem.Allocator;
 const as = @import("as");
 const ErrorReporter = as.common.reporting.ErrorReporter;
 const Scanner = as.frontend.Scanner;
+const StringTable = as.common.StringTable;
 const TokenType = as.frontend.TokenType;
+const TokenStream = as.frontend.TokenStream;
 const Token = as.frontend.Token;
 const TypeId = as.frontend.TypeId;
 const TypePool = as.frontend.TypePool;

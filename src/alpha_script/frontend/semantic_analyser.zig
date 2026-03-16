@@ -21,7 +21,7 @@ pub const SemanticAnalyser = struct {
     error_reporter: *ErrorReporter,
     symbol_table: SymbolTable,
 
-    pub fn init(allocator: std.mem.Allocator, error_reporter: *ErrorReporter) !SemanticAnalyser {
+    pub fn init(error_reporter: *ErrorReporter, allocator: std.mem.Allocator) SemanticAnalyser {
         return .{
             .allocator = allocator,
             .ast = undefined,
