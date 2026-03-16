@@ -155,7 +155,6 @@ pub const AST = struct {
         self.roots.deinit();
         self.nodes.deinit();
         self.extra_data.deinit();
-        self.string_table.deinit();
     }
 
     pub fn invalidate(self: *AST) void {

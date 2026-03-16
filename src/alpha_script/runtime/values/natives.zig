@@ -15,7 +15,6 @@ pub fn nativePrint(context: *ExecutionContext, args: []Value) Value {
     for (args) |value| {
         if (value == .error_value) {
             const error_name_id = context.error_pool.getErrorNameId(value.error_value);
-            context.string_table.printAllKeys();
             const error_name = context.string_table.get(error_name_id);
 
             writer.print("{s}", .{error_name}) catch {};

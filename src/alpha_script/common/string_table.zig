@@ -37,12 +37,6 @@ pub const StringTable = struct {
         return new_id;
     }
 
-    pub fn printAllKeys(self: *const StringTable) void {
-        for (0.., self.map.keys()) |index, key| {
-            std.debug.print("{d}: {s}", .{ index, key });
-        }
-    }
-
     pub fn get(self: *const StringTable, id: StringId) []const u8 {
         return self.map.keys()[id];
     }
