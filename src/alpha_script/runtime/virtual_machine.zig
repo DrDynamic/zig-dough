@@ -1,6 +1,11 @@
 const FRAMES_MAX = 128;
 const STACK_MAX = FRAMES_MAX * 256;
 
+pub const ExecutionContext = struct {
+    string_table: *const StringTable,
+    error_pool: *const ErrorPool,
+};
+
 pub const CallFrame = struct {
     function: *ObjFunction,
     ip: usize,
@@ -27,7 +32,11 @@ pub const VirtualMachine = struct {
     current_ip: usize,
     current_base: usize,
 
-    pub fn init(error_reporter: *const ErrorReporter, garbage_collector: *GarbageCollector, allocator: std.mem.Allocator) VirtualMachine {
+    string_table: *StringTable,
+    error_pool: *ErrorPool,
+    execution_context: ExecutionContext,
+
+    pub fn init(string_table: *StringTable, error_pool: *ErrorPool, error_reporter: *const ErrorReporter, garbage_collector: *GarbageCollector, allocator: std.mem.Allocator) VirtualMachine {
         return .{
             .frames = undefined,
             .frame_count = 0,
@@ -39,10 +48,18 @@ pub const VirtualMachine = struct {
             .current_chunk = undefined,
             .current_ip = 0,
             .current_base = 0,
+            .string_table = string_table,
+            .error_pool = error_pool,
+            .execution_context = undefined,
         };
     }
 
     pub fn execute(self: *VirtualMachine, module: *const ObjModule) !void {
+        self.execution_context = .{
+            .string_table = self.string_table,
+            .error_pool = self.error_pool,
+        };
+
         self.current_chunk = &module.function.chunk;
         self.current_ip = 0;
         self.current_base = 0;
@@ -206,7 +223,7 @@ pub const VirtualMachine = struct {
                                 const reg_args_start = reg_callee + 1;
                                 const args = stack[reg_args_start .. reg_args_start + arg_count];
 
-                                const result = native.function(args);
+                                const result = native.function(&self.execution_context, args);
                                 stack[reg_dest] = result;
                             },
 
@@ -315,10 +332,13 @@ const as = @import("as");
 const values = as.runtime.values;
 
 const Chunk = as.compiler.Chunk;
+const ErrorPool = as.frontend.ErrorPool;
 const ErrorReporter = as.common.reporting.ErrorReporter;
 const GarbageCollector = as.common.memory.GarbageCollector;
 const Instruction = as.compiler.Instruction;
 const ObjFunction = as.runtime.values.ObjFunction;
 const ObjModule = as.runtime.values.ObjModule;
 const ObjString = as.runtime.values.ObjString;
+const StringTable = as.common.StringTable;
+const TypePool = as.frontend.TypePool;
 const Value = as.runtime.values.Value;

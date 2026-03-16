@@ -9,6 +9,7 @@ pub const Interpreter = struct {
     error_reporter: ErrorReporter,
     garbage_collector: GarbageCollector,
     string_table: StringTable,
+    error_pool: ErrorPool,
 
     parser: Parser,
     semantic_analyser: SemanticAnalyser,
@@ -24,6 +25,7 @@ pub const Interpreter = struct {
             .error_reporter = error_reporter,
             .garbage_collector = GarbageCollector.init(allocator),
             .string_table = StringTable.init(allocator),
+            .error_pool = ErrorPool.init(allocator),
 
             .parser = undefined,
             .semantic_analyser = undefined,
@@ -33,16 +35,17 @@ pub const Interpreter = struct {
             .register_natives_hook = null,
         };
 
-        interpreter.parser = Parser.init(&interpreter.string_table, &interpreter.error_reporter, allocator);
+        interpreter.parser = Parser.init(&interpreter.string_table, &interpreter.error_pool, &interpreter.error_reporter, allocator);
         interpreter.semantic_analyser = SemanticAnalyser.init(&interpreter.error_reporter, allocator);
         interpreter.compiler = Compiler.init(&interpreter.error_reporter, &interpreter.garbage_collector, allocator);
-        interpreter.virtual_machine = VirtualMachine.init(&interpreter.error_reporter, &interpreter.garbage_collector, allocator);
+        interpreter.virtual_machine = VirtualMachine.init(&interpreter.string_table, &interpreter.error_pool, &interpreter.error_reporter, &interpreter.garbage_collector, allocator);
 
         return interpreter;
     }
 
     pub fn deinit(self: *Interpreter) void {
         self.string_table.deinit();
+        self.error_pool.deinit();
         self.semantic_analyser.deinit();
     }
 
@@ -100,7 +103,7 @@ const ErrorReporter = as.common.reporting.ErrorReporter;
 const GarbageCollector = as.common.memory.GarbageCollector;
 const StringTable = as.common.StringTable;
 const TokenStream = as.frontend.TokenStream;
-
+const ErrorPool = as.frontend.ErrorPool;
 const Scanner = as.frontend.Scanner;
 const Parser = as.frontend.Parser;
 const SemanticAnalyser = as.frontend.SemanticAnalyzer;

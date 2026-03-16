@@ -17,11 +17,13 @@ pub const Parser = struct {
     scanner: *Scanner = undefined,
     ast: AST = undefined,
     string_table: *StringTable,
+    error_pool: *ErrorPool,
     error_reporter: *const ErrorReporter,
 
-    pub fn init(string_table: *StringTable, error_reporter: *const ErrorReporter, allocator: Allocator) Parser {
+    pub fn init(string_table: *StringTable, error_pool: *ErrorPool, error_reporter: *const ErrorReporter, allocator: Allocator) Parser {
         return .{
             .string_table = string_table,
+            .error_pool = error_pool,
             .error_reporter = error_reporter,
             .allocator = allocator,
         };
@@ -29,7 +31,8 @@ pub const Parser = struct {
 
     pub fn parse(self: *Parser, scanner: *Scanner) !AST {
         self.scanner = scanner;
-        self.ast = try AST.init(self.scanner, self.string_table, try TypePool.init(self.allocator), self.allocator);
+        const type_pool = try TypePool.init(self.error_pool, self.allocator);
+        self.ast = try AST.init(self.scanner, self.string_table, type_pool, self.allocator);
 
         while (!self.check(.eof)) {
             const maybe_node_id = self.declaration();
@@ -69,8 +72,8 @@ pub const Parser = struct {
 
         while (!self.check(.right_brace)) {
             const error_name_id = try self.parseIdentifier();
-            const error_id = try self.ast.type_pool.getOrCreateErrorType(error_name_id);
-            try error_list.append(error_id);
+            const error_type_id = try self.ast.type_pool.getOrCreateErrorType(error_name_id);
+            try error_list.append(error_type_id);
 
             if (!try self.match(.comma)) break;
         }
@@ -574,12 +577,13 @@ pub const Parser = struct {
                 };
 
                 const error_type_id = try self.ast.type_pool.getOrCreateErrorType(error_name_id);
+                const error_id = try self.ast.type_pool.error_pool.getOrCreateError(error_name_id);
 
                 break :case self.ast.addNode(.{
                     .tag = .literal_error,
                     .token_position = self.scanner.previous().location.start,
                     .resolved_type_id = error_type_id,
-                    .data = .{ .error_value = error_type_id },
+                    .data = .{ .error_value = error_id },
                 });
             },
             .null => case: {
@@ -685,6 +689,7 @@ pub const Parser = struct {
                             return Error.UnexpectedToken;
                         };
                         const error_type_id = try self.ast.type_pool.getOrCreateErrorType(error_name_id);
+                        const error_id = try self.ast.type_pool.error_pool.getOrCreateError(error_name_id);
 
                         if (!self.ast.type_pool.isErrorInSet(set_id, error_type_id)) {
                             const error_message = try std.fmt.allocPrint(self.allocator, "Error '{s}' does not exists in ErrorSet '{s}'", .{
@@ -702,7 +707,7 @@ pub const Parser = struct {
                             .tag = .literal_error,
                             .token_position = token.location.start,
                             .resolved_type_id = error_type_id,
-                            .data = .{ .error_value = error_type_id },
+                            .data = .{ .error_value = error_id },
                         });
                     }
                 }
@@ -992,19 +997,20 @@ const assert = std.debug.assert;
 const Allocator = std.mem.Allocator;
 
 const as = @import("as");
+const AST = as.frontend.AST;
+const ErrorPool = as.frontend.ErrorPool;
+const ErrorType = as.frontend.ErrorType;
 const ErrorReporter = as.common.reporting.ErrorReporter;
+const NodeId = as.frontend.ast.NodeId;
+const NodeType = as.frontend.ast.NodeType;
 const Scanner = as.frontend.Scanner;
+const StringId = as.common.StringId;
 const StringTable = as.common.StringTable;
 const TokenType = as.frontend.TokenType;
 const TokenStream = as.frontend.TokenStream;
 const Token = as.frontend.Token;
 const TypeId = as.frontend.TypeId;
 const TypePool = as.frontend.TypePool;
-const ErrorType = as.frontend.ErrorType;
-const AST = as.frontend.AST;
-const NodeId = as.frontend.ast.NodeId;
-const StringId = as.common.StringId;
-const NodeType = as.frontend.ast.NodeType;
 
 const VarDeclarationExtra = as.frontend.ast.VarDeclarationExtra;
 const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;

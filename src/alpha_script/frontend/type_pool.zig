@@ -35,7 +35,7 @@ pub const Type = union(TypeTag) {
     module,
 
     anyerror,
-    error_type: StringId,
+    error_type: ErrorId,
     error_set: struct {
         type_list_index: u32,
         count: u32,
@@ -47,18 +47,54 @@ pub const Type = union(TypeTag) {
     },
 };
 
+pub const ErrorId = u32;
+pub const ErrorPool = struct {
+    allocator: std.mem.Allocator,
+    error_ids: std.AutoArrayHashMap(StringId, ErrorId),
+
+    pub fn init(allocator: Allocator) ErrorPool {
+        return .{
+            .allocator = allocator,
+            .error_ids = std.AutoArrayHashMap(StringId, ErrorId).init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *ErrorPool) void {
+        self.error_ids.deinit();
+    }
+
+    /// create an ErrorType by its name
+    pub fn getOrCreateError(self: *ErrorPool, name_id: StringId) Allocator.Error!ErrorId {
+        // return type_id if cached
+        if (self.error_ids.get(name_id)) |error_id| {
+            return error_id;
+        }
+
+        // create error_type otherwise
+        const error_id: ErrorId = @intCast(self.error_ids.count());
+        try self.error_ids.put(name_id, error_id);
+
+        return error_id;
+    }
+
+    pub fn getErrorNameId(self: *const ErrorPool, error_id: ErrorId) StringId {
+        return self.error_ids.keys()[error_id];
+    }
+};
+
 pub const TypePool = struct {
     const Error = error{
         RedaclarationError,
         NotFound,
     };
     allocator: std.mem.Allocator,
+    error_pool: *ErrorPool,
     types: ArrayList(Type),
     type_list_buffer: std.ArrayList(TypeId),
     named_type_cache: std.AutoHashMap(StringId, TypeId),
-    error_type_cache: std.AutoHashMap(StringId, TypeId),
     union_cache: TypeListMap,
     error_set_cache: TypeListMap,
+    error_type_cache: std.AutoHashMap(ErrorId, TypeId),
 
     pub const UNRESOLVED = 0;
     pub const ANYERROR = 1;
@@ -70,15 +106,16 @@ pub const TypePool = struct {
     pub const STRING = 7;
     pub const MODULE = 8;
 
-    pub fn init(allocator: Allocator) !TypePool {
+    pub fn init(error_pool: *ErrorPool, allocator: Allocator) !TypePool {
         var pool = TypePool{
             .allocator = allocator,
+            .error_pool = error_pool,
             .types = ArrayList(Type).init(allocator),
             .type_list_buffer = std.ArrayList(TypeId).init(allocator),
             .named_type_cache = std.AutoHashMap(StringId, TypeId).init(allocator),
-            .error_type_cache = std.AutoHashMap(StringId, TypeId).init(allocator),
             .union_cache = TypeListMap.init(allocator),
             .error_set_cache = TypeListMap.init(allocator),
+            .error_type_cache = std.AutoHashMap(ErrorId, TypeId).init(allocator),
         };
 
         try pool.types.append(.{ .unresolved = undefined });
@@ -98,9 +135,9 @@ pub const TypePool = struct {
         self.types.deinit();
         self.type_list_buffer.deinit();
         self.named_type_cache.deinit();
-        self.error_type_cache.deinit();
         self.union_cache.deinit();
         self.error_set_cache.deinit();
+        self.error_type_cache.deinit();
     }
 
     pub fn getTypeNameAlloc(
@@ -128,8 +165,8 @@ pub const TypePool = struct {
                 const members = self.getErrorSetMembers(t);
 
                 for (members) |error_id| {
-                    const error_type = self.types.items[error_id];
-                    const error_name = string_table.get(error_type.error_type);
+                    const error_name_id = self.error_pool.getErrorNameId(error_id);
+                    const error_name = string_table.get(error_name_id);
 
                     try type_name.appendSlice(error_name);
                     try type_name.append(',');
@@ -236,6 +273,8 @@ pub const TypePool = struct {
             },
             .error_type => {
                 const source = self.types.items[source_id];
+
+                if (source != .error_type) return false;
                 return target.error_type == source.error_type;
             },
             .error_set => {
@@ -396,25 +435,23 @@ pub const TypePool = struct {
         }
     }
 
-    /// create an ErrorType by its name
-    pub fn getOrCreateErrorType(self: *TypePool, name_id: StringId) Allocator.Error!TypeId {
-        // return type_id if cached
-        if (self.error_type_cache.get(name_id)) |error_type_id| {
+    pub fn isErrorSet(self: *TypePool, type_id: TypeId) bool {
+        return self.types.items[type_id] == .error_set;
+    }
+
+    pub fn getOrCreateErrorType(self: *TypePool, error_name_id: StringId) !TypeId {
+        const error_id = try self.error_pool.getOrCreateError(error_name_id);
+
+        if (self.error_type_cache.get(error_id)) |error_type_id| {
             return error_type_id;
         }
 
-        // create error_type otherwise
-        const error_type_id: TypeId = @intCast(self.types.items.len);
+        const type_id: TypeId = @intCast(self.types.items.len);
         try self.types.append(.{
-            .error_type = name_id,
+            .error_type = error_id,
         });
-        try self.error_type_cache.put(name_id, error_type_id);
-
-        return error_type_id;
-    }
-
-    pub fn isErrorSet(self: *TypePool, type_id: TypeId) bool {
-        return self.types.items[type_id] == .error_set;
+        try self.error_type_cache.putNoClobber(error_id, type_id);
+        return type_id;
     }
 
     /// create an ErrorSet
@@ -448,11 +485,11 @@ pub const TypePool = struct {
         return type_id;
     }
 
-    pub fn isErrorInSet(self: *TypePool, set_id: TypeId, error_id: TypeId) bool {
+    pub fn isErrorInSet(self: *TypePool, set_id: TypeId, error_type_id: TypeId) bool {
         const set = self.types.items[set_id];
         const members = self.getErrorSetMembers(set);
         for (members) |member_error_id| {
-            if (member_error_id == error_id) return true;
+            if (member_error_id == error_type_id) return true;
         }
         return false;
     }

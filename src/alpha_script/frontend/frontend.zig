@@ -25,6 +25,8 @@ pub const TypeId = type_pool.TypeId;
 pub const TypeTag = type_pool.TypeTag;
 pub const Type = type_pool.Type;
 pub const TypePool = type_pool.TypePool;
+pub const ErrorId = type_pool.ErrorId;
+pub const ErrorPool = type_pool.ErrorPool;
 
 const scope = @import("scope.zig");
 pub const Symbol = scope.Symbol;
