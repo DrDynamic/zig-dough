@@ -12,10 +12,10 @@ pub const NodeType = enum(u8) {
     object_string, // string_id
 
     // declarations
-    declaration_error_set, // VarDeclarationExtra
-    declaration_type, // VarDeclarationExtra
-    declaration_var, // VarDeclarationExtra
-    declaration_const, // VarDeclarationExtra
+    declaration_error_set, // DeclarationExtra
+    declaration_type, // DeclarationExtra
+    declaration_var, // DeclarationExtra
+    declaration_const, // DeclarationExtra
 
     // expressions
     expression_block, // node_id (the start of a NodeList of Satements)
@@ -46,7 +46,7 @@ pub const NodeType = enum(u8) {
     binary_greater_equal, // BinaryOpExtra
 };
 
-pub const VarDeclarationExtra = struct {
+pub const DeclarationExtra = struct {
     name_id: StringId,
     explicit_type: TypeId,
     init_value: ?NodeId,

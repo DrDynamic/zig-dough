@@ -66,7 +66,7 @@ pub const Compiler = struct {
             .declaration_const,
             .declaration_var,
             => {
-                const extra = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationExtra);
+                const extra = self.ast.getExtra(node.data.extra_id, ast.DeclarationExtra);
 
                 if (extra.init_value) |init_value_id| {
                     // create the local before initializing it, so compileExpression can reference the variable
@@ -206,7 +206,7 @@ pub const Compiler = struct {
                     const node_capture = self.ast.nodes.items[then_capture_id];
                     assert(node_capture.tag == .declaration_const);
 
-                    const capture_extra = self.ast.getExtra(node_capture.data.extra_id, VarDeclarationExtra);
+                    const capture_extra = self.ast.getExtra(node_capture.data.extra_id, DeclarationExtra);
                     const capture_name_id = capture_extra.name_id;
                     const void_identifier_id = try self.ast.string_table.add("_");
 
@@ -232,7 +232,7 @@ pub const Compiler = struct {
                         const node_capture = self.ast.nodes.items[else_capture_id];
                         assert(node_capture.tag == .declaration_const);
 
-                        const capture_extra = self.ast.getExtra(node_capture.data.extra_id, VarDeclarationExtra);
+                        const capture_extra = self.ast.getExtra(node_capture.data.extra_id, DeclarationExtra);
                         const capture_name_id = capture_extra.name_id;
                         const void_identifier_id = try self.ast.string_table.add("_");
 
@@ -469,5 +469,5 @@ const NodeListExtra = as.frontend.ast.NodeListExtra;
 const NodeListIterator = as.frontend.ast.NodeListIterator;
 const IfExtra = as.frontend.ast.IfExtra;
 const AssignmentExtra = as.frontend.ast.AssignmentExtra;
-const VarDeclarationExtra = as.frontend.ast.VarDeclarationExtra;
+const DeclarationExtra = as.frontend.ast.DeclarationExtra;
 const CallExtra = as.frontend.ast.CallExtra;

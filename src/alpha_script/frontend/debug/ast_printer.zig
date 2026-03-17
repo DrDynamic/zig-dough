@@ -81,7 +81,7 @@ pub const ASTPrinter = struct {
             .declaration_var,
             .declaration_const,
             => {
-                const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationExtra);
+                const data = self.ast.getExtra(node.data.extra_id, ast.DeclarationExtra);
                 const name = self.ast.string_table.get(data.name_id);
                 self.terminal.print(" name: {s}\n", .{name});
             },
@@ -160,7 +160,7 @@ pub const ASTPrinter = struct {
             .declaration_const,
             .declaration_var,
             => {
-                const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationExtra);
+                const data = self.ast.getExtra(node.data.extra_id, ast.DeclarationExtra);
                 if (data.init_value) |init_value_id| {
                     try self.printNode(init_value_id, prefix, true);
                 } else {
