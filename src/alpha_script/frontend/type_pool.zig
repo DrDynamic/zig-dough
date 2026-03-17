@@ -164,8 +164,9 @@ pub const TypePool = struct {
                 try type_name.appendSlice("error{");
                 const members = self.getErrorSetMembers(t);
 
-                for (members) |error_id| {
-                    const error_name_id = self.error_pool.getErrorNameId(error_id);
+                for (members) |error_type_id| {
+                    const error_type = self.types.items[error_type_id];
+                    const error_name_id = self.error_pool.getErrorNameId(error_type.error_type);
                     const error_name = string_table.get(error_name_id);
 
                     try type_name.appendSlice(error_name);
@@ -455,6 +456,10 @@ pub const TypePool = struct {
         });
         try self.error_type_cache.putNoClobber(error_id, type_id);
         return type_id;
+    }
+
+    pub fn getTypeByErrorId(self: *TypePool, error_id: ErrorId) ?TypeId {
+        return self.error_type_cache.get(error_id);
     }
 
     /// create an ErrorSet

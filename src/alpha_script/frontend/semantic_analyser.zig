@@ -65,7 +65,10 @@ pub const SemanticAnalyser = struct {
             .literal_bool => TypePool.BOOL,
             .literal_int => TypePool.INT,
             .literal_float => TypePool.FLOAT,
-            .literal_error => node.data.error_value,
+            .literal_error => case: {
+                const error_id = node.data.error_value;
+                break :case self.ast.type_pool.getTypeByErrorId(error_id).?;
+            },
 
             // objects
             .object_string => TypePool.STRING,
@@ -245,6 +248,7 @@ pub const SemanticAnalyser = struct {
                     self.error_reporter.semanticAnalyserError(self, Error.IllegalAssignment, node.*, "assignments in if conditions are not allowed");
                     return Error.IllegalAssignment;
                 }
+
                 const extra = self.ast.getExtra(node.data.extra_id, AssignmentExtra);
                 const target_node = self.ast.nodes.items[extra.target];
 
