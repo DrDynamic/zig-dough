@@ -243,6 +243,7 @@ pub const SemanticAnalyser = struct {
             .assignment => case: {
                 if (self.context.current_scope == .if_condition) {
                     self.error_reporter.semanticAnalyserError(self, Error.IllegalAssignment, node.*, "assignments in if conditions are not allowed");
+                    return Error.IllegalAssignment;
                 }
                 const extra = self.ast.getExtra(node.data.extra_id, AssignmentExtra);
                 const target_node = self.ast.nodes.items[extra.target];
