@@ -181,9 +181,13 @@ pub const Compiler = struct {
             .expression_block => {
                 self.enterScope();
 
-                var iterator = NodeListIterator.init(self.ast, node.data.node_id);
-                while (iterator.next()) |child_node_id| {
-                    _ = try self.compileStatement(child_node_id);
+                const extra = self.ast.getExtra(node.data.extra_id, BlockExtra);
+
+                if (extra.statements) |statements| {
+                    var iterator = NodeListIterator.init(self.ast, statements);
+                    while (iterator.next()) |child_node_id| {
+                        _ = try self.compileStatement(child_node_id);
+                    }
                 }
 
                 self.exitScope();
@@ -270,12 +274,15 @@ pub const Compiler = struct {
 
                 try self.compileExpressionEnsureRegister(extra.callee, reg_callee);
 
-                var iterator = NodeListIterator.init(self.ast, extra.args_start);
-                const reg_start = self.next_free_reg;
                 var arg_count: u8 = 0;
-                while (iterator.next()) |arg_node_id| {
-                    _ = try self.compileExpressionEnsureRegister(arg_node_id, reg_start + arg_count);
-                    arg_count += 1;
+                if (extra.args_start) |args_start| {
+                    var iterator = NodeListIterator.init(self.ast, args_start);
+                    const reg_start = self.next_free_reg;
+
+                    while (iterator.next()) |arg_node_id| {
+                        _ = try self.compileExpressionEnsureRegister(arg_node_id, reg_start + arg_count);
+                        arg_count += 1;
+                    }
                 }
 
                 try self.chunk.emit(Instruction.fromABC(.call, reg_callee, reg_callee, arg_count));
@@ -465,9 +472,9 @@ const Value = as.runtime.values.Value;
 const NodeId = as.frontend.ast.NodeId;
 const StringId = as.common.StringId;
 
-const NodeListExtra = as.frontend.ast.NodeListExtra;
 const NodeListIterator = as.frontend.ast.NodeListIterator;
-const IfExtra = as.frontend.ast.IfExtra;
 const AssignmentExtra = as.frontend.ast.AssignmentExtra;
-const DeclarationExtra = as.frontend.ast.DeclarationExtra;
+const BlockExtra = as.frontend.ast.BlockExtra;
 const CallExtra = as.frontend.ast.CallExtra;
+const DeclarationExtra = as.frontend.ast.DeclarationExtra;
+const IfExtra = as.frontend.ast.IfExtra;

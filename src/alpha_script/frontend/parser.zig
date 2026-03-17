@@ -95,7 +95,7 @@ pub const Parser = struct {
             return Error.TypeRedeclaration;
         };
 
-        const extra_id = try self.ast.addExtra(VarDeclarationExtra{
+        const extra_id = try self.ast.addExtra(DeclarationExtra{
             .name_id = set_name_id,
             .explicit_type = set_id,
             .init_value = null,
@@ -139,7 +139,7 @@ pub const Parser = struct {
 
         _ = try self.match(.semicolon);
 
-        const extra_id = try self.ast.addExtra(VarDeclarationExtra{
+        const extra_id = try self.ast.addExtra(DeclarationExtra{
             .name_id = name_id,
             .explicit_type = type_id,
             .init_value = null,
@@ -179,7 +179,7 @@ pub const Parser = struct {
 
         _ = try self.match(.semicolon);
 
-        const extra_id = try self.ast.addExtra(VarDeclarationExtra{
+        const extra_id = try self.ast.addExtra(DeclarationExtra{
             .name_id = name_id,
             .explicit_type = type_id,
             .init_value = assignment_node_id,
@@ -222,12 +222,15 @@ pub const Parser = struct {
             try statements.append(try self.declaration());
         }
 
-        const list_start = try self.nodeListFromArray(statements.items);
+        const extra_id = try self.ast.addExtra(BlockExtra{
+            .statements = try self.nodeListFromArray(statements.items),
+        });
+
         return self.ast.addNode(.{
             .tag = .expression_block,
             .token_position = left_brace.location.start,
             .resolved_type_id = TypePool.UNRESOLVED,
-            .data = .{ .node_id = list_start },
+            .data = .{ .extra_id = extra_id },
         });
     }
 
@@ -311,7 +314,7 @@ pub const Parser = struct {
             },
         };
 
-        const extra_id = try self.ast.addExtra(VarDeclarationExtra{
+        const extra_id = try self.ast.addExtra(DeclarationExtra{
             .name_id = capture_name,
             .explicit_type = TypePool.UNRESOLVED,
             .init_value = null,
@@ -509,11 +512,11 @@ pub const Parser = struct {
             if (try self.match(.left_paren)) {
                 const token = self.scanner.previous();
                 // finish Call
-                const list = try self.expressionList(.right_paren);
+                const list_start = try self.expressionList(.right_paren);
 
                 const extra_id = try self.ast.addExtra(CallExtra{
                     .callee = callee,
-                    .args_start = list.list_start,
+                    .args_start = list_start,
                 });
                 callee = try self.ast.addNode(.{
                     .tag = .call,
@@ -537,7 +540,7 @@ pub const Parser = struct {
 
     /// parses a comma seperated list of expressions until end_token is found
     /// returns the number of found expressions and the start of a node_list with all expressions
-    fn expressionList(self: *Parser, end_token: TokenType) Error!struct { count: u8, list_start: NodeId } {
+    fn expressionList(self: *Parser, end_token: TokenType) Error!?NodeExtraId {
         var expression_ids: [255]NodeId = undefined;
         var count: u8 = 0;
         while (!self.check(end_token)) {
@@ -553,12 +556,7 @@ pub const Parser = struct {
         }
         _ = try self.consume(end_token);
 
-        const list_start: NodeId = try self.nodeListFromArray(expression_ids[0..count]);
-
-        return .{
-            .count = count,
-            .list_start = list_start,
-        };
+        return try self.nodeListFromArray(expression_ids[0..count]);
     }
 
     fn primary(self: *Parser) Error!NodeId {
@@ -883,26 +881,20 @@ pub const Parser = struct {
     }
 
     // node list
-    pub fn nodeListFromArray(self: *Parser, node_ids: []NodeId) Error!NodeId {
-        assert(node_ids.len > 0);
-        var list_node: ?NodeId = null;
+    pub fn nodeListFromArray(self: *Parser, node_ids: []NodeId) Error!?NodeExtraId {
+        if (node_ids.len == 0) return null;
+
+        var list_node_extra: ?NodeExtraId = null;
         var index: usize = node_ids.len;
         while (index > 0) {
             index -= 1;
-            const extra_id = try self.ast.addExtra(NodeListExtra{
+            list_node_extra = try self.ast.addExtra(NodeListExtra{
                 .node_id = node_ids[index],
-                .next = list_node,
-            });
-
-            list_node = try self.ast.addNode(.{
-                .tag = .node_list,
-                .token_position = 0,
-                .resolved_type_id = TypePool.UNRESOLVED,
-                .data = .{ .extra_id = extra_id },
+                .next = list_node_extra,
             });
         }
 
-        return list_node.?;
+        return list_node_extra.?;
     }
 
     // scanner interactions
@@ -982,7 +974,7 @@ pub const Parser = struct {
     pub inline fn reportHintToTypeDeclaration(self: *const Parser, type_name_id: StringId, message: []const u8) void {
         for (self.ast.nodes.items) |node| {
             if (node.tag == .declaration_type or node.tag == .declaration_error_set) {
-                const extra = self.ast.getExtra(node.data.extra_id, VarDeclarationExtra);
+                const extra = self.ast.getExtra(node.data.extra_id, DeclarationExtra);
                 if (extra.name_id == type_name_id) {
                     const token = self.ast.scanner.token_stream.scanPosition(node.token_position) catch unreachable;
                     self.reportHint(token, message);
@@ -1002,6 +994,7 @@ const ErrorPool = as.frontend.ErrorPool;
 const ErrorType = as.frontend.ErrorType;
 const ErrorReporter = as.common.reporting.ErrorReporter;
 const NodeId = as.frontend.ast.NodeId;
+const NodeExtraId = as.frontend.ast.NodeExtraId;
 const NodeType = as.frontend.ast.NodeType;
 const Scanner = as.frontend.Scanner;
 const StringId = as.common.StringId;
@@ -1012,7 +1005,8 @@ const Token = as.frontend.Token;
 const TypeId = as.frontend.TypeId;
 const TypePool = as.frontend.TypePool;
 
-const VarDeclarationExtra = as.frontend.ast.VarDeclarationExtra;
+const DeclarationExtra = as.frontend.ast.DeclarationExtra;
+const BlockExtra = as.frontend.ast.BlockExtra;
 const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
 const CallExtra = as.frontend.ast.CallExtra;
 const NodeListExtra = as.frontend.ast.NodeListExtra;

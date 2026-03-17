@@ -71,9 +71,13 @@ pub const SemanticAnalyser = struct {
             .expression_block => |_| case: {
                 self.symbol_table.enterScope();
 
-                var iterator = NodeListIterator.init(self.ast, node.data.node_id);
-                while (iterator.next()) |list_node_id| {
-                    _ = try self.analyse(list_node_id);
+                const extra = self.ast.getExtra(node.data.extra_id, BlockExtra);
+
+                if (extra.statements) |statements| {
+                    var iterator = NodeListIterator.init(self.ast, statements);
+                    while (iterator.next()) |list_node_id| {
+                        _ = try self.analyse(list_node_id);
+                    }
                 }
 
                 self.symbol_table.exitScope();
@@ -99,7 +103,7 @@ pub const SemanticAnalyser = struct {
                     if (extra.then_capture) |then_capture| {
                         const capture_node = &self.ast.nodes.items[then_capture];
                         const capture_type = try self.ast.type_pool.getOrCreateNotNullableType(type_condition);
-                        const capture_extra = self.ast.getExtra(capture_node.data.extra_id, VarDeclarationExtra);
+                        const capture_extra = self.ast.getExtra(capture_node.data.extra_id, DeclarationExtra);
 
                         capture_node.resolved_type_id = capture_type;
 
@@ -126,7 +130,7 @@ pub const SemanticAnalyser = struct {
                     if (extra.then_capture) |then_capture| {
                         const capture_node = &self.ast.nodes.items[then_capture];
                         const capture_type = try self.ast.type_pool.getOrCreateNotErrorUnionType(type_condition);
-                        const capture_extra = self.ast.getExtra(capture_node.data.extra_id, VarDeclarationExtra);
+                        const capture_extra = self.ast.getExtra(capture_node.data.extra_id, DeclarationExtra);
 
                         capture_node.resolved_type_id = capture_type;
 
@@ -150,7 +154,7 @@ pub const SemanticAnalyser = struct {
                         if (extra.else_capture) |else_capture| {
                             const capture_node = &self.ast.nodes.items[else_capture];
                             const capture_type = self.ast.type_pool.getErrorSetFromTypeUnion(type_condition) catch unreachable; // assured ErrorUnion by parent:  else if (self.ast.type_pool.isErrorUnion(type_condition))
-                            const capture_extra = self.ast.getExtra(capture_node.data.extra_id, VarDeclarationExtra);
+                            const capture_extra = self.ast.getExtra(capture_node.data.extra_id, DeclarationExtra);
 
                             capture_node.resolved_type_id = capture_type;
 
@@ -310,9 +314,11 @@ pub const SemanticAnalyser = struct {
                 const extra = self.ast.getExtra(node.data.extra_id, CallExtra);
                 const type_callee = try self.analyse(extra.callee);
 
-                var iterator = NodeListIterator.init(self.ast, extra.args_start);
-                while (iterator.next()) |list_node_id| {
-                    _ = try self.analyse(list_node_id);
+                if (extra.args_start) |args_start| {
+                    var iterator = NodeListIterator.init(self.ast, args_start);
+                    while (iterator.next()) |list_node_id| {
+                        _ = try self.analyse(list_node_id);
+                    }
                 }
 
                 break :case type_callee;
@@ -325,7 +331,7 @@ pub const SemanticAnalyser = struct {
 
     fn analyseDeclaration(self: *SemanticAnalyser, node_id: NodeId, is_mutable: bool) Error!TypeId {
         const node = self.ast.nodes.items[node_id];
-        const extra = self.ast.getExtra(node.data.extra_id, VarDeclarationExtra);
+        const extra = self.ast.getExtra(node.data.extra_id, DeclarationExtra);
 
         // add variable to symbol table
         self.symbol_table.declare(
@@ -483,19 +489,19 @@ const as = @import("as");
 const ErrorReporter = as.common.reporting.ErrorReporter;
 
 const AST = as.frontend.AST;
-const TypePool = as.frontend.TypePool;
 const SymbolTable = as.frontend.SymbolTable;
+const TypePool = as.frontend.TypePool;
 
+const NodeId = as.frontend.ast.NodeId;
+const Node = as.frontend.ast.Node;
 const Symbol = as.frontend.Symbol;
 const StringId = as.common.StringId;
 const TypeId = as.frontend.TypeId;
-const NodeId = as.frontend.ast.NodeId;
-const Node = as.frontend.ast.Node;
 
-const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
-const VarDeclarationExtra = as.frontend.ast.VarDeclarationExtra;
-const NodeListExtra = as.frontend.ast.NodeListExtra;
-const NodeListIterator = as.frontend.ast.NodeListIterator;
-const CallExtra = as.frontend.ast.CallExtra;
-const IfExtra = as.frontend.ast.IfExtra;
 const AssignmentExtra = as.frontend.ast.AssignmentExtra;
+const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
+const BlockExtra = as.frontend.ast.BlockExtra;
+const CallExtra = as.frontend.ast.CallExtra;
+const DeclarationExtra = as.frontend.ast.DeclarationExtra;
+const IfExtra = as.frontend.ast.IfExtra;
+const NodeListIterator = as.frontend.ast.NodeListIterator;
