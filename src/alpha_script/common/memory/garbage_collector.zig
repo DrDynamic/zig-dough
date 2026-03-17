@@ -144,6 +144,10 @@ pub const GarbageCollector = struct {
     }
 
     inline fn markVmRoots(self: *GarbageCollector) void {
+        if (self.vm.current_module) |current_module| {
+            self.markObject(current_module.asObject());
+        }
+
         const stack = &self.vm.stack;
         const stack_top = self.vm.stack_top;
         for (0.., stack) |index, value| {

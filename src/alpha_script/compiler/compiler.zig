@@ -177,11 +177,15 @@ pub const Compiler = struct {
             .object_string => {
                 const register = self.next_free_reg;
                 const string_data = self.ast.string_table.get(node.data.string_id);
+                const string_object = ObjString.copydata(string_data, self.garbage_collector).asObject();
+
+                try self.garbage_collector.temp_objects.append(string_object);
                 try self.emitLoadConstant(
                     .load_const,
                     register,
-                    Value.fromObject(ObjString.copydata(string_data, self.garbage_collector).asObject()),
+                    Value.fromObject(string_object),
                 );
+                _ = self.garbage_collector.temp_objects.pop();
 
                 return register;
             },

@@ -1,10 +1,42 @@
-var nan = 0/0;
+// trailing comma is optional
+error ErrorWithTrailingComma {
+    NotFound,
+    TooMany,
+    EvenMoreProblems,
+}
 
-print(nan == 0); // expect: false
-print(nan != 1); // expect: true
-print(nan > 5); // expect: false
-print(nan < 5); // expect: false
+error ErrorWithoutTrailingComma {
+    NotFound,
+    TooMany,
+    EvenMoreProblems
+}
 
-// NaN is not equal to self.
-print(nan == nan); // expect: false
-print(nan != nan); // expect: true
+
+// all errors in a set can be assigned to an variable typed with that set
+
+var test:ErrorWithTrailingComma = ErrorWithTrailingComma.NotFound;
+print(test) // expect: NotFound
+test = ErrorWithTrailingComma.TooMany;
+print(test) // expect: TooMany
+test = ErrorWithTrailingComma.EvenMoreProblems;
+print(test) // expect: EvenMoreProblems
+
+
+// errors are not bound to the set but identifierd by name
+
+test = ErrorWithoutTrailingComma.NotFound;
+print(test) // expect: NotFound
+test = ErrorWithoutTrailingComma.TooMany;
+print(test) // expect: TooMany
+test = ErrorWithoutTrailingComma.EvenMoreProblems;
+print(test) // expect: EvenMoreProblems
+
+
+// errors can even be assigned withoud ErrorSet
+
+test = error.NotFound;
+print(test) // expect: NotFound
+test = error.TooMany;
+print(test) // expect: TooMany
+test = error.EvenMoreProblems;
+print(test) // expect: EvenMoreProblems

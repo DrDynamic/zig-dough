@@ -28,6 +28,7 @@ pub const VirtualMachine = struct {
     garbage_collector: *GarbageCollector,
     error_reporter: *const ErrorReporter,
 
+    current_module: ?*ObjModule,
     current_chunk: *const Chunk,
     current_ip: usize,
     current_base: usize,
@@ -45,6 +46,7 @@ pub const VirtualMachine = struct {
             .allocator = allocator,
             .garbage_collector = garbage_collector,
             .error_reporter = error_reporter,
+            .current_module = null,
             .current_chunk = undefined,
             .current_ip = 0,
             .current_base = 0,
@@ -54,12 +56,12 @@ pub const VirtualMachine = struct {
         };
     }
 
-    pub fn execute(self: *VirtualMachine, module: *const ObjModule) !void {
+    pub fn execute(self: *VirtualMachine, module: *ObjModule) !void {
         self.execution_context = .{
             .string_table = self.string_table,
             .error_pool = self.error_pool,
         };
-
+        self.current_module = module;
         self.current_chunk = &module.function.chunk;
         self.current_ip = 0;
         self.current_base = 0;
