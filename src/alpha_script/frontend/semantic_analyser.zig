@@ -358,6 +358,10 @@ pub const SemanticAnalyser = struct {
 
                 break :case type_callee;
             },
+            // logical operations
+            .logical_or,
+            .logical_and,
+            => try self.analyseBinaryLogical(node_id),
         };
 
         node.resolved_type_id = resolved_type;
@@ -483,8 +487,21 @@ pub const SemanticAnalyser = struct {
         }
         // For simplicity, assume binary operations return the same type as operands
         self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, node, "incompatible types");
-
         return error.IncompatibleTypes;
+    }
+
+    fn analyseBinaryLogical(self: *SemanticAnalyser, node_id: NodeId) Error!TypeId {
+        const node = self.ast.nodes.items[node_id];
+        const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
+
+        const lhs_type_id = try self.analyse(extra.lhs);
+        const rhs_type_id = try self.analyse(extra.rhs);
+
+        if (lhs_type_id != TypePool.BOOL or rhs_type_id != TypePool.BOOL) {
+            self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, node, "incompatible types");
+            return error.IncompatibleTypes;
+        }
+        return TypePool.BOOL;
     }
 
     fn assertHasNode(self: *SemanticAnalyser, node_id: ?NodeId, err: Error, message: []const u8) Error!void {

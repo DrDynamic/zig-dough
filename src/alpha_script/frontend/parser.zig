@@ -359,15 +359,42 @@ pub const Parser = struct {
     }
 
     fn or_(self: *Parser) Error!NodeId {
-        const lhs = try self.and_();
+        var lhs = try self.and_();
 
-        // TODO implement or
+        while (try self.match(.logical_or)) {
+            const token_or = self.scanner.previous();
+            const extra_id = try self.ast.addExtra(BinaryOpExtra{
+                .lhs = lhs,
+                .rhs = try self.and_(),
+            });
+            lhs = try self.ast.addNode(.{
+                .tag = .logical_or,
+                .token_position = token_or.location.start,
+                .resolved_type_id = TypePool.UNRESOLVED,
+                .data = .{ .extra_id = extra_id },
+            });
+        }
+
         return lhs;
     }
 
     fn and_(self: *Parser) Error!NodeId {
-        const lhs = try self.equality();
-        // TODO implement and
+        var lhs = try self.equality();
+
+        while (try self.match(.logical_and)) {
+            const token_and = self.scanner.previous();
+            const extra_id = try self.ast.addExtra(BinaryOpExtra{
+                .lhs = lhs,
+                .rhs = try self.equality(),
+            });
+            lhs = try self.ast.addNode(.{
+                .tag = .logical_and,
+                .token_position = token_and.location.start,
+                .resolved_type_id = TypePool.UNRESOLVED,
+                .data = .{ .extra_id = extra_id },
+            });
+        }
+
         return lhs;
     }
 

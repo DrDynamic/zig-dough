@@ -76,6 +76,12 @@ pub const ASTPrinter = struct {
             => {
                 self.terminal.print("\n", .{});
             },
+            .logical_or,
+            .logical_and,
+            => {
+                self.terminal.print("\n", .{});
+            },
+
             .declaration_error_set,
             .declaration_type,
             .declaration_var,
@@ -150,6 +156,13 @@ pub const ASTPrinter = struct {
             .binary_less_equal,
             .binary_greater,
             .binary_greater_equal,
+            => {
+                const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
+                try self.printNode(extra.lhs, prefix, false);
+                try self.printNode(extra.rhs, prefix, true);
+            },
+            .logical_or,
+            .logical_and,
             => {
                 const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
                 try self.printNode(extra.lhs, prefix, false);

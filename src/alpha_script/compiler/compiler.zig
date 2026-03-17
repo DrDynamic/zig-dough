@@ -310,7 +310,7 @@ pub const Compiler = struct {
 
             // binary operations
             .binary_add => {
-                const extra = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
+                const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
                 const node_lhs = self.ast.nodes.items[extra.lhs];
                 const node_rhs = self.ast.nodes.items[extra.rhs];
 
@@ -329,6 +329,29 @@ pub const Compiler = struct {
             .binary_less_equal => self.emitBinaryOp(.less_equal, &node),
             .binary_greater => self.emitBinaryOp(.greater, &node),
             .binary_greater_equal => self.emitBinaryOp(.greater_equal, &node),
+
+            .logical_and => {
+                const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
+                const reg_result = self.next_free_reg;
+
+                try self.compileExpressionEnsureRegister(extra.lhs, reg_result);
+                const pos_end_jump = try self.emitJump(.jump_if_false, reg_result);
+                try self.compileExpressionEnsureRegister(extra.rhs, reg_result);
+                self.patchJump(pos_end_jump);
+
+                return reg_result;
+            },
+            .logical_or => {
+                const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
+                const reg_result = self.next_free_reg;
+
+                try self.compileExpressionEnsureRegister(extra.lhs, reg_result);
+                const pos_end_jump = try self.emitJump(.jump_if_true, reg_result);
+                try self.compileExpressionEnsureRegister(extra.rhs, reg_result);
+                self.patchJump(pos_end_jump);
+
+                return reg_result;
+            },
 
             // stack_actions
             .call_return => {
@@ -390,6 +413,14 @@ pub const Compiler = struct {
     fn emitLoadConstant(self: *Compiler, opcode: OpCode, register: RegisterId, constant: Value) !void {
         const constant_id = try self.chunk.addConstant(constant);
         try self.chunk.emit(Instruction.fromAB(opcode, register, constant_id));
+    }
+
+    /// emits a InstructionAB with the given jump.
+    /// Returns the position of the jump
+    inline fn emitJump(self: *Compiler, opcode: OpCode, arg: u8) !usize {
+        const pos = self.chunk.code.items.len;
+        try self.chunk.emit(Instruction.fromAB(opcode, arg, 0));
+        return pos;
     }
 
     inline fn patchJump(self: *Compiler, jump_pos: usize) void {
@@ -488,6 +519,7 @@ const StringId = as.common.StringId;
 
 const NodeListIterator = as.frontend.ast.NodeListIterator;
 const AssignmentExtra = as.frontend.ast.AssignmentExtra;
+const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
 const BlockExtra = as.frontend.ast.BlockExtra;
 const CallExtra = as.frontend.ast.CallExtra;
 const DeclarationExtra = as.frontend.ast.DeclarationExtra;

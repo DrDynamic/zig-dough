@@ -48,6 +48,10 @@ pub const NodeType = enum(u8) {
     binary_less_equal, // BinaryOpExtra
     binary_greater, // BinaryOpExtra
     binary_greater_equal, // BinaryOpExtra
+
+    // logical operations
+    logical_and, // BinaryOpExtra
+    logical_or, // BinaryOpExtra
 };
 
 pub const AssignmentExtra = struct {

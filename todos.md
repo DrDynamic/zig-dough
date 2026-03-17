@@ -13,6 +13,7 @@
   - assert isType
   - assert hasValue (or isInitialized)
 
+- xor
 - loops (need iteratable interface)
 - shapes (need classes or objects or arrays)
 - functions / closures
