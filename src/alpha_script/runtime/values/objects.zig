@@ -11,10 +11,10 @@ pub const ObjectHeader = struct {
     next: ?*ObjectHeader,
     next_gray: ?*ObjectHeader,
 
-    pub inline fn equals(self: ObjectHeader, other: Value) bool {
-        _ = self;
-        _ = other;
-        return false;
+    pub inline fn equals(self: *ObjectHeader, other: Value) bool {
+        if (!other.isObject()) return false;
+
+        return self == other.toObject();
     }
 
     pub inline fn is(self: *const ObjectHeader, tag: ObjectType) bool {

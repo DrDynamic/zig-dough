@@ -44,13 +44,13 @@ pub const SemanticAnalyser = struct {
         self.symbol_table.deinit();
     }
 
-    pub fn analyseAst(self: *SemanticAnalyser, ast: *AST) Error!void {
+    pub fn analyseAst(self: *SemanticAnalyser, ast: *AST) void {
         self.ast = ast;
 
         for (ast.getRoots()) |node_id| {
-            _ = self.analyse(node_id) catch |err| {
+            _ = self.analyse(node_id) catch {
                 ast.invalidate();
-                return err;
+                return;
             };
         }
     }
@@ -89,7 +89,10 @@ pub const SemanticAnalyser = struct {
                 if (extra.statements) |statements| {
                     var iterator = NodeListIterator.init(self.ast, statements);
                     while (iterator.next()) |list_node_id| {
-                        _ = try self.analyse(list_node_id);
+                        _ = self.analyse(list_node_id) catch {
+                            self.ast.invalidate();
+                            break;
+                        };
                     }
                 }
 
@@ -271,6 +274,8 @@ pub const SemanticAnalyser = struct {
                 }
 
                 const source_type = try self.analyse(extra.source);
+                const symbol_name = self.ast.string_table.get(maybe_symbol.?.name_id);
+                _ = symbol_name;
                 if (!self.ast.type_pool.isAssignable(maybe_symbol.?.type_id, source_type)) {
                     const source_node = self.ast.nodes.items[extra.source];
                     try self.reportNotAssignable(source_node, maybe_symbol.?.type_id, source_type);
@@ -308,7 +313,8 @@ pub const SemanticAnalyser = struct {
                     break :case type_rhs;
                 }
 
-                self.error_reporter.semanticAnalyserError(self, Error.UnsupportedOperand, node.*, "operand must be a number");
+                const node_rhs = self.ast.nodes.items[node.data.node_id];
+                self.error_reporter.semanticAnalyserError(self, Error.UnsupportedOperand, node_rhs, "operand must be a number");
                 return Error.UnsupportedOperand;
             },
             .logical_not => |_| case: {
@@ -318,7 +324,8 @@ pub const SemanticAnalyser = struct {
                     break :case type_rhs;
                 }
 
-                self.error_reporter.semanticAnalyserError(self, Error.UnsupportedOperand, node.*, "operand must be a bool");
+                const node_rhs = self.ast.nodes.items[node.data.node_id];
+                self.error_reporter.semanticAnalyserError(self, Error.UnsupportedOperand, node_rhs, "operand must be Bool");
                 return Error.UnsupportedOperand;
             },
 
@@ -437,6 +444,7 @@ pub const SemanticAnalyser = struct {
             return TypePool.BOOL;
         }
         // For simplicity, assume binary operations return the same type as operands
+        self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, node, "incompatible types");
         return error.IncompatibleTypes;
     }
 
@@ -474,7 +482,7 @@ pub const SemanticAnalyser = struct {
             return TypePool.FLOAT;
         }
         // For simplicity, assume binary operations return the same type as operands
-        self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, node, "Incompatible types");
+        self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, node, "incompatible types");
 
         return error.IncompatibleTypes;
     }

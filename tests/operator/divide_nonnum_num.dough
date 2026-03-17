@@ -1,1 +1,1 @@
-"1" / 1; // expect compile error: Error at '/': Incompatible types
+"1" / 1; // expect compile error: Error at '/': incompatible types

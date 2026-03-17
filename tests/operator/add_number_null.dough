@@ -1,1 +1,1 @@
-1 + null; // expect compile error: Error at 'null': mixing types is not allowed
+1 + null; // expect compile error: Error at '+': incompatible types

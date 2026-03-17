@@ -76,7 +76,7 @@ pub const Interpreter = struct {
             register_natives_hook(&ast, &self.semantic_analyser, &self.compiler, &self.virtual_machine);
         }
 
-        try self.semantic_analyser.analyseAst(&ast);
+        self.semantic_analyser.analyseAst(&ast);
         if (!ast.is_valid) {
             return error.InvalidAST;
         }

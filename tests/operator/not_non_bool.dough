@@ -1,0 +1,15 @@
+{
+    print(!123);      // expect compile error: Error at '123': operand must be Bool
+}
+{
+    print(!0);        // expect compile error: Error at '0': operand must be Bool
+}
+{
+    print(!null);     // expect compile error: Error at 'null': operand must be Bool
+}
+{
+    print(!"");       // expect compile error: Error at '""': operand must be Bool
+}
+
+//fun foo() {}
+//print !foo;      

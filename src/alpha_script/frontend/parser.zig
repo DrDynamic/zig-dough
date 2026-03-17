@@ -646,7 +646,8 @@ pub const Parser = struct {
                 _ = try self.advance();
 
                 const lexeme = self.scanner.getLexeme(token);
-                const string_id = try self.ast.string_table.add(lexeme);
+
+                const string_id = try self.ast.string_table.add(lexeme[1 .. lexeme.len - 1]);
 
                 break :case try self.ast.addNode(.{
                     .tag = .object_string,
