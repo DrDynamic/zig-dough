@@ -401,7 +401,11 @@ pub const TypePool = struct {
                 const members = self.getUnionMembers(t);
                 for (members) |member| {
                     const member_type = self.types.items[member];
-                    if (member_type == .error_set) return member;
+                    if (member_type == .error_set) {
+                        return member;
+                    } else if (member_type == .anyerror) {
+                        return member;
+                    }
                 }
                 return Error.NotFound;
             },

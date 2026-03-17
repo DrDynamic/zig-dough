@@ -187,12 +187,13 @@ pub const SemanticAnalyser = struct {
                                 return Error.RedeclarationError;
                             };
                             self.symbol_table.initialize(capture_extra.name_id) catch unreachable; // existence is checked above
+
+                        } else {
+                            const else_branch_node = self.ast.nodes.items[extra.else_branch.?];
+
+                            self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, else_branch_node, "missing else capture for ErrorUnion condition");
+                            maybe_capture_error = Error.MissingCapture;
                         }
-
-                        const else_branch_node = self.ast.nodes.items[extra.else_branch.?];
-
-                        self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, else_branch_node, "missing else capture for ErrorUnion condition");
-                        maybe_capture_error = Error.MissingCapture;
                     }
 
                     if (maybe_capture_error) |err| return err;
