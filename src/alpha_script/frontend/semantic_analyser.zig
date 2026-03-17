@@ -1,3 +1,11 @@
+const CurrentScope = enum {
+    unknown,
+    if_condition,
+};
+const SemanticAnalyserContext = struct {
+    current_scope: CurrentScope = CurrentScope.unknown,
+};
+
 pub const SemanticAnalyser = struct {
     pub const Error = error{
         OutOfMemory,
@@ -12,6 +20,7 @@ pub const SemanticAnalyser = struct {
         MissingCapture,
         IllegalMutation,
         InvalidAssignmentTarget,
+        IllegalAssignment,
         //
         NotFound,
     };
@@ -20,6 +29,7 @@ pub const SemanticAnalyser = struct {
     ast: *AST,
     error_reporter: *ErrorReporter,
     symbol_table: SymbolTable,
+    context: SemanticAnalyserContext = .{},
 
     pub fn init(error_reporter: *ErrorReporter, allocator: std.mem.Allocator) SemanticAnalyser {
         return .{
@@ -88,17 +98,21 @@ pub const SemanticAnalyser = struct {
                 var maybe_err: ?Error = null;
                 const extra = self.ast.getExtra(node.data.extra_id, IfExtra);
 
+                self.context.current_scope = .if_condition;
                 const type_condition = try self.analyse(extra.condition);
+                self.context.current_scope = .unknown;
 
                 self.symbol_table.enterScope();
 
                 if (type_condition == TypePool.BOOL) {
+                    var maybe_capture_error: ?Error = null;
                     self.assertHasNode(extra.then_capture, Error.PointlessCapture, "then capture is pointless (capture is always true)") catch |err| {
-                        maybe_err = err;
+                        maybe_capture_error = err;
                     };
                     self.assertHasNode(extra.else_capture, Error.PointlessCapture, "else capture is pointless (capture is always false)") catch |err| {
-                        maybe_err = err;
+                        maybe_capture_error = err;
                     };
+                    if (maybe_capture_error) |err| return err;
                 } else if (self.ast.type_pool.isNullable(type_condition)) {
                     if (extra.then_capture) |then_capture| {
                         const capture_node = &self.ast.nodes.items[then_capture];
@@ -119,14 +133,16 @@ pub const SemanticAnalyser = struct {
                         self.symbol_table.initialize(capture_extra.name_id) catch unreachable; // declared above
                     } else {
                         const condition = self.ast.nodes.items[extra.condition];
-                        self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing then capture for nullable condition");
+                        self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing then capture for Nullable condition");
                         maybe_err = Error.MissingCapture;
                     }
 
-                    self.assertHasNode(extra.else_capture, Error.PointlessCapture, "capture is pointless for nullable condition (it is always null)") catch |err| {
+                    self.assertHasNode(extra.else_capture, Error.PointlessCapture, "capture is pointless for Nullable condition (it is always null)") catch |err| {
                         maybe_err = err;
                     };
                 } else if (self.ast.type_pool.isErrorUnion(type_condition)) {
+                    var maybe_capture_error: ?Error = null;
+
                     if (extra.then_capture) |then_capture| {
                         const capture_node = &self.ast.nodes.items[then_capture];
                         const capture_type = try self.ast.type_pool.getOrCreateNotErrorUnionType(type_condition);
@@ -145,9 +161,9 @@ pub const SemanticAnalyser = struct {
                         };
                         self.symbol_table.initialize(capture_extra.name_id) catch unreachable; // existence is checked above
                     } else {
-                        const condition = self.ast.nodes.items[extra.condition];
-                        self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing then capture for nullable condition");
-                        maybe_err = Error.MissingCapture;
+                        const then_branch_node = self.ast.nodes.items[extra.then_branch];
+                        self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, then_branch_node, "missing then capture for ErrorUnion condition");
+                        maybe_capture_error = Error.MissingCapture;
                     }
 
                     if (extra.else_branch != null) {
@@ -170,13 +186,16 @@ pub const SemanticAnalyser = struct {
                             self.symbol_table.initialize(capture_extra.name_id) catch unreachable; // existence is checked above
                         }
 
-                        const condition = self.ast.nodes.items[extra.condition];
-                        self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing else capture for error union condition");
-                        maybe_err = Error.MissingCapture;
+                        const else_branch_node = self.ast.nodes.items[extra.else_branch.?];
+
+                        self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, else_branch_node, "missing else capture for ErrorUnion condition");
+                        maybe_capture_error = Error.MissingCapture;
                     }
+
+                    if (maybe_capture_error) |err| return err;
                 } else {
                     const condition = self.ast.nodes.items[extra.condition];
-                    self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, condition, "condition needs to evaluate to bool, nullable type or error union");
+                    self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, condition, "condition needs to evaluate to Bool, Nullable type or ErrorUnion");
 
                     const type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, type_condition, self.ast.string_table);
                     defer self.allocator.free(type_name);
@@ -222,6 +241,9 @@ pub const SemanticAnalyser = struct {
 
             // access
             .assignment => case: {
+                if (self.context.current_scope == .if_condition) {
+                    self.error_reporter.semanticAnalyserError(self, Error.IllegalAssignment, node.*, "assignments in if conditions are not allowed");
+                }
                 const extra = self.ast.getExtra(node.data.extra_id, AssignmentExtra);
                 const target_node = self.ast.nodes.items[extra.target];
 

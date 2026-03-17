@@ -243,7 +243,10 @@ pub const TypePool = struct {
 
         const members = self.getUnionMembers(t);
         for (members) |member| {
-            if (self.types.items[member] == .error_set) {
+            const member_type = self.types.items[member];
+            if (member_type == .anyerror) {
+                return true;
+            } else if (member_type == .error_set) {
                 return true;
             } else if (self.isErrorUnion(member)) {
                 return true;

@@ -1,0 +1,8 @@
+
+var maybe_a:!String = "lorem"
+
+if(maybe_a) { // expect compile error: Error at '{': missing then capture for ErrorUnion condition
+    print(a) 
+} else { // expect compile error: Error at '{': missing else capture for ErrorUnion condition
+    print(err)
+}

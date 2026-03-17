@@ -6,4 +6,4 @@ if(false) {
     a = "Some Value";
 }
 
-print("a") // expect compile error: access of possibly uninitialized variable
+print(a) // expect compile error: Error at 'a': can not read uninitialized variable
