@@ -249,7 +249,7 @@ pub const SemanticAnalyser = struct {
                 const target_node = self.ast.nodes.items[extra.target];
 
                 if (target_node.tag != .identifier_expr) {
-                    self.error_reporter.semanticAnalyserError(self, Error.InvalidAssignmentTarget, target_node, "invalid assignment target");
+                    self.error_reporter.semanticAnalyserError(self, Error.InvalidAssignmentTarget, node.*, "invalid assignment target");
                     return Error.InvalidAssignmentTarget;
                 }
 
