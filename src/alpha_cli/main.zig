@@ -79,7 +79,7 @@ pub fn main() !void {
         };
 
         const error_reporter = as.common.reporting.ErrorReporter.init(output);
-        var interpreter = as.Interpreter.init(error_reporter, allocator);
+        var interpreter = try as.Interpreter.init(error_reporter, allocator);
         interpreter.register_natives_hook = registerNatives;
         defer interpreter.deinit();
 
@@ -145,6 +145,7 @@ fn registerNatives(ast: *as.frontend.AST, semantic_analyser: *as.frontend.Semant
     };
 
     vm.stack[0] = as.runtime.values.Value.fromObject(&native_print.header);
+    vm.stack_top += 1;
 }
 
 pub fn _main() !void {

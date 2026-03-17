@@ -9,7 +9,7 @@ const DebugLogs = struct {
         return self.alloc or self.stats or self.sweep or self.blacken or self.mark;
     }
 };
-
+// TODO rename to MemoryManager
 pub const GarbageCollector = struct {
     const GC_HEAP_GROW_FACTOR: usize = 2;
 
@@ -37,6 +37,8 @@ pub const GarbageCollector = struct {
     /// a list of objects already marked by the gc but not blackend yet
     gray_objects: ?*ObjectHeader = null,
 
+    interned_strings: std.StringArrayHashMap(*ObjString),
+
     pub fn init(_allocator: std.mem.Allocator) GarbageCollector {
         return .{
             .internal_allocator = _allocator,
@@ -44,6 +46,7 @@ pub const GarbageCollector = struct {
             .next_gc = 1024 * 1024,
             .debug_logs = .{},
             .temp_objects = std.ArrayList(*ObjectHeader).init(_allocator),
+            .interned_strings = std.StringArrayHashMap(*ObjString).init(_allocator),
         };
     }
 
@@ -95,6 +98,8 @@ pub const GarbageCollector = struct {
 
         self.markVmRoots();
         self.markCompilerRoots();
+        self.markTempObjects();
+
         self.traceReferences();
         //        self.removeUnreferencedStrings();
         self.sweep();
@@ -138,7 +143,7 @@ pub const GarbageCollector = struct {
         }
     }
 
-    fn markVmRoots(self: *GarbageCollector) void {
+    inline fn markVmRoots(self: *GarbageCollector) void {
         const stack = &self.vm.stack;
         const stack_top = self.vm.stack_top;
         for (0.., stack) |index, value| {
@@ -154,8 +159,14 @@ pub const GarbageCollector = struct {
         }
     }
 
-    fn markCompilerRoots(self: *GarbageCollector) void {
+    inline fn markCompilerRoots(self: *GarbageCollector) void {
         self.markArray(self.compiler.chunk.constants.items);
+    }
+
+    inline fn markTempObjects(self: *GarbageCollector) void {
+        for (self.temp_objects.items) |object| {
+            self.markObject(object);
+        }
     }
 
     fn traceReferences(self: *GarbageCollector) void {
@@ -189,7 +200,8 @@ pub const GarbageCollector = struct {
                 }
 
                 if (unreached.tag == .string) {
-                    // TODO remove interned ObjString
+                    const unreached_string = unreached.as(ObjString);
+                    _ = self.interned_strings.swapRemove(unreached_string.data);
                 }
                 unreached.deinit(self.allocator());
             }
@@ -414,6 +426,7 @@ const Compiler = as.compiler.Compiler;
 const ObjectHeader = as.runtime.values.ObjectHeader;
 const ObjFunction = as.runtime.values.ObjFunction;
 const ObjModule = as.runtime.values.ObjModule;
+const ObjString = as.runtime.values.ObjString;
 const Value = as.runtime.values.Value;
 const VirtualMachine = as.runtime.VirtualMachine;
 

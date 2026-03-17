@@ -1,9 +1,10 @@
+var nan = 0/0;
 
-var a:?String;
+print(nan == 0); // expect: false
+print(nan != 1); // expect: true
+print(nan > 5); // expect: false
+print(nan < 5); // expect: false
 
-if(false) {
-}else {
-    a = "Some Value";
-}
-
-print(a) // expect compile error: access of possibly uninitialized variable
+// NaN is not equal to self.
+print(nan == nan); // expect: false
+print(nan != nan); // expect: true

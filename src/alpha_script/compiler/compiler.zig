@@ -43,7 +43,15 @@ pub const Compiler = struct {
     pub fn compile(self: *Compiler, _ast: *AST) !*ObjModule {
         self.ast = _ast;
 
+        // temporary initialization to satisfy MemoryManager
+        var tempChunk = Chunk.init(self.allocator);
+        defer tempChunk.deinit();
+
+        self.chunk = &tempChunk;
+
         var function = ObjFunction.init(self.garbage_collector);
+        try self.garbage_collector.temp_objects.append(function.asObject());
+
         self.max_registers = &function.max_registers;
         self.chunk = &function.chunk;
 
@@ -53,7 +61,9 @@ pub const Compiler = struct {
 
         try self.chunk.emit(Instruction.fromABC(.call_return, 0, 0, 0));
 
-        return ObjModule.init(function, self.garbage_collector);
+        const module = ObjModule.init(function, self.garbage_collector);
+        _ = self.garbage_collector.temp_objects.pop();
+        return module;
     }
 
     fn compileStatement(self: *Compiler, node_id: NodeId) !void {

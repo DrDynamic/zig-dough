@@ -1,7 +1,7 @@
 pub const CompilerOptions = struct {
     terminal: as.common.Terminal,
-    print_tokens: bool,
-    print_ast: bool,
+    print_tokens: bool = false,
+    print_ast: bool = false,
 };
 
 pub const Interpreter = struct {
@@ -19,8 +19,9 @@ pub const Interpreter = struct {
     /// temporary workaround to insert natives without import system
     register_natives_hook: ?*const fn (ast: *AST, semantic_analyser: *SemanticAnalyser, compiler: *Compiler, vm: *VirtualMachine) void,
 
-    pub fn init(error_reporter: ErrorReporter, allocator: std.mem.Allocator) Interpreter {
-        var interpreter: Interpreter = .{
+    pub fn init(error_reporter: ErrorReporter, allocator: std.mem.Allocator) !*Interpreter {
+        var interpreter = try allocator.create(Interpreter);
+        interpreter.* = .{
             .allocator = allocator,
             .error_reporter = error_reporter,
             .garbage_collector = GarbageCollector.init(allocator),
@@ -35,10 +36,15 @@ pub const Interpreter = struct {
             .register_natives_hook = null,
         };
 
+        interpreter.garbage_collector.stress_mode = true;
+
         interpreter.parser = Parser.init(&interpreter.string_table, &interpreter.error_pool, &interpreter.error_reporter, allocator);
         interpreter.semantic_analyser = SemanticAnalyser.init(&interpreter.error_reporter, allocator);
         interpreter.compiler = Compiler.init(&interpreter.error_reporter, &interpreter.garbage_collector, allocator);
         interpreter.virtual_machine = VirtualMachine.init(&interpreter.string_table, &interpreter.error_pool, &interpreter.error_reporter, &interpreter.garbage_collector, allocator);
+
+        interpreter.garbage_collector.watchCompiler(&interpreter.compiler);
+        interpreter.garbage_collector.watchVirtualMachine(&interpreter.virtual_machine);
 
         return interpreter;
     }
