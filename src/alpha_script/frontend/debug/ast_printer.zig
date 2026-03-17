@@ -46,12 +46,11 @@ pub const ASTPrinter = struct {
             .literal_float => self.terminal.print(": {d:.4}\n", .{node.data.float_value}),
             .literal_bool => self.terminal.print(": {}\n", .{node.data.bool_value}),
             .literal_error => {
-                const error_type = self.ast.type_pool.types.items[node.data.error_value];
-                const error_name = self.ast.string_table.get(error_type.error_type);
+                const error_name_id = self.type_pool.error_pool.getErrorNameId(node.data.error_value);
+                const error_name = self.ast.string_table.get(error_name_id);
                 self.terminal.print(": {s}\n", .{error_name});
             },
 
-            // TODO print the actual string
             .object_string => {
                 const str = self.ast.string_table.get(node.data.string_id);
                 self.terminal.print(": '{s}'\n", .{str});

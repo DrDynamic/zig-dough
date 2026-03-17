@@ -17,7 +17,7 @@ pub fn nativePrint(context: *ExecutionContext, args: []Value) Value {
             const error_name_id = context.error_pool.getErrorNameId(value.error_value);
             const error_name = context.string_table.get(error_name_id);
 
-            writer.print("{s}", .{error_name}) catch {};
+            writer.print("{s}\n", .{error_name}) catch {};
         } else {
             writer.print("{}\n", .{value}) catch {};
         }
