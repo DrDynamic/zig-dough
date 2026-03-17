@@ -215,8 +215,8 @@ pub const Compiler = struct {
                     }
                 }
 
-                const reg_then = self.next_free_reg;
-                try self.compileExpressionEnsureRegister(extra.then_branch, self.next_free_reg);
+                const reg_result = self.next_free_reg;
+                try self.compileExpressionEnsureRegister(extra.then_branch, reg_result);
 
                 self.exitScope();
 
@@ -241,18 +241,14 @@ pub const Compiler = struct {
                         }
                     }
 
-                    const reg_else = self.next_free_reg;
-                    try self.compileExpressionEnsureRegister(else_branch_id, self.next_free_reg);
+                    try self.compileExpressionEnsureRegister(else_branch_id, reg_result);
                     self.exitScope();
-
-                    // both branches should produce the same register, since the result of the if expression is in that register
-                    assert(reg_then == reg_else);
                 }
 
                 // patch jump at the end of then branch to jump to the end of else branch
                 self.patchJump(pos_jump_end);
 
-                return reg_then;
+                return reg_result;
             },
 
             // access

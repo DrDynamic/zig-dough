@@ -1,17 +1,9 @@
-error SomeError {
-    NotSet
+
+var a:?String;
+
+if(false) {
+}else {
+    a = "Some Value";
 }
 
-var test:!String = SomeError.NotSet;
-print(test); // expect: NotSet
-
-
-error OtherError {
-    Unknown,
-}
-
-test = OtherError.Unknown;
-print(test); // expect: Unknown
-
-test = "Lorem";
-print(test); // expect: Lorem
+print(a) // expect compile error: access of possibly uninitialized variable
