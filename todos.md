@@ -12,6 +12,7 @@
 - @assert builtin
   - assert isType
   - assert hasValue (or isInitialized)
+- @enforceVar("description") // tell the compiler to not enforce the variable to be const. A description why is mendatory
 
 - xor
 - loops (need iteratable interface)
@@ -28,3 +29,6 @@
 - std library
 - lsp
 - debugger
+
+- Compiler Settings
+  - enforce const

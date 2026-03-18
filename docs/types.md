@@ -1,15 +1,57 @@
+# Types 
+Types are mendatory. The compiler needs to know the type of every declaration.
+
+## Variables / Constants
+Variables and Constants can get their type by explicitly declaring it.
+```alpha-script
+var foo:String;
+```
+
+Or by infering it from its initializing Value.
+```alpha-script
+var foo = "BAR"
+```
+
+One of those has to be present in the declaration.
+```alpha-script
+var foo // this is illegal
+```
+
+
+## Type Unions
+Declarations are not limited to one type.
+Types can be combined in TypeUnions.
+```alpha-script
+var foo:Int|String = "BAR"
+foo = 42
+```
+
+The type of the assignment target must match the type of the assignment source.
+```alpha-script
+const foo:Int|String = "BAR"
+const foo_the_second = foo // correct
+const foo_too:Int|String = foo // correct
+const also_foo:Int|String|Bool = foo // correct
+
+cont not_foo:String = foo // compiler error
+```
+
+
+
 # Available Types
 - Void
 - Null
 - Error
 - Bool
-- Number
+- Int
+- Float
 - String
 
 # Typing Variables
 
+
 ```dough
-var doughnut:String = "";
+var doughnut:String;
 
 doughnut = 5; // this is an error
 ```
