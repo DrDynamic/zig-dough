@@ -753,6 +753,31 @@ pub const Parser = struct {
         };
     }
 
+    fn function(self: *Parser) Error!NodeId {
+        var function_extra = FunctionExtra{
+            .name_id = null,
+            .parameters = null,
+            .return_type = undefined,
+            .body = undefined,
+        };
+        if (self.scanner.current().tag == .identifier) {
+            const name_id = self.parseIdentifier() catch unreachable; // if ensures that the current token is an identifier
+            _ = name_id;
+        }
+        _ = self.consume(.left_paren) catch {
+            self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect '(' after function declaration");
+            return Error.UnexpectedToken;
+        };
+
+        const parameters = try self.expressionList(.right_paren);
+
+        _ = self.consume(.left_brace) catch {
+            self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect '{' before function body");
+            return Error.UnexpectedToken;
+        };
+        const body = try self.blockStatement();
+    }
+
     // types
 
     fn parseTypeDeclaration(self: *Parser) !TypeId {
@@ -1033,10 +1058,11 @@ const Token = as.frontend.Token;
 const TypeId = as.frontend.TypeId;
 const TypePool = as.frontend.TypePool;
 
-const DeclarationExtra = as.frontend.ast.DeclarationExtra;
-const BlockExtra = as.frontend.ast.BlockExtra;
-const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
-const CallExtra = as.frontend.ast.CallExtra;
-const NodeListExtra = as.frontend.ast.NodeListExtra;
-const IfExtra = as.frontend.ast.IfExtra;
 const AssignmentExtra = as.frontend.ast.AssignmentExtra;
+const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
+const BlockExtra = as.frontend.ast.BlockExtra;
+const CallExtra = as.frontend.ast.CallExtra;
+const DeclarationExtra = as.frontend.ast.DeclarationExtra;
+const FunctionExtra = as.frontend.ast.FunctionExtra;
+const IfExtra = as.frontend.ast.IfExtra;
+const NodeListExtra = as.frontend.ast.NodeListExtra;

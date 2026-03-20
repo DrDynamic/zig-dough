@@ -25,6 +25,7 @@ pub const NodeType = enum(u8) {
     expression_block, // BlockExtra (the start of a NodeList of Satements)
     expression_if, // IfExtra
     expression_grouping, // node_id (the expression, that is grouped)
+    expression_function, // FunctionExtra
 
     // access
     assignment, // node_id (the expression that is assigned)
@@ -59,14 +60,31 @@ pub const AssignmentExtra = struct {
     source: NodeId,
 };
 
+pub const BinaryOpExtra = struct {
+    lhs: NodeId,
+    rhs: NodeId,
+};
+
 pub const BlockExtra = struct {
     statements: ?NodeExtraId, // NodeListExtra
+};
+
+pub const CallExtra = struct {
+    callee: NodeId,
+    args_start: ?NodeExtraId, // NodeListExtra
 };
 
 pub const DeclarationExtra = struct {
     name_id: StringId,
     explicit_type: TypeId,
     init_value: ?NodeId,
+};
+
+pub const FunctionExtra = struct {
+    name_id: ?StringId,
+    parameters: ?NodeExtraId, // NodeListExtra
+    return_type: TypeId,
+    body: NodeId, // expression_block
 };
 
 pub const IfExtra = struct {
@@ -77,16 +95,6 @@ pub const IfExtra = struct {
 
     else_capture: ?NodeId,
     else_branch: ?NodeId,
-};
-
-pub const BinaryOpExtra = struct {
-    lhs: NodeId,
-    rhs: NodeId,
-};
-
-pub const CallExtra = struct {
-    callee: NodeId,
-    args_start: ?NodeExtraId, // NodeListExtra
 };
 
 pub const NodeListExtra = struct {
