@@ -14,6 +14,7 @@
   - assert hasValue (or isInitialized)
 - @enforceVar("description") // tell the compiler to not enforce the variable to be const. A description why is mendatory
 
+- defer
 - xor
 - loops (need iteratable interface)
 - shapes (need classes or objects or arrays)
