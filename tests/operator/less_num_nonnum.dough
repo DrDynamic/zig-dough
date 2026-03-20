@@ -1,1 +1,1 @@
-1 < "1"; // expect compile error: Error at '1': mixing types is not allowed
+1 < "1"; // expect compile error: Error at '<': incompatible types

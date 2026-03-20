@@ -43,7 +43,15 @@ pub const Compiler = struct {
     pub fn compile(self: *Compiler, _ast: *AST) !*ObjModule {
         self.ast = _ast;
 
+        // temporary initialization to satisfy MemoryManager
+        var tempChunk = Chunk.init(self.allocator);
+        defer tempChunk.deinit();
+
+        self.chunk = &tempChunk;
+
         var function = ObjFunction.init(self.garbage_collector);
+        try self.garbage_collector.temp_objects.append(function.asObject());
+
         self.max_registers = &function.max_registers;
         self.chunk = &function.chunk;
 
@@ -53,7 +61,9 @@ pub const Compiler = struct {
 
         try self.chunk.emit(Instruction.fromABC(.call_return, 0, 0, 0));
 
-        return ObjModule.init(function, self.garbage_collector);
+        const module = ObjModule.init(function, self.garbage_collector);
+        _ = self.garbage_collector.temp_objects.pop();
+        return module;
     }
 
     fn compileStatement(self: *Compiler, node_id: NodeId) !void {
@@ -66,7 +76,7 @@ pub const Compiler = struct {
             .declaration_const,
             .declaration_var,
             => {
-                const extra = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationExtra);
+                const extra = self.ast.getExtra(node.data.extra_id, ast.DeclarationExtra);
 
                 if (extra.init_value) |init_value_id| {
                     // create the local before initializing it, so compileExpression can reference the variable
@@ -167,11 +177,15 @@ pub const Compiler = struct {
             .object_string => {
                 const register = self.next_free_reg;
                 const string_data = self.ast.string_table.get(node.data.string_id);
+                const string_object = ObjString.copydata(string_data, self.garbage_collector).asObject();
+
+                try self.garbage_collector.temp_objects.append(string_object);
                 try self.emitLoadConstant(
                     .load_const,
                     register,
-                    Value.fromObject(ObjString.copydata(string_data, self.garbage_collector).asObject()),
+                    Value.fromObject(string_object),
                 );
+                _ = self.garbage_collector.temp_objects.pop();
 
                 return register;
             },
@@ -181,9 +195,13 @@ pub const Compiler = struct {
             .expression_block => {
                 self.enterScope();
 
-                var iterator = NodeListIterator.init(self.ast, node.data.node_id);
-                while (iterator.next()) |child_node_id| {
-                    _ = try self.compileStatement(child_node_id);
+                const extra = self.ast.getExtra(node.data.extra_id, BlockExtra);
+
+                if (extra.statements) |statements| {
+                    var iterator = NodeListIterator.init(self.ast, statements);
+                    while (iterator.next()) |child_node_id| {
+                        _ = try self.compileStatement(child_node_id);
+                    }
                 }
 
                 self.exitScope();
@@ -206,7 +224,7 @@ pub const Compiler = struct {
                     const node_capture = self.ast.nodes.items[then_capture_id];
                     assert(node_capture.tag == .declaration_const);
 
-                    const capture_extra = self.ast.getExtra(node_capture.data.extra_id, VarDeclarationExtra);
+                    const capture_extra = self.ast.getExtra(node_capture.data.extra_id, DeclarationExtra);
                     const capture_name_id = capture_extra.name_id;
                     const void_identifier_id = try self.ast.string_table.add("_");
 
@@ -232,7 +250,7 @@ pub const Compiler = struct {
                         const node_capture = self.ast.nodes.items[else_capture_id];
                         assert(node_capture.tag == .declaration_const);
 
-                        const capture_extra = self.ast.getExtra(node_capture.data.extra_id, VarDeclarationExtra);
+                        const capture_extra = self.ast.getExtra(node_capture.data.extra_id, DeclarationExtra);
                         const capture_name_id = capture_extra.name_id;
                         const void_identifier_id = try self.ast.string_table.add("_");
 
@@ -270,12 +288,15 @@ pub const Compiler = struct {
 
                 try self.compileExpressionEnsureRegister(extra.callee, reg_callee);
 
-                var iterator = NodeListIterator.init(self.ast, extra.args_start);
-                const reg_start = self.next_free_reg;
                 var arg_count: u8 = 0;
-                while (iterator.next()) |arg_node_id| {
-                    _ = try self.compileExpressionEnsureRegister(arg_node_id, reg_start + arg_count);
-                    arg_count += 1;
+                if (extra.args_start) |args_start| {
+                    var iterator = NodeListIterator.init(self.ast, args_start);
+                    const reg_start = self.next_free_reg;
+
+                    while (iterator.next()) |arg_node_id| {
+                        _ = try self.compileExpressionEnsureRegister(arg_node_id, reg_start + arg_count);
+                        arg_count += 1;
+                    }
                 }
 
                 try self.chunk.emit(Instruction.fromABC(.call, reg_callee, reg_callee, arg_count));
@@ -289,7 +310,7 @@ pub const Compiler = struct {
 
             // binary operations
             .binary_add => {
-                const extra = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
+                const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
                 const node_lhs = self.ast.nodes.items[extra.lhs];
                 const node_rhs = self.ast.nodes.items[extra.rhs];
 
@@ -308,6 +329,29 @@ pub const Compiler = struct {
             .binary_less_equal => self.emitBinaryOp(.less_equal, &node),
             .binary_greater => self.emitBinaryOp(.greater, &node),
             .binary_greater_equal => self.emitBinaryOp(.greater_equal, &node),
+
+            .logical_and => {
+                const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
+                const reg_result = self.next_free_reg;
+
+                try self.compileExpressionEnsureRegister(extra.lhs, reg_result);
+                const pos_end_jump = try self.emitJump(.jump_if_false, reg_result);
+                try self.compileExpressionEnsureRegister(extra.rhs, reg_result);
+                self.patchJump(pos_end_jump);
+
+                return reg_result;
+            },
+            .logical_or => {
+                const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
+                const reg_result = self.next_free_reg;
+
+                try self.compileExpressionEnsureRegister(extra.lhs, reg_result);
+                const pos_end_jump = try self.emitJump(.jump_if_true, reg_result);
+                try self.compileExpressionEnsureRegister(extra.rhs, reg_result);
+                self.patchJump(pos_end_jump);
+
+                return reg_result;
+            },
 
             // stack_actions
             .call_return => {
@@ -369,6 +413,14 @@ pub const Compiler = struct {
     fn emitLoadConstant(self: *Compiler, opcode: OpCode, register: RegisterId, constant: Value) !void {
         const constant_id = try self.chunk.addConstant(constant);
         try self.chunk.emit(Instruction.fromAB(opcode, register, constant_id));
+    }
+
+    /// emits a InstructionAB with the given jump.
+    /// Returns the position of the jump
+    inline fn emitJump(self: *Compiler, opcode: OpCode, arg: u8) !usize {
+        const pos = self.chunk.code.items.len;
+        try self.chunk.emit(Instruction.fromAB(opcode, arg, 0));
+        return pos;
     }
 
     inline fn patchJump(self: *Compiler, jump_pos: usize) void {
@@ -465,9 +517,10 @@ const Value = as.runtime.values.Value;
 const NodeId = as.frontend.ast.NodeId;
 const StringId = as.common.StringId;
 
-const NodeListExtra = as.frontend.ast.NodeListExtra;
 const NodeListIterator = as.frontend.ast.NodeListIterator;
-const IfExtra = as.frontend.ast.IfExtra;
 const AssignmentExtra = as.frontend.ast.AssignmentExtra;
-const VarDeclarationExtra = as.frontend.ast.VarDeclarationExtra;
+const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
+const BlockExtra = as.frontend.ast.BlockExtra;
 const CallExtra = as.frontend.ast.CallExtra;
+const DeclarationExtra = as.frontend.ast.DeclarationExtra;
+const IfExtra = as.frontend.ast.IfExtra;

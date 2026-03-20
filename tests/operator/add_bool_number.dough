@@ -1,1 +1,1 @@
-true + 123; // expect compile error: Error at '123': mixing types is not allowed
+true + 123; // expect compile error: Error at '+': incompatible types

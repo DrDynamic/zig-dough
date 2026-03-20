@@ -42,11 +42,13 @@ pub inline fn calcNodeLocation(source: []const u8, node: Node, ast: *const AST) 
             const token_start = try token_stream.scanPosition(node.token_position);
             var token_end = token_start;
 
-            var iterator = NodeListIterator.init(ast, extra.args_start);
-            while (iterator.next()) |arg_node_id| {
-                if (!iterator.hasNext()) {
-                    const arg_node = ast.nodes.items[arg_node_id];
-                    token_end = try token_stream.scanPosition(arg_node.token_position);
+            if (extra.args_start) |args_start| {
+                var iterator = NodeListIterator.init(ast, args_start);
+                while (iterator.next()) |arg_node_id| {
+                    if (!iterator.hasNext()) {
+                        const arg_node = ast.nodes.items[arg_node_id];
+                        token_end = try token_stream.scanPosition(arg_node.token_position);
+                    }
                 }
             }
 
@@ -139,8 +141,7 @@ const ReportingModule = as.common.reporting.ReportingModule;
 const Token = as.frontend.Token;
 const Node = as.frontend.ast.Node;
 const AST = as.frontend.AST;
-const VarDeclarationExtra = as.frontend.ast.VarDeclarationExtra;
+const DeclarationExtra = as.frontend.ast.DeclarationExtra;
 const CallExtra = as.frontend.ast.CallExtra;
 const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
-const NodeListExtra = as.frontend.ast.NodeListExtra;
 const NodeListIterator = as.frontend.ast.NodeListIterator;

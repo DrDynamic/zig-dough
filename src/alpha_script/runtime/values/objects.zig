@@ -11,10 +11,10 @@ pub const ObjectHeader = struct {
     next: ?*ObjectHeader,
     next_gray: ?*ObjectHeader,
 
-    pub inline fn equals(self: ObjectHeader, other: Value) bool {
-        _ = self;
-        _ = other;
-        return false;
+    pub inline fn equals(self: *ObjectHeader, other: Value) bool {
+        if (!other.isObject()) return false;
+
+        return self == other.toObject();
     }
 
     pub inline fn is(self: *const ObjectHeader, tag: ObjectType) bool {
@@ -103,20 +103,31 @@ pub const ObjString = struct {
     header: ObjectHeader,
     data: []const u8,
 
-    pub fn init(data: []const u8, garbage_collector: *GarbageCollector) *ObjString {
-        var string = garbage_collector.createObject(ObjString, .string);
+    pub fn init(data: []const u8, memory_manager: *GarbageCollector) *ObjString {
+        if (getInterned(data, memory_manager)) |interned| {
+            memory_manager.allocator().free(data);
+            return interned;
+        }
+
+        var string = memory_manager.createObject(ObjString, .string);
         string.data = data;
+
+        memory_manager.interned_strings.put(data, string) catch {
+            @panic("failed to create string (OutOfMemory)");
+        };
 
         return string;
     }
 
-    pub fn copydata(data: []const u8, garbage_collector: *GarbageCollector) *ObjString {
-        const buffer = garbage_collector.allocator().alloc(u8, data.len) catch {
+    pub fn copydata(data: []const u8, memory_manager: *GarbageCollector) *ObjString {
+        if (getInterned(data, memory_manager)) |interned| return interned;
+
+        const buffer = memory_manager.allocator().alloc(u8, data.len) catch {
             // TODO runtime error?
             @panic("Failed to create String");
         };
         @memcpy(buffer, data);
-        return ObjString.init(buffer, garbage_collector);
+        return ObjString.init(buffer, memory_manager);
     }
 
     pub fn deinit(self: *ObjString, allocator: std.mem.Allocator) void {
@@ -126,6 +137,10 @@ pub const ObjString = struct {
 
     pub fn asObject(self: *ObjString) *ObjectHeader {
         return &self.header;
+    }
+
+    inline fn getInterned(data: []const u8, memory_manager: *GarbageCollector) ?*ObjString {
+        return memory_manager.interned_strings.get(data);
     }
 };
 

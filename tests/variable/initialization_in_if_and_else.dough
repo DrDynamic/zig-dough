@@ -7,4 +7,4 @@ if(false) {
     a = "Some Value";
 }
 
-print("a") // expect: Some Value
+print(a) // expect: Some Value

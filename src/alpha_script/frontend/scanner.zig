@@ -180,7 +180,7 @@ pub const TokenStream = struct {
     }
 
     fn makeString(self: *TokenStream, stringChar: u8) !Token {
-        const token_start = self.pos;
+        const token_start = self.pos - 1;
         while (!self.matchChar(stringChar) and !self.isAtEnd()) {
             self.pos += 1;
         }
@@ -196,7 +196,7 @@ pub const TokenStream = struct {
             .tag = .string_double_quote,
             .location = .{
                 .start = token_start,
-                .end = self.pos - 1,
+                .end = self.pos,
             },
         };
     }

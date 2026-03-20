@@ -1,4 +1,5 @@
 pub const NodeId = u32;
+pub const NodeExtraId = u32;
 
 pub const NodeType = enum(u8) {
     // literals
@@ -12,13 +13,16 @@ pub const NodeType = enum(u8) {
     object_string, // string_id
 
     // declarations
-    declaration_error_set, // VarDeclarationExtra
-    declaration_type, // VarDeclarationExtra
-    declaration_var, // VarDeclarationExtra
-    declaration_const, // VarDeclarationExtra
+    declaration_error_set, // DeclarationExtra
+    declaration_type, // DeclarationExtra
+    declaration_var, // DeclarationExtra
+    declaration_const, // DeclarationExtra
+
+    // statements
+    //    statement_for,
 
     // expressions
-    expression_block, // node_id (the start of a NodeList of Satements)
+    expression_block, // BlockExtra (the start of a NodeList of Satements)
     expression_if, // IfExtra
     expression_grouping, // node_id (the expression, that is grouped)
 
@@ -44,17 +48,25 @@ pub const NodeType = enum(u8) {
     binary_less_equal, // BinaryOpExtra
     binary_greater, // BinaryOpExtra
     binary_greater_equal, // BinaryOpExtra
-};
 
-pub const VarDeclarationExtra = struct {
-    name_id: StringId,
-    explicit_type: TypeId,
-    init_value: ?NodeId,
+    // logical operations
+    logical_and, // BinaryOpExtra
+    logical_or, // BinaryOpExtra
 };
 
 pub const AssignmentExtra = struct {
     target: NodeId,
     source: NodeId,
+};
+
+pub const BlockExtra = struct {
+    statements: ?NodeExtraId, // NodeListExtra
+};
+
+pub const DeclarationExtra = struct {
+    name_id: StringId,
+    explicit_type: TypeId,
+    init_value: ?NodeId,
 };
 
 pub const IfExtra = struct {
@@ -74,22 +86,22 @@ pub const BinaryOpExtra = struct {
 
 pub const CallExtra = struct {
     callee: NodeId,
-    args_start: NodeId,
+    args_start: ?NodeExtraId, // NodeListExtra
 };
 
 pub const NodeListExtra = struct {
     node_id: NodeId,
-    next: ?NodeId,
+    next: ?NodeExtraId,
 };
 
 pub const NodeListIterator = struct {
     ast: *const AST,
-    current: ?NodeId,
+    current: ?NodeExtraId,
 
-    pub fn init(ast: *const AST, first_node_id: NodeId) NodeListIterator {
+    pub fn init(ast: *const AST, first_extra_id: NodeExtraId) NodeListIterator {
         return .{
             .ast = ast,
-            .current = first_node_id,
+            .current = first_extra_id,
         };
     }
 
@@ -100,12 +112,10 @@ pub const NodeListIterator = struct {
     pub fn next(self: *NodeListIterator) ?NodeId {
         if (self.current == null) return null;
 
-        const current_node = self.ast.nodes.items[self.current.?];
-        assert(current_node.tag == .node_list);
+        const current_extra = self.ast.getExtra(self.current.?, NodeListExtra);
+        self.current = current_extra.next;
 
-        const extra = self.ast.getExtra(current_node.data.extra_id, NodeListExtra);
-        self.current = extra.next;
-        return extra.node_id;
+        return current_extra.node_id;
     }
 };
 
@@ -121,7 +131,7 @@ pub const Node = struct {
         error_value: TypeId,
         string_id: StringId,
         node_id: NodeId,
-        extra_id: u32,
+        extra_id: NodeExtraId,
     },
 };
 

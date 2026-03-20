@@ -1,9 +1,1 @@
-
-var a:?String;
-
-if(false) {
-}else {
-    a = "Some Value";
-}
-
-print(a) // expect compile error: access of possibly uninitialized variable
+print("str" == "str")

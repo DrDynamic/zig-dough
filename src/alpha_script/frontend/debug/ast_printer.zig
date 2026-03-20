@@ -76,12 +76,18 @@ pub const ASTPrinter = struct {
             => {
                 self.terminal.print("\n", .{});
             },
+            .logical_or,
+            .logical_and,
+            => {
+                self.terminal.print("\n", .{});
+            },
+
             .declaration_error_set,
             .declaration_type,
             .declaration_var,
             .declaration_const,
             => {
-                const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationExtra);
+                const data = self.ast.getExtra(node.data.extra_id, ast.DeclarationExtra);
                 const name = self.ast.string_table.get(data.name_id);
                 self.terminal.print(" name: {s}\n", .{name});
             },
@@ -155,12 +161,19 @@ pub const ASTPrinter = struct {
                 try self.printNode(extra.lhs, prefix, false);
                 try self.printNode(extra.rhs, prefix, true);
             },
+            .logical_or,
+            .logical_and,
+            => {
+                const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
+                try self.printNode(extra.lhs, prefix, false);
+                try self.printNode(extra.rhs, prefix, true);
+            },
             .declaration_error_set,
             .declaration_type,
             .declaration_const,
             .declaration_var,
             => {
-                const data = self.ast.getExtra(node.data.extra_id, ast.VarDeclarationExtra);
+                const data = self.ast.getExtra(node.data.extra_id, ast.DeclarationExtra);
                 if (data.init_value) |init_value_id| {
                     try self.printNode(init_value_id, prefix, true);
                 } else {
@@ -175,9 +188,13 @@ pub const ASTPrinter = struct {
                 try self.printNode(node.data.node_id, prefix, true);
             },
             .expression_block => {
-                var iterator = ast.NodeListIterator.init(self.ast, node.data.node_id);
-                while (iterator.next()) |statement_id| {
-                    try self.printNode(statement_id, prefix, iterator.hasNext() == false);
+                const extra = self.ast.getExtra(node.data.extra_id, ast.BlockExtra);
+
+                if (extra.statements) |statements| {
+                    var iterator = ast.NodeListIterator.init(self.ast, statements);
+                    while (iterator.next()) |statement_id| {
+                        try self.printNode(statement_id, prefix, iterator.hasNext() == false);
+                    }
                 }
             },
             .expression_if => {
@@ -207,12 +224,15 @@ pub const ASTPrinter = struct {
                 const extra = self.ast.getExtra(node.data.extra_id, ast.CallExtra);
                 try self.printNode(extra.callee, prefix, false);
 
-                var iterator = ast.NodeListIterator.init(self.ast, extra.args_start);
-                while (iterator.next()) |arg_id| {
-                    try self.printNode(arg_id, prefix, iterator.hasNext() == false);
+                if (extra.args_start) |args_start| {
+                    var iterator = ast.NodeListIterator.init(self.ast, args_start);
+                    while (iterator.next()) |arg_id| {
+                        try self.printNode(arg_id, prefix, iterator.hasNext() == false);
+                    }
                 }
             },
             .node_list => {
+                // TODO test is this still works
                 const data = self.ast.getExtra(node.data.extra_id, ast.NodeListExtra);
                 try self.printNode(data.node_id, prefix, true);
             },

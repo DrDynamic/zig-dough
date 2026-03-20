@@ -1,3 +1,11 @@
+const CurrentScope = enum {
+    unknown,
+    if_condition,
+};
+const SemanticAnalyserContext = struct {
+    current_scope: CurrentScope = CurrentScope.unknown,
+};
+
 pub const SemanticAnalyser = struct {
     pub const Error = error{
         OutOfMemory,
@@ -12,6 +20,7 @@ pub const SemanticAnalyser = struct {
         MissingCapture,
         IllegalMutation,
         InvalidAssignmentTarget,
+        IllegalAssignment,
         //
         NotFound,
     };
@@ -20,6 +29,7 @@ pub const SemanticAnalyser = struct {
     ast: *AST,
     error_reporter: *ErrorReporter,
     symbol_table: SymbolTable,
+    context: SemanticAnalyserContext = .{},
 
     pub fn init(error_reporter: *ErrorReporter, allocator: std.mem.Allocator) SemanticAnalyser {
         return .{
@@ -34,13 +44,13 @@ pub const SemanticAnalyser = struct {
         self.symbol_table.deinit();
     }
 
-    pub fn analyseAst(self: *SemanticAnalyser, ast: *AST) Error!void {
+    pub fn analyseAst(self: *SemanticAnalyser, ast: *AST) void {
         self.ast = ast;
 
         for (ast.getRoots()) |node_id| {
-            _ = self.analyse(node_id) catch |err| {
+            _ = self.analyse(node_id) catch {
                 ast.invalidate();
-                return err;
+                return;
             };
         }
     }
@@ -55,7 +65,10 @@ pub const SemanticAnalyser = struct {
             .literal_bool => TypePool.BOOL,
             .literal_int => TypePool.INT,
             .literal_float => TypePool.FLOAT,
-            .literal_error => node.data.error_value,
+            .literal_error => case: {
+                const error_id = node.data.error_value;
+                break :case self.ast.type_pool.getTypeByErrorId(error_id).?;
+            },
 
             // objects
             .object_string => TypePool.STRING,
@@ -71,9 +84,16 @@ pub const SemanticAnalyser = struct {
             .expression_block => |_| case: {
                 self.symbol_table.enterScope();
 
-                var iterator = NodeListIterator.init(self.ast, node.data.node_id);
-                while (iterator.next()) |list_node_id| {
-                    _ = try self.analyse(list_node_id);
+                const extra = self.ast.getExtra(node.data.extra_id, BlockExtra);
+
+                if (extra.statements) |statements| {
+                    var iterator = NodeListIterator.init(self.ast, statements);
+                    while (iterator.next()) |list_node_id| {
+                        _ = self.analyse(list_node_id) catch {
+                            self.ast.invalidate();
+                            break;
+                        };
+                    }
                 }
 
                 self.symbol_table.exitScope();
@@ -84,22 +104,26 @@ pub const SemanticAnalyser = struct {
                 var maybe_err: ?Error = null;
                 const extra = self.ast.getExtra(node.data.extra_id, IfExtra);
 
+                self.context.current_scope = .if_condition;
                 const type_condition = try self.analyse(extra.condition);
+                self.context.current_scope = .unknown;
 
                 self.symbol_table.enterScope();
 
                 if (type_condition == TypePool.BOOL) {
+                    var maybe_capture_error: ?Error = null;
                     self.assertHasNode(extra.then_capture, Error.PointlessCapture, "then capture is pointless (capture is always true)") catch |err| {
-                        maybe_err = err;
+                        maybe_capture_error = err;
                     };
                     self.assertHasNode(extra.else_capture, Error.PointlessCapture, "else capture is pointless (capture is always false)") catch |err| {
-                        maybe_err = err;
+                        maybe_capture_error = err;
                     };
+                    if (maybe_capture_error) |err| return err;
                 } else if (self.ast.type_pool.isNullable(type_condition)) {
                     if (extra.then_capture) |then_capture| {
                         const capture_node = &self.ast.nodes.items[then_capture];
                         const capture_type = try self.ast.type_pool.getOrCreateNotNullableType(type_condition);
-                        const capture_extra = self.ast.getExtra(capture_node.data.extra_id, VarDeclarationExtra);
+                        const capture_extra = self.ast.getExtra(capture_node.data.extra_id, DeclarationExtra);
 
                         capture_node.resolved_type_id = capture_type;
 
@@ -115,18 +139,20 @@ pub const SemanticAnalyser = struct {
                         self.symbol_table.initialize(capture_extra.name_id) catch unreachable; // declared above
                     } else {
                         const condition = self.ast.nodes.items[extra.condition];
-                        self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing then capture for nullable condition");
+                        self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing then capture for Nullable condition");
                         maybe_err = Error.MissingCapture;
                     }
 
-                    self.assertHasNode(extra.else_capture, Error.PointlessCapture, "capture is pointless for nullable condition (it is always null)") catch |err| {
+                    self.assertHasNode(extra.else_capture, Error.PointlessCapture, "capture is pointless for Nullable condition (it is always null)") catch |err| {
                         maybe_err = err;
                     };
                 } else if (self.ast.type_pool.isErrorUnion(type_condition)) {
+                    var maybe_capture_error: ?Error = null;
+
                     if (extra.then_capture) |then_capture| {
                         const capture_node = &self.ast.nodes.items[then_capture];
                         const capture_type = try self.ast.type_pool.getOrCreateNotErrorUnionType(type_condition);
-                        const capture_extra = self.ast.getExtra(capture_node.data.extra_id, VarDeclarationExtra);
+                        const capture_extra = self.ast.getExtra(capture_node.data.extra_id, DeclarationExtra);
 
                         capture_node.resolved_type_id = capture_type;
 
@@ -141,16 +167,16 @@ pub const SemanticAnalyser = struct {
                         };
                         self.symbol_table.initialize(capture_extra.name_id) catch unreachable; // existence is checked above
                     } else {
-                        const condition = self.ast.nodes.items[extra.condition];
-                        self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing then capture for nullable condition");
-                        maybe_err = Error.MissingCapture;
+                        const then_branch_node = self.ast.nodes.items[extra.then_branch];
+                        self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, then_branch_node, "missing then capture for ErrorUnion condition");
+                        maybe_capture_error = Error.MissingCapture;
                     }
 
                     if (extra.else_branch != null) {
                         if (extra.else_capture) |else_capture| {
                             const capture_node = &self.ast.nodes.items[else_capture];
                             const capture_type = self.ast.type_pool.getErrorSetFromTypeUnion(type_condition) catch unreachable; // assured ErrorUnion by parent:  else if (self.ast.type_pool.isErrorUnion(type_condition))
-                            const capture_extra = self.ast.getExtra(capture_node.data.extra_id, VarDeclarationExtra);
+                            const capture_extra = self.ast.getExtra(capture_node.data.extra_id, DeclarationExtra);
 
                             capture_node.resolved_type_id = capture_type;
 
@@ -164,15 +190,19 @@ pub const SemanticAnalyser = struct {
                                 return Error.RedeclarationError;
                             };
                             self.symbol_table.initialize(capture_extra.name_id) catch unreachable; // existence is checked above
-                        }
 
-                        const condition = self.ast.nodes.items[extra.condition];
-                        self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing else capture for error union condition");
-                        maybe_err = Error.MissingCapture;
+                        } else {
+                            const else_branch_node = self.ast.nodes.items[extra.else_branch.?];
+
+                            self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, else_branch_node, "missing else capture for ErrorUnion condition");
+                            maybe_capture_error = Error.MissingCapture;
+                        }
                     }
+
+                    if (maybe_capture_error) |err| return err;
                 } else {
                     const condition = self.ast.nodes.items[extra.condition];
-                    self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, condition, "condition needs to evaluate to bool, nullable type or error union");
+                    self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, condition, "condition needs to evaluate to Bool, Nullable type or ErrorUnion");
 
                     const type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, type_condition, self.ast.string_table);
                     defer self.allocator.free(type_name);
@@ -218,11 +248,16 @@ pub const SemanticAnalyser = struct {
 
             // access
             .assignment => case: {
+                if (self.context.current_scope == .if_condition) {
+                    self.error_reporter.semanticAnalyserError(self, Error.IllegalAssignment, node.*, "assignments in if conditions are not allowed");
+                    return Error.IllegalAssignment;
+                }
+
                 const extra = self.ast.getExtra(node.data.extra_id, AssignmentExtra);
                 const target_node = self.ast.nodes.items[extra.target];
 
                 if (target_node.tag != .identifier_expr) {
-                    self.error_reporter.semanticAnalyserError(self, Error.InvalidAssignmentTarget, target_node, "invalid assignment target");
+                    self.error_reporter.semanticAnalyserError(self, Error.InvalidAssignmentTarget, node.*, "invalid assignment target");
                     return Error.InvalidAssignmentTarget;
                 }
 
@@ -239,6 +274,8 @@ pub const SemanticAnalyser = struct {
                 }
 
                 const source_type = try self.analyse(extra.source);
+                const symbol_name = self.ast.string_table.get(maybe_symbol.?.name_id);
+                _ = symbol_name;
                 if (!self.ast.type_pool.isAssignable(maybe_symbol.?.type_id, source_type)) {
                     const source_node = self.ast.nodes.items[extra.source];
                     try self.reportNotAssignable(source_node, maybe_symbol.?.type_id, source_type);
@@ -276,7 +313,8 @@ pub const SemanticAnalyser = struct {
                     break :case type_rhs;
                 }
 
-                self.error_reporter.semanticAnalyserError(self, Error.UnsupportedOperand, node.*, "operand must be a number");
+                const node_rhs = self.ast.nodes.items[node.data.node_id];
+                self.error_reporter.semanticAnalyserError(self, Error.UnsupportedOperand, node_rhs, "operand must be a number");
                 return Error.UnsupportedOperand;
             },
             .logical_not => |_| case: {
@@ -286,7 +324,8 @@ pub const SemanticAnalyser = struct {
                     break :case type_rhs;
                 }
 
-                self.error_reporter.semanticAnalyserError(self, Error.UnsupportedOperand, node.*, "operand must be a bool");
+                const node_rhs = self.ast.nodes.items[node.data.node_id];
+                self.error_reporter.semanticAnalyserError(self, Error.UnsupportedOperand, node_rhs, "operand must be Bool");
                 return Error.UnsupportedOperand;
             },
 
@@ -310,13 +349,19 @@ pub const SemanticAnalyser = struct {
                 const extra = self.ast.getExtra(node.data.extra_id, CallExtra);
                 const type_callee = try self.analyse(extra.callee);
 
-                var iterator = NodeListIterator.init(self.ast, extra.args_start);
-                while (iterator.next()) |list_node_id| {
-                    _ = try self.analyse(list_node_id);
+                if (extra.args_start) |args_start| {
+                    var iterator = NodeListIterator.init(self.ast, args_start);
+                    while (iterator.next()) |list_node_id| {
+                        _ = try self.analyse(list_node_id);
+                    }
                 }
 
                 break :case type_callee;
             },
+            // logical operations
+            .logical_or,
+            .logical_and,
+            => try self.analyseBinaryLogical(node_id),
         };
 
         node.resolved_type_id = resolved_type;
@@ -325,7 +370,7 @@ pub const SemanticAnalyser = struct {
 
     fn analyseDeclaration(self: *SemanticAnalyser, node_id: NodeId, is_mutable: bool) Error!TypeId {
         const node = self.ast.nodes.items[node_id];
-        const extra = self.ast.getExtra(node.data.extra_id, VarDeclarationExtra);
+        const extra = self.ast.getExtra(node.data.extra_id, DeclarationExtra);
 
         // add variable to symbol table
         self.symbol_table.declare(
@@ -403,6 +448,7 @@ pub const SemanticAnalyser = struct {
             return TypePool.BOOL;
         }
         // For simplicity, assume binary operations return the same type as operands
+        self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, node, "incompatible types");
         return error.IncompatibleTypes;
     }
 
@@ -440,9 +486,22 @@ pub const SemanticAnalyser = struct {
             return TypePool.FLOAT;
         }
         // For simplicity, assume binary operations return the same type as operands
-        self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, node, "Incompatible types");
-
+        self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, node, "incompatible types");
         return error.IncompatibleTypes;
+    }
+
+    fn analyseBinaryLogical(self: *SemanticAnalyser, node_id: NodeId) Error!TypeId {
+        const node = self.ast.nodes.items[node_id];
+        const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
+
+        const lhs_type_id = try self.analyse(extra.lhs);
+        const rhs_type_id = try self.analyse(extra.rhs);
+
+        if (lhs_type_id != TypePool.BOOL or rhs_type_id != TypePool.BOOL) {
+            self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, node, "incompatible types");
+            return error.IncompatibleTypes;
+        }
+        return TypePool.BOOL;
     }
 
     fn assertHasNode(self: *SemanticAnalyser, node_id: ?NodeId, err: Error, message: []const u8) Error!void {
@@ -483,19 +542,19 @@ const as = @import("as");
 const ErrorReporter = as.common.reporting.ErrorReporter;
 
 const AST = as.frontend.AST;
-const TypePool = as.frontend.TypePool;
 const SymbolTable = as.frontend.SymbolTable;
+const TypePool = as.frontend.TypePool;
 
+const NodeId = as.frontend.ast.NodeId;
+const Node = as.frontend.ast.Node;
 const Symbol = as.frontend.Symbol;
 const StringId = as.common.StringId;
 const TypeId = as.frontend.TypeId;
-const NodeId = as.frontend.ast.NodeId;
-const Node = as.frontend.ast.Node;
 
-const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
-const VarDeclarationExtra = as.frontend.ast.VarDeclarationExtra;
-const NodeListExtra = as.frontend.ast.NodeListExtra;
-const NodeListIterator = as.frontend.ast.NodeListIterator;
-const CallExtra = as.frontend.ast.CallExtra;
-const IfExtra = as.frontend.ast.IfExtra;
 const AssignmentExtra = as.frontend.ast.AssignmentExtra;
+const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
+const BlockExtra = as.frontend.ast.BlockExtra;
+const CallExtra = as.frontend.ast.CallExtra;
+const DeclarationExtra = as.frontend.ast.DeclarationExtra;
+const IfExtra = as.frontend.ast.IfExtra;
+const NodeListIterator = as.frontend.ast.NodeListIterator;

@@ -3,13 +3,13 @@ error ErrorWithTrailingComma {
     NotFound,
     TooMany,
     EvenMoreProblems,
-};
+}
 
 error ErrorWithoutTrailingComma {
     NotFound,
     TooMany,
     EvenMoreProblems
-};
+}
 
 
 // all errors in a set can be assigned to an variable typed with that set
