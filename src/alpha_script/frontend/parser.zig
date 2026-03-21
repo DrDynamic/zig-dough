@@ -754,28 +754,41 @@ pub const Parser = struct {
     }
 
     fn function(self: *Parser) Error!NodeId {
+        const token_start = self.scanner.previous();
+
         var function_extra = FunctionExtra{
             .name_id = null,
             .parameters = null,
             .return_type = undefined,
             .body = undefined,
         };
+
         if (self.scanner.current().tag == .identifier) {
-            const name_id = self.parseIdentifier() catch unreachable; // if ensures that the current token is an identifier
-            _ = name_id;
+            function_extra.name_id = self.parseIdentifier() catch unreachable; // if ensures that the current token is an identifier
         }
         _ = self.consume(.left_paren) catch {
             self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect '(' after function declaration");
             return Error.UnexpectedToken;
         };
 
-        const parameters = try self.expressionList(.right_paren);
+        function_extra.parameters = try self.expressionList(.right_paren);
+
+        function_extra.return_type = try self.parseTypeErrorUnion();
 
         _ = self.consume(.left_brace) catch {
             self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect '{' before function body");
             return Error.UnexpectedToken;
         };
-        const body = try self.blockStatement();
+
+        function_extra.body = try self.blockStatement();
+
+        const extra_id = try self.ast.addExtra(function_extra);
+        return try self.ast.addNode(.{
+            .tag = .expression_function,
+            .token_position = token_start.location.start,
+            .resolved_type_id = TypePool.UNRESOLVED,
+            .data = .{ .extra_id = extra_id },
+        });
     }
 
     // types
