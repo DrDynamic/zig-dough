@@ -2,6 +2,18 @@ const CurrentScope = enum {
     unknown,
     if_condition,
 };
+
+const BlockContext = struct {
+    label: ?StringId,
+    expected_type: TypeId, // Welchen Typ erwartet dieser Block?
+    has_break: bool = false, // Wurde ein break gefunden?
+};
+
+const FunctionContext = struct {
+    return_type: TypeId,
+    name: StringId,
+};
+
 const SemanticAnalyserContext = struct {
     current_scope: CurrentScope = CurrentScope.unknown,
 };
@@ -79,7 +91,8 @@ pub const SemanticAnalyser = struct {
             .declaration_var => try self.analyseDeclaration(node_id, true),
             .declaration_const => try self.analyseDeclaration(node_id, false),
 
-            // statements
+            // expressions
+            .expression_function => try self.analyseFunction(node_id),
             .expression_grouping => try self.analyse(node.data.node_id),
             .expression_block => |_| case: {
                 self.symbol_table.enterScope();
@@ -429,6 +442,19 @@ pub const SemanticAnalyser = struct {
         return TypePool.VOID;
     }
 
+    fn analyseFunction(self: *SemanticAnalyser, node_id: NodeId) Error!TypeId {
+        const node = self.ast.nodes.items[node_id];
+        const extra = self.ast.getExtra(node.data.extra_id, FunctionExtra);
+
+        // match return type of body with function return type
+
+        // build function type
+
+        const return_type = try self.analyse(extra.body);
+        self.ast.type_pool.setFunctionType(extra.function_type_id, return_type) catch unreachable; // function type is created during parsing and guaranteed to exist
+        return extra.function_type_id;
+    }
+
     fn analyseBinaryCompare(self: *SemanticAnalyser, node_id: NodeId) Error!TypeId {
         const node = self.ast.nodes.items[node_id];
         const data = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
@@ -556,5 +582,6 @@ const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
 const BlockExtra = as.frontend.ast.BlockExtra;
 const CallExtra = as.frontend.ast.CallExtra;
 const DeclarationExtra = as.frontend.ast.DeclarationExtra;
+const FunctionExtra = as.frontend.ast.FunctionExtra;
 const IfExtra = as.frontend.ast.IfExtra;
 const NodeListIterator = as.frontend.ast.NodeListIterator;
