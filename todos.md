@@ -13,6 +13,7 @@
   - assert isType
   - assert hasValue (or isInitialized)
 - @enforceVar("description") // tell the compiler to not enforce the variable to be const. A description why is mendatory
+- block expressions (labeld breaks)
 
 - defer
 - xor

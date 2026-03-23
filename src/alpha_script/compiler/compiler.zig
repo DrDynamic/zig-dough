@@ -59,7 +59,7 @@ pub const Compiler = struct {
             try self.compileStatement(node_id);
         }
 
-        try self.chunk.emit(Instruction.fromABC(.call_return, 0, 0, 0));
+        try self.chunk.emit(Instruction.fromABC(.statement_return, 0, 0, 0));
 
         const module = ObjModule.init(function, self.garbage_collector);
         _ = self.garbage_collector.temp_objects.pop();
@@ -188,6 +188,13 @@ pub const Compiler = struct {
                 _ = self.garbage_collector.temp_objects.pop();
 
                 return register;
+            },
+
+            // statements
+            .statement_return => {
+                const reg = try self.compileExpression(node.data.node_id);
+                try self.chunk.emit(Instruction.fromAB(.call_return, reg, 0));
+                return 0;
             },
 
             // expressions
@@ -351,13 +358,6 @@ pub const Compiler = struct {
                 self.patchJump(pos_end_jump);
 
                 return reg_result;
-            },
-
-            // stack_actions
-            .call_return => {
-                const reg = try self.compileExpression(node.data.node_id);
-                try self.chunk.emit(Instruction.fromAB(.call_return, reg, 0));
-                return 0;
             },
         };
     }

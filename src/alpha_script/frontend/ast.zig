@@ -20,6 +20,7 @@ pub const NodeType = enum(u8) {
 
     // statements
     //    statement_for,
+    statement_return, // node_id (the returned expression)
 
     // expressions
     expression_block, // BlockExtra (the start of a NodeList of Satements)
@@ -31,7 +32,6 @@ pub const NodeType = enum(u8) {
     assignment, // node_id (the expression that is assigned)
     identifier_expr, // string_id
     call, // CallExtra
-    call_return,
     node_list, // NodeListExtra
 
     // unary operations

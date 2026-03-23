@@ -114,7 +114,7 @@ pub const ASTPrinter = struct {
                 self.terminal.print("\n", .{});
             },
             //
-            .call_return => {
+            .statement_return => {
                 self.terminal.print("\n", .{});
             },
         }
@@ -180,7 +180,7 @@ pub const ASTPrinter = struct {
                     self.terminal.print("{s} (no initializer)\n", .{prefix});
                 }
             },
-            .call_return => {
+            .statement_return => {
                 try self.printNode(node.data.node_id, prefix, true);
             },
             // expressions

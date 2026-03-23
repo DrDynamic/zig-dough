@@ -14,6 +14,7 @@ pub const TypeTag = enum(u8) {
 
     // complex
     module,
+    function,
 
     // error
     anyerror,
@@ -42,6 +43,11 @@ pub const Type = union(TypeTag) {
     },
 
     union_type: struct {
+        type_list_index: u32,
+        count: u32,
+    },
+
+    function: struct {
         type_list_index: u32,
         count: u32,
     },
@@ -92,6 +98,7 @@ pub const TypePool = struct {
     types: ArrayList(Type),
     type_list_buffer: std.ArrayList(TypeId),
     named_type_cache: std.AutoHashMap(StringId, TypeId),
+    function_cache: TypeListMap,
     union_cache: TypeListMap,
     error_set_cache: TypeListMap,
     error_type_cache: std.AutoHashMap(ErrorId, TypeId),
@@ -113,6 +120,7 @@ pub const TypePool = struct {
             .types = ArrayList(Type).init(allocator),
             .type_list_buffer = std.ArrayList(TypeId).init(allocator),
             .named_type_cache = std.AutoHashMap(StringId, TypeId).init(allocator),
+            .function_cache = TypeListMap.init(allocator),
             .union_cache = TypeListMap.init(allocator),
             .error_set_cache = TypeListMap.init(allocator),
             .error_type_cache = std.AutoHashMap(ErrorId, TypeId).init(allocator),
@@ -158,6 +166,28 @@ pub const TypePool = struct {
             .float => try type_name.appendSlice("Float"),
             .string => try type_name.appendSlice("String"),
             .module => try type_name.appendSlice("Module"),
+            .function => {
+                try type_name.append('(');
+                const signature = self.getFunctionSignature(t);
+                for (signature[0 .. signature.len - 1]) |parameter_id| {
+                    const name = try self.getTypeNameAlloc(allocator, parameter_id, string_table);
+                    defer allocator.free(name);
+
+                    try type_name.appendSlice(name);
+                    try type_name.append(',');
+                }
+
+                if (signature.len > 1) {
+                    _ = type_name.pop();
+                }
+
+                try type_name.append(')');
+
+                const return_name = try self.getTypeNameAlloc(allocator, signature[signature.len - 1], string_table);
+                defer allocator.free(return_name);
+
+                return type_name.items;
+            },
             .anyerror => try type_name.appendSlice("Anyerror"),
             .error_type => try type_name.appendSlice(string_table.get(self.types.items[type_id].error_type)),
             .error_set => {
@@ -271,6 +301,32 @@ pub const TypePool = struct {
             .float => return source_id == TypePool.INT, // int type can be promoted to float
             .string => return false,
             .module => unreachable,
+            .function => {
+                const source = self.types.items[source_id];
+                if (source != .function) {
+                    return false;
+                }
+
+                const target_signature = self.getFunctionSignature(target);
+                const source_signature = self.getFunctionSignature(source);
+
+                if (target_signature.len != source_signature.len) {
+                    // TODO special case optionas:
+                    // This is Invalid (we dont know how test is called):
+                    //   const test:(a:Int, b:Int=42)void = fn(a:Int)void{}
+                    // This could be valid (when test is called, b would get always the default):
+                    //   const test:(a:Int)void = fn(a:Int, b:Int=42)void{}
+                    return false;
+                }
+
+                for (0..target_signature.len) |index| {
+                    if (target_signature[index] != source_signature[index]) {
+                        return false;
+                    }
+                }
+
+                return true;
+            },
             .anyerror => {
                 const source_type = self.types.items[source_id];
                 return source_type == .error_type;
@@ -330,6 +386,34 @@ pub const TypePool = struct {
         }
 
         return null;
+    }
+
+    /// creates a function type
+    pub fn getOrCreateFunctionType(self: *TypePool, parameter_type_ids: ?[]const TypeId, return_type_id: TypeId) Allocator.Error!TypeId {
+        // concat all types so TypeListMap can be used as cache
+        const signature_len = if (parameter_type_ids) |ids| ids.len + 1 else 1;
+        const signature = try self.allocator.alloc(TypeId, signature_len);
+        if (parameter_type_ids) |ids| {
+            @memcpy(signature, ids);
+            signature[signature.len - 1] = return_type_id;
+        } else {
+            signature[0] = return_type_id;
+        }
+
+        if (self.function_cache.get(signature)) |type_id| {
+            return type_id;
+        }
+
+        const list_index: u32 = @intCast(self.type_list_buffer.items.len);
+        try self.type_list_buffer.appendUnalignedSlice(signature);
+
+        const type_id: TypeId = @intCast(self.types.items.len);
+        try self.types.append(.{ .function = .{
+            .type_list_index = list_index,
+            .count = @intCast(signature.len),
+        } });
+
+        return type_id;
     }
 
     /// create an type union
@@ -504,6 +588,11 @@ pub const TypePool = struct {
             if (member_error_id == error_type_id) return true;
         }
         return false;
+    }
+
+    /// retrive all members of an error set
+    inline fn getFunctionSignature(self: *const TypePool, function: Type) []const TypeId {
+        return self.type_list_buffer.items[function.function.type_list_index .. function.function.type_list_index + function.function.count];
     }
 
     /// retrive all member types of an type union

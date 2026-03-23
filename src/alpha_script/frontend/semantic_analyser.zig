@@ -5,17 +5,48 @@ const CurrentScope = enum {
 
 const BlockContext = struct {
     label: ?StringId,
-    expected_type: TypeId, // Welchen Typ erwartet dieser Block?
-    has_break: bool = false, // Wurde ein break gefunden?
+    expected_type: TypeId,
+    has_break: bool = false,
 };
 
 const FunctionContext = struct {
+    node_id: NodeId,
     return_type: TypeId,
-    name: StringId,
 };
 
 const SemanticAnalyserContext = struct {
     current_scope: CurrentScope = CurrentScope.unknown,
+
+    block_stack: std.ArrayList(BlockContext),
+    function_stack: std.ArrayList(FunctionContext),
+
+    pub fn init(allocator: std.mem.Allocator) SemanticAnalyserContext {
+        return .{
+            .current_scope = CurrentScope.unknown,
+            .block_stack = std.ArrayList(BlockContext).init(allocator),
+            .function_stack = std.ArrayList(FunctionContext).init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *SemanticAnalyserContext) void {
+        self.block_stack.deinit();
+        self.function_stack.deinit();
+    }
+
+    pub fn pushFunction(self: *SemanticAnalyserContext, node_id: NodeId, fn_extra: FunctionExtra) !void {
+        try self.function_stack.append(.{
+            .node_id = node_id,
+            .return_type = fn_extra.return_type,
+        });
+    }
+
+    pub fn popFunction(self: *SemanticAnalyserContext) ?FunctionContext {
+        return self.function_stack.pop();
+    }
+
+    pub fn currentFunction(self: *const SemanticAnalyserContext) ?FunctionContext {
+        return self.function_stack.getLastOrNull();
+    }
 };
 
 pub const SemanticAnalyser = struct {
@@ -33,6 +64,7 @@ pub const SemanticAnalyser = struct {
         IllegalMutation,
         InvalidAssignmentTarget,
         IllegalAssignment,
+        UnexpectedReturn,
         //
         NotFound,
     };
@@ -90,6 +122,30 @@ pub const SemanticAnalyser = struct {
             .declaration_type => node.resolved_type_id,
             .declaration_var => try self.analyseDeclaration(node_id, true),
             .declaration_const => try self.analyseDeclaration(node_id, false),
+
+            // statements
+            .statement_return => |_| case: {
+                if (self.context.currentFunction()) |fn_context| {
+                    const returned_type = self.analyse(node.data.node_id);
+
+                    if (!self.ast.type_pool.isAssignable(fn_context.return_type, returned_type)) {
+                        try self.reportTypeMissmatch(node, fn_context.return_type, returned_type, "can not return {[source_type]s} as {[target_type]s}");
+
+                        const return_type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, fn_context.return_type, self.ast.string_table);
+                        defer self.allocator.free(return_type_name);
+
+                        const hint_message = try std.fmt.allocPrint(self.allocator, "fn has return type {s}", .{return_type_name});
+                        defer self.allocator.free(hint_message);
+
+                        try self.error_reporter.semanticAnalyserHint(self, fn_context.node_id, hint_message);
+                        return Error.TypeMismatch;
+                    }
+                } else {
+                    self.error_reporter.semanticAnalyserError(self, Error.UnexpectedReturn, node.*, "return statement ourside of fn");
+                    return Error.UnexpectedReturn;
+                }
+                break :case try self.analyse(node.data.node_id);
+            },
 
             // expressions
             .expression_function => try self.analyseFunction(node_id),
@@ -355,9 +411,7 @@ pub const SemanticAnalyser = struct {
             .binary_greater,
             .binary_greater_equal,
             => try self.analyseBinaryCompare(node_id),
-            .call_return => |_| case: {
-                break :case try self.analyse(node.data.node_id);
-            },
+
             .call => |_| case: {
                 const extra = self.ast.getExtra(node.data.extra_id, CallExtra);
                 const type_callee = try self.analyse(extra.callee);
@@ -446,13 +500,26 @@ pub const SemanticAnalyser = struct {
         const node = self.ast.nodes.items[node_id];
         const extra = self.ast.getExtra(node.data.extra_id, FunctionExtra);
 
-        // match return type of body with function return type
+        const signature: [32]TypeId = undefined;
+        var count: u8 = 0;
+        if (extra.parameters) |list_id| {
+            var iterator = NodeListIterator.init(self.ast, list_id);
+            while (iterator.next()) |parameter_id| {
+                const parameter_type_id = try self.analyse(parameter_id);
+                signature[count] = parameter_type_id;
+                count += 1;
+            }
+        }
 
-        // build function type
+        const type_id = try self.ast.type_pool.getOrCreateFunctionType(signature[0..count], extra.return_type);
 
-        const return_type = try self.analyse(extra.body);
-        self.ast.type_pool.setFunctionType(extra.function_type_id, return_type) catch unreachable; // function type is created during parsing and guaranteed to exist
-        return extra.function_type_id;
+        try self.context.pushFunction(node_id, extra);
+
+        _ = try self.analyse(extra.body);
+
+        try self.context.popFunction();
+
+        return type_id;
     }
 
     fn analyseBinaryCompare(self: *SemanticAnalyser, node_id: NodeId) Error!TypeId {
@@ -538,19 +605,23 @@ pub const SemanticAnalyser = struct {
         }
     }
 
-    fn reportNotAssignable(self: *const SemanticAnalyser, node: Node, target_type_id: TypeId, sourceType_id: TypeId) !void {
+    inline fn reportNotAssignable(self: *const SemanticAnalyser, node: Node, target_type_id: TypeId, source_type_id: TypeId) !void {
+        try self.reportTypeMissmatch(node, target_type_id, source_type_id, "can not assign {[source_type]s} to {[target_type]s}");
+    }
+
+    inline fn reportTypeMissmatch(self: *const SemanticAnalyser, node: Node, target_type_id: TypeId, source_type_id: TypeId, comptime message: []const u8) !void {
         const target_type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, target_type_id, self.ast.string_table);
         defer self.allocator.free(target_type_name);
-        const source_type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, sourceType_id, self.ast.string_table);
+        const source_type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, source_type_id, self.ast.string_table);
         defer self.allocator.free(source_type_name);
 
-        const error_message = try std.fmt.allocPrint(self.allocator, "can not assign {s} to {s}", .{ source_type_name, target_type_name });
+        const error_message = try std.fmt.allocPrint(self.allocator, message, .{ .source_type = source_type_name, .target_type = target_type_name });
         defer self.allocator.free(error_message);
 
         self.error_reporter.semanticAnalyserError(self, Error.TypeMismatch, node, error_message);
     }
 
-    fn reportRedeclarationError(self: *const SemanticAnalyser, node: Node, identifier_name: StringId) !void {
+    inline fn reportRedeclarationError(self: *const SemanticAnalyser, node: Node, identifier_name: StringId) !void {
         const error_message = try std.fmt.allocPrint(self.allocator, "identifier '{s}' has already been declared", .{self.ast.string_table.get(identifier_name)});
         defer self.allocator.free(error_message);
 
@@ -571,6 +642,7 @@ const AST = as.frontend.AST;
 const SymbolTable = as.frontend.SymbolTable;
 const TypePool = as.frontend.TypePool;
 
+const NodeExtraId = as.frontend.ast.NodeExtraId;
 const NodeId = as.frontend.ast.NodeId;
 const Node = as.frontend.ast.Node;
 const Symbol = as.frontend.Symbol;

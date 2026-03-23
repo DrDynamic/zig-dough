@@ -239,7 +239,7 @@ pub const Parser = struct {
         const expr = try self.expression();
         _ = try self.match(.semicolon);
         return try self.ast.addNode(.{
-            .tag = .call_return,
+            .tag = .statement_return,
             .token_position = token.location.start,
             .resolved_type_id = TypePool.UNRESOLVED,
             .data = .{ .node_id = expr },
