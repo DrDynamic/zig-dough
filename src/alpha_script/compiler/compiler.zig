@@ -66,6 +66,10 @@ pub const Compiler = struct {
         return module;
     }
 
+    fn compileChunk(self:*Compiler, node_id:NodeId, chunk:*Chunk) !void {
+         
+    }
+
     fn compileStatement(self: *Compiler, node_id: NodeId) !void {
         const node = self.ast.nodes.items[node_id];
 
@@ -197,6 +201,9 @@ pub const Compiler = struct {
             },
 
             // expressions
+            .expression_function => {
+                const function = ObjFunction.init(self.garbage_collector);
+            },
             .expression_grouping => try self.compileExpression(node.data.node_id),
             .expression_block => {
                 self.enterScope();
