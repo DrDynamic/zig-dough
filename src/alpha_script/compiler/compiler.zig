@@ -98,6 +98,11 @@ pub const Compiler = struct {
                     try self.addLocal(extra.name_id, init_reg, true, true);
                 }
             },
+            // statements
+            .statement_return => {
+                const reg = try self.compileExpression(node.data.node_id);
+                try self.chunk.emit(Instruction.fromAB(.call_return, reg, 0));
+            },
             else => { // expression statements
                 const snapshot = self.next_free_reg;
 
@@ -119,6 +124,7 @@ pub const Compiler = struct {
             .declaration_type,
             .declaration_const,
             .declaration_var,
+            .statement_return,
             => unreachable,
 
             // literals
@@ -188,13 +194,6 @@ pub const Compiler = struct {
                 _ = self.garbage_collector.temp_objects.pop();
 
                 return register;
-            },
-
-            // statements
-            .statement_return => {
-                const reg = try self.compileExpression(node.data.node_id);
-                try self.chunk.emit(Instruction.fromAB(.call_return, reg, 0));
-                return 0;
             },
 
             // expressions
