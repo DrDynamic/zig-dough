@@ -66,8 +66,35 @@ pub const Compiler = struct {
         return module;
     }
 
-    fn compileChunk(self:*Compiler, node_id:NodeId, chunk:*Chunk) !void {
-         
+    fn compileFunction(self: *Compiler, node_id: NodeId) !void {
+        const fn_node = self.ast.nodes.items[node_id];
+        const fn_extra = self.ast.getExtra(fn_node.data.error_value, FunctionExtra);
+
+        var function = ObjFunction.init(self.garbage_collector);
+        try self.garbage_collector.temp_objects.append(function.asObject());
+
+        const compiler = Compiler.init(self.error_reporter, self.garbage_collector, self.allocator);
+
+        self.enterScope();
+        // define parameters
+
+        // compile function body
+
+        self.exitScope();
+
+        compiler.compileStatement(node_id);
+
+        // snapshots
+        const snapshot_max_registers = self.max_registers;
+        const snapshot_chunk = self.chunk;
+
+        // set new function
+        self.max_registers = &function.max_registers;
+        self.chunk = &function.chunk;
+
+        // restore snapshots
+        self.max_registers = snapshot_max_registers;
+        self.chunk = snapshot_chunk;
     }
 
     fn compileStatement(self: *Compiler, node_id: NodeId) !void {
@@ -529,4 +556,5 @@ const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
 const BlockExtra = as.frontend.ast.BlockExtra;
 const CallExtra = as.frontend.ast.CallExtra;
 const DeclarationExtra = as.frontend.ast.DeclarationExtra;
+const FunctionExtra = as.frontend.ast.FunctionExtra;
 const IfExtra = as.frontend.ast.IfExtra;
