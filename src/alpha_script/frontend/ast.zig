@@ -17,6 +17,7 @@ pub const NodeType = enum(u8) {
     declaration_type, // DeclarationExtra
     declaration_var, // DeclarationExtra
     declaration_const, // DeclarationExtra
+    declaration_parameter, // string_id (the name of the parameter)
 
     // statements
     //    statement_for,
@@ -29,7 +30,7 @@ pub const NodeType = enum(u8) {
     expression_function, // FunctionExtra
 
     // access
-    assignment, // node_id (the expression that is assigned)
+    expression_assignment, // node_id (the expression that is assigned)
     identifier_expr, // string_id
     call, // CallExtra
     node_list, // NodeListExtra

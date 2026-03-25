@@ -10,6 +10,33 @@ pub const Local = struct {
     is_initialized: bool,
 };
 
+pub const CompilerContext = struct {
+    parent_context: ?*CompilerContext = null,
+
+    max_registers: *u8 = undefined,
+    chunk: *Chunk = undefined,
+    locals: std.ArrayList(Local),
+    scope_depth: i32,
+    next_free_reg: RegisterId,
+
+    pub fn init(parent: ?*CompilerContext, max_registers: *u8, chunk: *Chunk, allocator: std.mem.Allocator) CompilerContext {
+        return .{
+            .parent_context = parent,
+
+            .locals = std.ArrayList(Local).init(allocator),
+            .scope_depth = 0,
+            .next_free_reg = 0,
+
+            .max_registers = max_registers,
+            .chunk = chunk,
+        };
+    }
+
+    pub fn deinit(self: *CompilerContext) void {
+        self.locals.deinit();
+    }
+};
+
 pub const Compiler = struct {
     pub const Error = error{
         UndefinedIdentifier,
@@ -22,79 +49,86 @@ pub const Compiler = struct {
     garbage_collector: *GarbageCollector,
     error_reporter: *const ErrorReporter,
 
+    // initialized in compile()
+    is_compiling: bool = false, // used by MemoryManager, know if it needs to look at context.chunk.constants
     ast: *AST = undefined,
-    max_registers: *u8 = undefined,
-    chunk: *Chunk = undefined,
-    locals: std.ArrayList(Local),
-    scope_depth: i32,
-    next_free_reg: RegisterId,
+    context: CompilerContext = undefined,
 
     pub fn init(error_reporter: *const ErrorReporter, garbage_collector: *GarbageCollector, allocator: std.mem.Allocator) Compiler {
         return .{
             .allocator = allocator,
             .garbage_collector = garbage_collector,
             .error_reporter = error_reporter,
-            .locals = std.ArrayList(Local).init(allocator),
-            .scope_depth = 0,
-            .next_free_reg = 0,
         };
+    }
+
+    pub fn deinit(self: *Compiler) void {
+        self.context.deinit();
     }
 
     pub fn compile(self: *Compiler, _ast: *AST) !*ObjModule {
         self.ast = _ast;
 
-        // temporary initialization to satisfy MemoryManager
-        var tempChunk = Chunk.init(self.allocator);
-        defer tempChunk.deinit();
-
-        self.chunk = &tempChunk;
-
         var function = ObjFunction.init(self.garbage_collector);
         try self.garbage_collector.temp_objects.append(function.asObject());
 
-        self.max_registers = &function.max_registers;
-        self.chunk = &function.chunk;
+        self.context = CompilerContext.init(
+            null,
+            &function.max_registers,
+            &function.chunk,
+            self.allocator,
+        );
+        defer self.context.deinit();
+
+        self.is_compiling = true;
+        defer self.is_compiling = false;
 
         for (self.ast.getRoots()) |node_id| {
             try self.compileStatement(node_id);
         }
 
-        try self.chunk.emit(Instruction.fromABC(.statement_return, 0, 0, 0));
+        try self.context.chunk.emit(Instruction.fromABC(.call_return, 0, 0, 0));
 
         const module = ObjModule.init(function, self.garbage_collector);
-        _ = self.garbage_collector.temp_objects.pop();
+        _ = self.garbage_collector.temp_objects.pop(); // pop compiled function
         return module;
     }
 
-    fn compileFunction(self: *Compiler, node_id: NodeId) !void {
+    fn compileFunction(self: *Compiler, node_id: NodeId) !*ObjFunction {
         const fn_node = self.ast.nodes.items[node_id];
         const fn_extra = self.ast.getExtra(fn_node.data.error_value, FunctionExtra);
 
         var function = ObjFunction.init(self.garbage_collector);
         try self.garbage_collector.temp_objects.append(function.asObject());
 
-        const compiler = Compiler.init(self.error_reporter, self.garbage_collector, self.allocator);
+        const parent_context = self.context;
+        const fn_context = CompilerContext.init(
+            &parent_context,
+            &function.max_registers,
+            &function.chunk,
+            self.allocator,
+        );
+        defer fn_context.deinit();
+        self.context = fn_context;
 
         self.enterScope();
         // define parameters
+        if (fn_extra.parameters) |parameters| {
+            var iterator = NodeListIterator.init(self.ast, parameters);
+
+            while (iterator.next()) |parameter_id| {
+                const parameter_node = self.ast.nodes.items[parameter_id];
+                const parameter_reg = self.allocateRegister();
+                try self.addLocal(parameter_node.data.string_id, parameter_reg, true, true);
+            }
+        }
 
         // compile function body
+        self.compileStatement(fn_extra.body);
 
         self.exitScope();
 
-        compiler.compileStatement(node_id);
-
-        // snapshots
-        const snapshot_max_registers = self.max_registers;
-        const snapshot_chunk = self.chunk;
-
-        // set new function
-        self.max_registers = &function.max_registers;
-        self.chunk = &function.chunk;
-
-        // restore snapshots
-        self.max_registers = snapshot_max_registers;
-        self.chunk = snapshot_chunk;
+        self.context = parent_context;
     }
 
     fn compileStatement(self: *Compiler, node_id: NodeId) !void {
@@ -111,16 +145,15 @@ pub const Compiler = struct {
 
                 if (extra.init_value) |init_value_id| {
                     // create the local before initializing it, so compileExpression can reference the variable
-                    const local_index = self.locals.items.len;
-                    try self.addLocal(extra.name_id, self.next_free_reg, false, true);
+                    const local_index = self.context.locals.items.len;
+                    try self.addLocal(extra.name_id, self.context.next_free_reg, false, true);
 
-                    try self.compileExpressionEnsureRegister(init_value_id, self.next_free_reg);
+                    try self.compileExpressionEnsureRegister(init_value_id, self.context.next_free_reg);
                     _ = self.allocateRegister();
 
-                    self.locals.items[local_index].is_initialized = true;
+                    self.context.locals.items[local_index].is_initialized = true;
                 } else {
-                    const init_reg = self.next_free_reg;
-                    self.next_free_reg += 1;
+                    const init_reg = self.allocateRegister();
                     try self.emitLoadConstant(
                         .load_const,
                         init_reg,
@@ -132,14 +165,14 @@ pub const Compiler = struct {
             // statements
             .statement_return => {
                 const reg = try self.compileExpression(node.data.node_id);
-                try self.chunk.emit(Instruction.fromAB(.call_return, reg, 0));
+                try self.context.chunk.emit(Instruction.fromAB(.call_return, reg, 0));
             },
             else => { // expression statements
-                const snapshot = self.next_free_reg;
+                const snapshot = self.context.next_free_reg;
 
                 _ = try self.compileExpression(node_id);
 
-                self.next_free_reg = snapshot;
+                self.context.next_free_reg = snapshot;
             },
         }
     }
@@ -155,12 +188,13 @@ pub const Compiler = struct {
             .declaration_type,
             .declaration_const,
             .declaration_var,
+            .declaration_parameter,
             .statement_return,
             => unreachable,
 
             // literals
             .literal_null => {
-                const register = self.next_free_reg;
+                const register = self.context.next_free_reg;
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -170,7 +204,7 @@ pub const Compiler = struct {
                 return register;
             },
             .literal_bool => {
-                const register = self.next_free_reg;
+                const register = self.context.next_free_reg;
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -180,7 +214,7 @@ pub const Compiler = struct {
                 return register;
             },
             .literal_int => {
-                const register = self.next_free_reg;
+                const register = self.context.next_free_reg;
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -190,7 +224,7 @@ pub const Compiler = struct {
                 return register;
             },
             .literal_float => {
-                const register = self.next_free_reg;
+                const register = self.context.next_free_reg;
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -200,7 +234,7 @@ pub const Compiler = struct {
                 return register;
             },
             .literal_error => {
-                const register = self.next_free_reg;
+                const register = self.context.next_free_reg;
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -212,7 +246,7 @@ pub const Compiler = struct {
 
             // objects
             .object_string => {
-                const register = self.next_free_reg;
+                const register = self.context.next_free_reg;
                 const string_data = self.ast.string_table.get(node.data.string_id);
                 const string_object = ObjString.copydata(string_data, self.garbage_collector).asObject();
 
@@ -228,8 +262,31 @@ pub const Compiler = struct {
             },
 
             // expressions
+            .expression_assignment => {
+                const extra = self.ast.getExtra(node.data.extra_id, AssignmentExtra);
+                const target_node = self.ast.nodes.items[extra.target]; // semantic analyser assures that this is an identifier_expr
+                const reg_target = self.resolveLocal(target_node.data.string_id) catch unreachable; // assured by semyntc analyser
+
+                try self.compileExpressionEnsureRegister(extra.source, reg_target);
+                return reg_target;
+            },
             .expression_function => {
-                const function = ObjFunction.init(self.garbage_collector);
+                const fn_extra = self.ast.getExtra(node.data.extra_id, FunctionExtra);
+
+                const fn_obj = try self.compileFunction(node_id);
+                const fn_value = Value.fromObject(fn_obj.asObject());
+
+                var result_reg: RegisterId = undefined;
+                if (fn_extra.name_id) |name_id| {
+                    result_reg = self.allocateRegister();
+                    try self.emitLoadConstant(.load_const, result_reg, fn_value);
+                    try self.addLocal(name_id, result_reg, true, true);
+                } else {
+                    result_reg = self.context.next_free_reg;
+                    try self.emitLoadConstant(.load_const, result_reg, fn_value);
+                }
+
+                return result_reg;
             },
             .expression_grouping => try self.compileExpression(node.data.node_id),
             .expression_block => {
@@ -254,10 +311,8 @@ pub const Compiler = struct {
 
                 const reg_condition = try self.compileExpression(extra.condition);
 
-                const pos_jump_else = self.chunk.code.items.len;
-
                 // Error and null evaluate to false. Should we use a explicit implementation for this instead of relying on falseness?
-                try self.chunk.emit(Instruction.fromAB(.jump_if_false, reg_condition, 0));
+                const pos_jump_else = try self.emitJump(.jump_if_false, reg_condition);
 
                 self.enterScope();
                 if (extra.then_capture) |then_capture_id| {
@@ -273,13 +328,12 @@ pub const Compiler = struct {
                     }
                 }
 
-                const reg_result = self.next_free_reg;
+                const reg_result = self.context.next_free_reg;
                 try self.compileExpressionEnsureRegister(extra.then_branch, reg_result);
 
                 self.exitScope();
 
-                const pos_jump_end = self.chunk.code.items.len;
-                try self.chunk.emit(Instruction.fromAB(.jump, 0, 0));
+                const pos_jump_end = try self.emitJump(.jump, 0);
 
                 // patch jump_else to jump to else branch
                 self.patchJump(pos_jump_else);
@@ -310,19 +364,12 @@ pub const Compiler = struct {
             },
 
             // access
-            .assignment => {
-                const extra = self.ast.getExtra(node.data.extra_id, AssignmentExtra);
-                const target_node = self.ast.nodes.items[extra.target]; // semantic analyser assures that this is an identifier_expr
-                const reg_target = self.resolveLocal(target_node.data.string_id) catch unreachable; // assured by semyntc analyser
 
-                try self.compileExpressionEnsureRegister(extra.source, reg_target);
-                return reg_target;
-            },
             .identifier_expr => self.resolveLocal(node.data.string_id) catch unreachable, // assured by semyntc analyser
             .call => {
                 const extra = self.ast.getExtra(node.data.extra_id, CallExtra);
 
-                const snapshot = self.next_free_reg;
+                const snapshot = self.context.next_free_reg;
 
                 const reg_callee = self.allocateRegister();
 
@@ -331,7 +378,7 @@ pub const Compiler = struct {
                 var arg_count: u8 = 0;
                 if (extra.args_start) |args_start| {
                     var iterator = NodeListIterator.init(self.ast, args_start);
-                    const reg_start = self.next_free_reg;
+                    const reg_start = self.context.next_free_reg;
 
                     while (iterator.next()) |arg_node_id| {
                         _ = try self.compileExpressionEnsureRegister(arg_node_id, reg_start + arg_count);
@@ -339,8 +386,8 @@ pub const Compiler = struct {
                     }
                 }
 
-                try self.chunk.emit(Instruction.fromABC(.call, reg_callee, reg_callee, arg_count));
-                self.next_free_reg = snapshot;
+                try self.context.chunk.emit(Instruction.fromABC(.call, reg_callee, reg_callee, arg_count));
+                self.context.next_free_reg = snapshot;
                 return reg_callee;
             },
 
@@ -372,7 +419,7 @@ pub const Compiler = struct {
 
             .logical_and => {
                 const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
-                const reg_result = self.next_free_reg;
+                const reg_result = self.context.next_free_reg;
 
                 try self.compileExpressionEnsureRegister(extra.lhs, reg_result);
                 const pos_end_jump = try self.emitJump(.jump_if_false, reg_result);
@@ -383,7 +430,7 @@ pub const Compiler = struct {
             },
             .logical_or => {
                 const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
-                const reg_result = self.next_free_reg;
+                const reg_result = self.context.next_free_reg;
 
                 try self.compileExpressionEnsureRegister(extra.lhs, reg_result);
                 const pos_end_jump = try self.emitJump(.jump_if_true, reg_result);
@@ -398,37 +445,37 @@ pub const Compiler = struct {
     inline fn compileExpressionEnsureRegister(self: *Compiler, node_id: ast.NodeId, register: RegisterId) !void {
         const result = try self.compileExpression(node_id);
         if (result != register) {
-            try self.chunk.emit(Instruction.fromABC(.move, register, result, 0));
-            if (register <= self.next_free_reg) {
-                self.next_free_reg = register + 1;
+            try self.context.chunk.emit(Instruction.fromABC(.move, register, result, 0));
+            if (register <= self.context.next_free_reg) {
+                self.context.next_free_reg = register + 1;
             }
         }
     }
 
     inline fn allocateRegister(self: *Compiler) RegisterId {
-        const next_free = self.next_free_reg;
-        self.next_free_reg += 1;
-        self.max_registers.* = @max(self.next_free_reg, self.max_registers.*);
+        const next_free = self.context.next_free_reg;
+        self.context.next_free_reg += 1;
+        self.context.max_registers.* = @max(self.context.next_free_reg, self.context.max_registers.*);
         return next_free;
     }
 
     fn emitUnaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {
-        const snapshot = self.next_free_reg;
+        const snapshot = self.context.next_free_reg;
 
         const reg_rhs = try self.compileExpression(node.data.node_id);
         const reg_dest = if (reg_rhs < snapshot) snapshot else reg_rhs;
 
-        try self.chunk.emit(Instruction.fromABC(opcode, reg_dest, reg_rhs, 0));
+        try self.context.chunk.emit(Instruction.fromABC(opcode, reg_dest, reg_rhs, 0));
 
         // free all regs
-        self.next_free_reg = snapshot;
+        self.context.next_free_reg = snapshot;
         return reg_dest;
     }
 
     fn emitBinaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {
         const extra = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
 
-        const snapshot = self.next_free_reg;
+        const snapshot = self.context.next_free_reg;
 
         const reg_lhs = try self.compileExpression(extra.lhs);
         _ = self.allocateRegister();
@@ -436,30 +483,30 @@ pub const Compiler = struct {
 
         const reg_dest = if (reg_lhs < snapshot) snapshot else reg_lhs;
 
-        try self.chunk.emit(Instruction.fromABC(opcode, reg_dest, reg_lhs, reg_rhs));
+        try self.context.chunk.emit(Instruction.fromABC(opcode, reg_dest, reg_lhs, reg_rhs));
 
         // free all regs
-        self.next_free_reg = snapshot;
+        self.context.next_free_reg = snapshot;
         return reg_dest;
     }
 
     fn emitLoadConstant(self: *Compiler, opcode: OpCode, register: RegisterId, constant: Value) !void {
-        const constant_id = try self.chunk.addConstant(constant);
-        try self.chunk.emit(Instruction.fromAB(opcode, register, constant_id));
+        const constant_id = try self.context.chunk.addConstant(constant);
+        try self.context.chunk.emit(Instruction.fromAB(opcode, register, constant_id));
     }
 
     /// emits a InstructionAB with the given jump.
     /// Returns the position of the jump
     inline fn emitJump(self: *Compiler, opcode: OpCode, arg: u8) !usize {
         const pos = self.chunk.code.items.len;
-        try self.chunk.emit(Instruction.fromAB(opcode, arg, 0));
+        try self.context.chunk.emit(Instruction.fromAB(opcode, arg, 0));
         return pos;
     }
 
     inline fn patchJump(self: *Compiler, jump_pos: usize) void {
-        const jump_offset: i32 = @intCast(self.chunk.code.items.len - jump_pos);
+        const jump_offset: i32 = @intCast(self.context.chunk.code.items.len - jump_pos);
         assert(jump_offset > 0);
-        self.chunk.code.items[jump_pos].ab.b = @intCast(jump_offset);
+        self.context.chunk.code.items[jump_pos].ab.b = @intCast(jump_offset);
     }
 
     /// bind a variable to a register
@@ -472,9 +519,9 @@ pub const Compiler = struct {
         // std.debug.print("## }}\n", .{});
         // std.debug.print("\n", .{});
 
-        try self.locals.append(.{
+        try self.context.locals.append(.{
             .name_id = name_id,
-            .depth = self.scope_depth,
+            .depth = self.context.scope_depth,
             .reg_slot = register,
             .owns_register = owns_register,
             .is_captured = false,
@@ -487,9 +534,9 @@ pub const Compiler = struct {
         const str = self.ast.string_table.get(name_id);
 
         _ = str;
-        var local_index: isize = @as(isize, @intCast(self.locals.items.len)) - 1;
+        var local_index: isize = @as(isize, @intCast(self.context.locals.items.len)) - 1;
         while (local_index >= 0) : (local_index -= 1) {
-            const local = self.locals.items[@intCast(local_index)];
+            const local = self.context.locals.items[@intCast(local_index)];
             if (local.name_id == name_id) return local.reg_slot;
         }
 
@@ -497,15 +544,15 @@ pub const Compiler = struct {
     }
 
     fn enterScope(self: *Compiler) void {
-        self.scope_depth += 1;
+        self.context.scope_depth += 1;
         // TODO error handling (overflow of scopes?)
     }
 
     fn exitScope(self: *Compiler) void {
-        self.scope_depth -= 1;
+        self.context.scope_depth -= 1;
         // TODO error handlich (underflow of scopes?)
-        while (self.locals.items.len > 0 and self.locals.items[self.locals.items.len - 1].depth > self.scope_depth) {
-            const local = self.locals.pop();
+        while (self.context.locals.items.len > 0 and self.context.locals.items[self.context.locals.items.len - 1].depth > self.context.scope_depth) {
+            const local = self.context.locals.pop();
 
             // std.debug.print("## popLocal {{\n", .{});
             // std.debug.print("##   name: {s}\n", .{self.ast.string_table.get(local.?.name_id)});
@@ -516,7 +563,7 @@ pub const Compiler = struct {
             // std.debug.print("\n", .{});
 
             if (local.?.owns_register) {
-                self.next_free_reg = local.?.reg_slot;
+                self.context.next_free_reg = local.?.reg_slot;
             }
         }
     }

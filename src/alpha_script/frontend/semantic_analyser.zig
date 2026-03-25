@@ -73,7 +73,7 @@ pub const SemanticAnalyser = struct {
     ast: *AST,
     error_reporter: *ErrorReporter,
     symbol_table: SymbolTable,
-    context: SemanticAnalyserContext = .{},
+    context: SemanticAnalyserContext,
 
     pub fn init(error_reporter: *ErrorReporter, allocator: std.mem.Allocator) SemanticAnalyser {
         return .{
@@ -81,11 +81,13 @@ pub const SemanticAnalyser = struct {
             .ast = undefined,
             .error_reporter = error_reporter,
             .symbol_table = SymbolTable.init(allocator),
+            .context = SemanticAnalyserContext.init(allocator),
         };
     }
 
     pub fn deinit(self: *SemanticAnalyser) void {
         self.symbol_table.deinit();
+        self.context.deinit();
     }
 
     pub fn analyseAst(self: *SemanticAnalyser, ast: *AST) void {
@@ -122,6 +124,7 @@ pub const SemanticAnalyser = struct {
             .declaration_type => node.resolved_type_id,
             .declaration_var => try self.analyseDeclaration(node_id, true),
             .declaration_const => try self.analyseDeclaration(node_id, false),
+            .declaration_parameter => unreachable, // analysed in .expression_function
 
             // statements
             .statement_return => |_| case: {
@@ -148,6 +151,49 @@ pub const SemanticAnalyser = struct {
             },
 
             // expressions
+            .expression_assignment => case: {
+                if (self.context.current_scope == .if_condition) {
+                    self.error_reporter.semanticAnalyserError(self, Error.IllegalAssignment, node.*, "assignments in if conditions are not allowed");
+                    return Error.IllegalAssignment;
+                }
+
+                const extra = self.ast.getExtra(node.data.extra_id, AssignmentExtra);
+                const target_node = self.ast.nodes.items[extra.target];
+
+                if (target_node.tag != .identifier_expr) {
+                    self.error_reporter.semanticAnalyserError(self, Error.InvalidAssignmentTarget, node.*, "invalid assignment target");
+                    return Error.InvalidAssignmentTarget;
+                }
+
+                const maybe_symbol = self.symbol_table.lookup(target_node.data.string_id);
+
+                if (maybe_symbol == null) {
+                    self.error_reporter.semanticAnalyserError(self, Error.UndefinedIdentifier, target_node, "undefined identifier");
+                    return Error.UndefinedIdentifier;
+                }
+
+                if (!maybe_symbol.?.is_mutable) {
+                    self.error_reporter.semanticAnalyserError(self, Error.IllegalMutation, node.*, "mutation not allowd");
+                    return Error.IllegalMutation;
+                }
+
+                const source_type = try self.analyse(extra.source);
+                const symbol_name = self.ast.string_table.get(maybe_symbol.?.name_id);
+                _ = symbol_name;
+                if (!self.ast.type_pool.isAssignable(maybe_symbol.?.type_id, source_type)) {
+                    const source_node = self.ast.nodes.items[extra.source];
+                    try self.reportNotAssignable(source_node, maybe_symbol.?.type_id, source_type);
+
+                    const declaration_node = self.ast.nodes.items[maybe_symbol.?.node_id];
+                    self.error_reporter.semanticAnalyserHint(self, declaration_node, "declared here:");
+
+                    return Error.TypeMismatch;
+                }
+
+                self.symbol_table.initialize(maybe_symbol.?.name_id) catch unreachable; // existence is checked above
+
+                break :case source_type;
+            },
             .expression_function => try self.analyseFunction(node_id),
             .expression_grouping => try self.analyse(node.data.node_id),
             .expression_block => |_| case: {
@@ -316,49 +362,6 @@ pub const SemanticAnalyser = struct {
             },
 
             // access
-            .assignment => case: {
-                if (self.context.current_scope == .if_condition) {
-                    self.error_reporter.semanticAnalyserError(self, Error.IllegalAssignment, node.*, "assignments in if conditions are not allowed");
-                    return Error.IllegalAssignment;
-                }
-
-                const extra = self.ast.getExtra(node.data.extra_id, AssignmentExtra);
-                const target_node = self.ast.nodes.items[extra.target];
-
-                if (target_node.tag != .identifier_expr) {
-                    self.error_reporter.semanticAnalyserError(self, Error.InvalidAssignmentTarget, node.*, "invalid assignment target");
-                    return Error.InvalidAssignmentTarget;
-                }
-
-                const maybe_symbol = self.symbol_table.lookup(target_node.data.string_id);
-
-                if (maybe_symbol == null) {
-                    self.error_reporter.semanticAnalyserError(self, Error.UndefinedIdentifier, target_node, "undefined identifier");
-                    return Error.UndefinedIdentifier;
-                }
-
-                if (!maybe_symbol.?.is_mutable) {
-                    self.error_reporter.semanticAnalyserError(self, Error.IllegalMutation, node.*, "mutation not allowd");
-                    return Error.IllegalMutation;
-                }
-
-                const source_type = try self.analyse(extra.source);
-                const symbol_name = self.ast.string_table.get(maybe_symbol.?.name_id);
-                _ = symbol_name;
-                if (!self.ast.type_pool.isAssignable(maybe_symbol.?.type_id, source_type)) {
-                    const source_node = self.ast.nodes.items[extra.source];
-                    try self.reportNotAssignable(source_node, maybe_symbol.?.type_id, source_type);
-
-                    const declaration_node = self.ast.nodes.items[maybe_symbol.?.node_id];
-                    self.error_reporter.semanticAnalyserHint(self, declaration_node, "declared here:");
-
-                    return Error.TypeMismatch;
-                }
-
-                self.symbol_table.initialize(maybe_symbol.?.name_id) catch unreachable; // existence is checked above
-
-                break :case source_type;
-            },
             .identifier_expr => |_| case: {
                 if (self.symbol_table.lookup(node.data.string_id)) |symbol| {
                     if (symbol.initialized == false) {
@@ -505,7 +508,9 @@ pub const SemanticAnalyser = struct {
         if (extra.parameters) |list_id| {
             var iterator = NodeListIterator.init(self.ast, list_id);
             while (iterator.next()) |parameter_id| {
-                const parameter_type_id = try self.analyse(parameter_id);
+                const parameter_node = self.ast.nodes.items[parameter_id];
+                const parameter_type_id = parameter_node.resolved_type_id;
+
                 signature[count] = parameter_type_id;
                 count += 1;
             }

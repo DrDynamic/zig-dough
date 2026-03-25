@@ -153,17 +153,12 @@ pub const Parser = struct {
     }
 
     fn declarationVar(self: *Parser) !NodeId {
-        const name_id: StringId = self.parseIdentifier() catch |err| switch (err) {
-            error.TokenMissMatch => {
-                self.reportError(Error.UnexpectedToken, self.scanner.current(), "Expect variable name");
-                _ = try self.advance();
-                _ = try self.match(.colon);
-                _ = try self.match(.equal);
-                return error.ParserError;
-            },
-            else => {
-                return err;
-            },
+        const name_id: StringId = self.parseIdentifier() catch {
+            self.reportError(Error.UnexpectedToken, self.scanner.current(), "Expect variable name");
+            _ = try self.advance();
+            _ = try self.match(.colon);
+            _ = try self.match(.equal);
+            return error.ParserError;
         };
         const identifier_token = self.scanner.previous();
 
@@ -348,7 +343,7 @@ pub const Parser = struct {
             });
 
             return try self.ast.addNode(.{
-                .tag = .assignment,
+                .tag = .expression_assignment,
                 .token_position = token_equal.location.start,
                 .resolved_type_id = TypePool.UNRESOLVED,
                 .data = .{ .extra_id = extra_id },
@@ -565,27 +560,6 @@ pub const Parser = struct {
         return callee;
     }
 
-    /// parses a comma seperated list of expressions until end_token is found
-    /// returns the number of found expressions and the start of a node_list with all expressions
-    fn expressionList(self: *Parser, end_token: TokenType) Error!?NodeExtraId {
-        var expression_ids: [255]NodeId = undefined;
-        var count: u8 = 0;
-        while (!self.check(end_token)) {
-            expression_ids[count] = try self.expression();
-
-            if (count == 255) {
-                return error.ListOverflow;
-            }
-            count += 1;
-            if (!try self.match(.comma)) {
-                break;
-            }
-        }
-        _ = try self.consume(end_token);
-
-        return try self.nodeListFromArray(expression_ids[0..count]);
-    }
-
     fn primary(self: *Parser) Error!NodeId {
         const token = self.scanner.current();
         return switch (token.tag) {
@@ -771,7 +745,7 @@ pub const Parser = struct {
             return Error.UnexpectedToken;
         };
 
-        function_extra.parameters = try self.expressionList(.right_paren);
+        function_extra.parameters = try self.parameterList();
 
         function_extra.return_type = try self.parseTypeErrorUnion();
 
@@ -939,11 +913,70 @@ pub const Parser = struct {
         };
     }
 
-    // string table
-    pub fn parseIdentifier(self: *Parser) Error!StringId {
-        const token = try self.consume(.identifier);
-        const lexeme = self.scanner.getLexeme(token);
-        return self.ast.string_table.add(lexeme);
+    /// parses a comma seperated list of parameters until ')' is found
+    /// returns the start of a node_list with all parameters
+    fn parameterList(self: *Parser) Error!?NodeExtraId {
+        var parameter_ids: [32]NodeId = undefined;
+        var count: u8 = 0;
+        while (true) {
+            const name_id: StringId = self.parseIdentifier() catch {
+                self.reportError(Error.UnexpectedToken, self.scanner.current(), "Expect variable name");
+                _ = try self.advance();
+                _ = try self.match(.colon);
+                _ = try self.match(.equal);
+                return error.ParserError;
+            };
+            const identifier_token = self.scanner.previous();
+
+            _ = self.consume(.colon) catch {
+                self.reportError(.UnexpectedToken, self.scanner.current(), "Expect type after parameter name");
+                return Error.UnexpectedToken;
+            };
+
+            const type_id: TypeId = try self.parseTypeErrorUnion();
+
+            // for optional parameters (not implemented yet)
+            // var assignment_node_id: ?NodeId = null;
+            // if (try self.match(.equal)) {
+            //     assignment_node_id = try self.expression();
+            // }
+
+            parameter_ids[count] = try self.ast.addNode(.{
+                .tag = .declaration_parameter,
+                .token_position = identifier_token.location.start,
+                .resolved_type_id = type_id,
+                .data = .{ .string_id = name_id },
+            });
+
+            if (count >= 32) {
+                return error.ListOverflow;
+            }
+            count += 1;
+            if (!try self.match(.comma)) {
+                break;
+            }
+        }
+    }
+
+    /// parses a comma seperated list of expressions until end_token is found
+    /// returns the start of a node_list with all expressions
+    fn expressionList(self: *Parser, end_token: TokenType) Error!?NodeExtraId {
+        var expression_ids: [255]NodeId = undefined;
+        var count: u8 = 0;
+        while (!self.check(end_token)) {
+            expression_ids[count] = try self.expression();
+
+            if (count == 255) {
+                return error.ListOverflow;
+            }
+            count += 1;
+            if (!try self.match(.comma)) {
+                break;
+            }
+        }
+        _ = try self.consume(end_token);
+
+        return try self.nodeListFromArray(expression_ids[0..count]);
     }
 
     // node list
@@ -961,6 +994,13 @@ pub const Parser = struct {
         }
 
         return list_node_extra.?;
+    }
+
+    // string table
+    pub fn parseIdentifier(self: *Parser) Error!StringId {
+        const token = try self.consume(.identifier);
+        const lexeme = self.scanner.getLexeme(token);
+        return self.ast.string_table.add(lexeme);
     }
 
     // scanner interactions

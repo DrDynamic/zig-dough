@@ -53,6 +53,7 @@ pub const Interpreter = struct {
         self.string_table.deinit();
         self.error_pool.deinit();
         self.semantic_analyser.deinit();
+        self.compiler.deinit();
     }
 
     pub fn compileModule(self: *Interpreter, filename: []const u8, compiler_options: CompilerOptions) !*ObjModule {

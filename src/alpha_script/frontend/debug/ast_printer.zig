@@ -91,17 +91,61 @@ pub const ASTPrinter = struct {
                 const name = self.ast.string_table.get(data.name_id);
                 self.terminal.print(" name: {s}\n", .{name});
             },
+            .declaration_parameter => unreachable,
 
             // expressions
-            .expression_grouping,
+            .expression_assignment => self.terminal.print("\n", .{}),
+            .expression_function => {
+                const fn_extra = self.ast.getExtra(node.data.extra_id, FunctionExtra);
+
+                var prototype = std.ArrayList(u8).init(self.ast.allocator);
+                defer prototype.deinit();
+
+                if (fn_extra.name_id) |name_id| {
+                    const fn_name = self.ast.string_table.get(name_id);
+                    try prototype.appendSlice(fn_name);
+                }
+
+                try prototype.append('(');
+
+                if (fn_extra.parameters) |parameters| {
+                    var iterator = NodeListIterator.init(self.ast, parameters);
+                    while (iterator.next()) |parameter_id| {
+                        const parameter_node = self.ast.nodes.items[parameter_id];
+                        const parameter_name = self.ast.string_table.get(parameter_node.data.string_id);
+                        try prototype.appendSlice(parameter_name);
+                        try prototype.append(':');
+
+                        const type_name = try self.ast.type_pool.getTypeNameAlloc(
+                            self.ast.allocator,
+                            parameter_node.resolved_type_id,
+                            self.ast.string_table,
+                        );
+                        defer self.ast.allocator.free(type_name);
+                        try prototype.appendSlice(type_name);
+                        try prototype.append(',');
+                    }
+                    prototype.pop(); // remove last ','
+                }
+
+                try prototype.append(')');
+
+                const return_type_name = try self.ast.type_pool.getTypeNameAlloc(
+                    self.ast.allocator,
+                    fn_extra.return_type,
+                    self.ast.string_table,
+                );
+                defer self.ast.allocator.free(return_type_name);
+                try prototype.appendSlice(return_type_name);
+            },
             .expression_block,
+            .expression_grouping,
             .expression_if,
             => {
                 self.terminal.print("\n", .{});
             },
 
             // access
-            .assignment => self.terminal.print("\n", .{}),
             .identifier_expr,
             => {
                 const str = self.ast.string_table.get(node.data.string_id);
@@ -184,8 +228,10 @@ pub const ASTPrinter = struct {
                 try self.printNode(node.data.node_id, prefix, true);
             },
             // expressions
-            .expression_grouping => {
-                try self.printNode(node.data.node_id, prefix, true);
+            .expression_assignment => {
+                const extra = self.ast.getExtra(node.data.extra_id, ast.AssignmentExtra);
+                try self.printNode(extra.target, prefix, false);
+                try self.printNode(extra.source, prefix, true);
             },
             .expression_block => {
                 const extra = self.ast.getExtra(node.data.extra_id, ast.BlockExtra);
@@ -196,6 +242,9 @@ pub const ASTPrinter = struct {
                         try self.printNode(statement_id, prefix, iterator.hasNext() == false);
                     }
                 }
+            },
+            .expression_grouping => {
+                try self.printNode(node.data.node_id, prefix, true);
             },
             .expression_if => {
                 const extra = self.ast.getExtra(node.data.extra_id, ast.IfExtra);
@@ -214,11 +263,6 @@ pub const ASTPrinter = struct {
                 }
             },
             // access
-            .assignment => {
-                const extra = self.ast.getExtra(node.data.extra_id, ast.AssignmentExtra);
-                try self.printNode(extra.target, prefix, false);
-                try self.printNode(extra.source, prefix, true);
-            },
             .call,
             => {
                 const extra = self.ast.getExtra(node.data.extra_id, ast.CallExtra);
@@ -244,6 +288,9 @@ const std = @import("std");
 const as = @import("as");
 const ast = as.frontend.ast;
 const AST = as.frontend.AST;
+const NodeListIterator = as.frontend.ast.NodeListIterator;
 const TypePool = as.frontend.TypePool;
-const BinaryOpExtra = ast.BinaryOpExtra;
 const Terminal = as.common.Terminal;
+
+const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
+const FunctionExtra = as.frontend.ast.FunctionExtra;

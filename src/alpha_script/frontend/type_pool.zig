@@ -27,13 +27,19 @@ pub const TypeTag = enum(u8) {
 
 pub const Type = union(TypeTag) {
     unresolved,
+
     void,
     null,
     bool,
     int,
     float,
     string,
+
     module,
+    function: struct {
+        type_list_index: u32,
+        count: u32,
+    },
 
     anyerror,
     error_type: ErrorId,
@@ -43,11 +49,6 @@ pub const Type = union(TypeTag) {
     },
 
     union_type: struct {
-        type_list_index: u32,
-        count: u32,
-    },
-
-    function: struct {
         type_list_index: u32,
         count: u32,
     },

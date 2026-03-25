@@ -164,7 +164,13 @@ pub const GarbageCollector = struct {
     }
 
     inline fn markCompilerRoots(self: *GarbageCollector) void {
-        self.markArray(self.compiler.chunk.constants.items);
+        if (self.compiler.is_compiling) {
+            var maybe_context: ?*CompilerContext = &self.compiler.context;
+            while (maybe_context) |context| {
+                self.markArray(context.chunk.constants.items);
+                maybe_context = context.parent_context;
+            }
+        }
     }
 
     inline fn markTempObjects(self: *GarbageCollector) void {
@@ -427,6 +433,7 @@ const std = @import("std");
 const as = @import("as");
 
 const Compiler = as.compiler.Compiler;
+const CompilerContext = as.compiler.CompilerContext;
 const ObjectHeader = as.runtime.values.ObjectHeader;
 const ObjFunction = as.runtime.values.ObjFunction;
 const ObjModule = as.runtime.values.ObjModule;

@@ -219,6 +219,12 @@ pub const VirtualMachine = struct {
 
                     if (callee.isObject()) {
                         switch (callee.object.tag) {
+                            .function => {
+                                const callee_fn = callee.toObject().as(values.ObjFunction);
+                                const result = try self.call(callee_fn, arg_count);
+
+                                stack[reg_dest] = result;
+                            },
                             .native_function => {
                                 const native = callee.object.as(values.ObjNative);
 
@@ -269,6 +275,7 @@ pub const VirtualMachine = struct {
     }
 
     inline fn call(self: *VirtualMachine, function: *ObjFunction, arg_count: u8) Error!void {
+        // TODO is this needed? (already checked by SemanticAnalyser?)
         if (arg_count < function.arity) {
             const error_string = std.fmt.allocPrint(self.allocator, "Expected {d} arguments but got {d}", .{ function.arity, arg_count }) catch {
                 @panic("Allocation failed!");
