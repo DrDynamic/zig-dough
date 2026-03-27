@@ -21,7 +21,7 @@ pub const OpCode = enum(u8) {
 
     // interaction
     call, // REG_DEST REG_CALLEE ARGS_COUNT // call REG_CALLEE and store the return Value in REG_DEST (ARG_COUNT registers after REG_CALLEE are reserved for call arguments)
-    call_return,
+    call_return, // REG_DEST REG_VALUE // return from a call and put REG_VALUE in REG_DEST
 
     // controlflow
     jump, // 0 OFFSET // jump to the instruction at the current instruction index + OFFSET

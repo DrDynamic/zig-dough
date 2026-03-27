@@ -248,7 +248,12 @@ pub const VirtualMachine = struct {
                         return;
                     }
                     // TODO return from a function -> restore stack top, decrement frame_count, etc.
-                    unreachable;
+                    const reg_dest = base + instruction.abc.a;
+                    const reg_value = base + instruction.abc.b;
+
+                    const return_value = stack[reg_value];
+                    // TODO write return va.lue
+                    self.frame_count -= 1;
                 },
 
                 // control flow

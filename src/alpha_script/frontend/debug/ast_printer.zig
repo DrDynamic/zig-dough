@@ -125,7 +125,7 @@ pub const ASTPrinter = struct {
                         try prototype.appendSlice(type_name);
                         try prototype.append(',');
                     }
-                    prototype.pop(); // remove last ','
+                    _ = prototype.pop(); // remove last ','
                 }
 
                 try prototype.append(')');
@@ -212,6 +212,7 @@ pub const ASTPrinter = struct {
                 try self.printNode(extra.lhs, prefix, false);
                 try self.printNode(extra.rhs, prefix, true);
             },
+            .declaration_parameter => unreachable,
             .declaration_error_set,
             .declaration_type,
             .declaration_const,
@@ -228,6 +229,10 @@ pub const ASTPrinter = struct {
                 try self.printNode(node.data.node_id, prefix, true);
             },
             // expressions
+            .expression_function => {
+                const extra = self.ast.getExtra(node.data.extra_id, FunctionExtra);
+                try self.printNode(extra.body, prefix, true);
+            },
             .expression_assignment => {
                 const extra = self.ast.getExtra(node.data.extra_id, ast.AssignmentExtra);
                 try self.printNode(extra.target, prefix, false);

@@ -121,7 +121,7 @@ fn registerNatives(ast: *as.frontend.AST, semantic_analyser: *as.frontend.Semant
         @panic("failed to register natives");
     };
 
-    compiler.locals.append(.{
+    compiler.context.locals.append(.{
         .name_id = name_id,
         .depth = 0,
         .reg_slot = 0,
@@ -132,7 +132,7 @@ fn registerNatives(ast: *as.frontend.AST, semantic_analyser: *as.frontend.Semant
         @panic("failed to register natives");
     };
 
-    compiler.next_free_reg += 1;
+    compiler.context.next_free_reg += 1;
 
     const native_print = vm.allocator.create(as.runtime.values.ObjNative) catch {
         @panic("failed to register natives");

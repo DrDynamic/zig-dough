@@ -101,8 +101,8 @@ pub const Compiler = struct {
         var function = ObjFunction.init(self.garbage_collector);
         try self.garbage_collector.temp_objects.append(function.asObject());
 
-        const parent_context = self.context;
-        const fn_context = CompilerContext.init(
+        var parent_context = self.context;
+        var fn_context = CompilerContext.init(
             &parent_context,
             &function.max_registers,
             &function.chunk,
@@ -124,11 +124,13 @@ pub const Compiler = struct {
         }
 
         // compile function body
-        self.compileStatement(fn_extra.body);
+        try self.compileStatement(fn_extra.body);
 
         self.exitScope();
 
         self.context = parent_context;
+
+        return function;
     }
 
     fn compileStatement(self: *Compiler, node_id: NodeId) !void {
@@ -165,7 +167,7 @@ pub const Compiler = struct {
             // statements
             .statement_return => {
                 const reg = try self.compileExpression(node.data.node_id);
-                try self.context.chunk.emit(Instruction.fromAB(.call_return, reg, 0));
+                try self.context.chunk.emit(Instruction.fromABC(.call_return, 0, reg, 0));
             },
             else => { // expression statements
                 const snapshot = self.context.next_free_reg;
@@ -498,7 +500,7 @@ pub const Compiler = struct {
     /// emits a InstructionAB with the given jump.
     /// Returns the position of the jump
     inline fn emitJump(self: *Compiler, opcode: OpCode, arg: u8) !usize {
-        const pos = self.chunk.code.items.len;
+        const pos = self.context.chunk.code.items.len;
         try self.context.chunk.emit(Instruction.fromAB(opcode, arg, 0));
         return pos;
     }

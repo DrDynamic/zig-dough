@@ -129,10 +129,10 @@ pub const SemanticAnalyser = struct {
             // statements
             .statement_return => |_| case: {
                 if (self.context.currentFunction()) |fn_context| {
-                    const returned_type = self.analyse(node.data.node_id);
+                    const returned_type = try self.analyse(node.data.node_id);
 
                     if (!self.ast.type_pool.isAssignable(fn_context.return_type, returned_type)) {
-                        try self.reportTypeMissmatch(node, fn_context.return_type, returned_type, "can not return {[source_type]s} as {[target_type]s}");
+                        try self.reportTypeMissmatch(node.*, fn_context.return_type, returned_type, "can not return {[source_type]s} as {[target_type]s}");
 
                         const return_type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, fn_context.return_type, self.ast.string_table);
                         defer self.allocator.free(return_type_name);
