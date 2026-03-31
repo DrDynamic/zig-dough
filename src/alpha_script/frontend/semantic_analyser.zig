@@ -140,7 +140,8 @@ pub const SemanticAnalyser = struct {
                         const hint_message = try std.fmt.allocPrint(self.allocator, "fn has return type {s}", .{return_type_name});
                         defer self.allocator.free(hint_message);
 
-                        try self.error_reporter.semanticAnalyserHint(self, fn_context.node_id, hint_message);
+                        const fn_node = self.ast.nodes.items[fn_context.node_id];
+                        self.error_reporter.semanticAnalyserHint(self, fn_node, hint_message);
                         return Error.TypeMismatch;
                     }
                 } else {
@@ -503,7 +504,7 @@ pub const SemanticAnalyser = struct {
         const node = self.ast.nodes.items[node_id];
         const extra = self.ast.getExtra(node.data.extra_id, FunctionExtra);
 
-        const signature: [32]TypeId = undefined;
+        var signature: [32]TypeId = undefined;
         var count: u8 = 0;
         if (extra.parameters) |list_id| {
             var iterator = NodeListIterator.init(self.ast, list_id);
@@ -522,7 +523,7 @@ pub const SemanticAnalyser = struct {
 
         _ = try self.analyse(extra.body);
 
-        try self.context.popFunction();
+        _ = self.context.popFunction();
 
         return type_id;
     }

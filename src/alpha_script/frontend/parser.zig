@@ -585,6 +585,7 @@ pub const Parser = struct {
                     .data = .{ .error_value = error_id },
                 });
             },
+            .function => self.function(),
             .null => case: {
                 _ = try self.advance();
 
@@ -929,7 +930,7 @@ pub const Parser = struct {
             const identifier_token = self.scanner.previous();
 
             _ = self.consume(.colon) catch {
-                self.reportError(.UnexpectedToken, self.scanner.current(), "Expect type after parameter name");
+                self.reportError(Error.UnexpectedToken, self.scanner.current(), "Expect type after parameter name");
                 return Error.UnexpectedToken;
             };
 

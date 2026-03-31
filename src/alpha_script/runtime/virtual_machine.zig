@@ -18,20 +18,17 @@ pub const VirtualMachine = struct {
         StackOverflow,
     };
 
+    allocator: std.mem.Allocator,
+    garbage_collector: *GarbageCollector,
+    error_reporter: *const ErrorReporter,
+
     frames: [FRAMES_MAX]CallFrame,
     frame_count: usize,
 
     stack: [STACK_MAX]Value,
     stack_top: usize,
 
-    allocator: std.mem.Allocator,
-    garbage_collector: *GarbageCollector,
-    error_reporter: *const ErrorReporter,
-
     current_module: ?*ObjModule,
-    current_chunk: *const Chunk,
-    current_ip: usize,
-    current_base: usize,
 
     string_table: *StringTable,
     error_pool: *ErrorPool,
@@ -39,17 +36,18 @@ pub const VirtualMachine = struct {
 
     pub fn init(string_table: *StringTable, error_pool: *ErrorPool, error_reporter: *const ErrorReporter, garbage_collector: *GarbageCollector, allocator: std.mem.Allocator) VirtualMachine {
         return .{
-            .frames = undefined,
-            .frame_count = 0,
-            .stack = undefined,
-            .stack_top = 0,
             .allocator = allocator,
             .garbage_collector = garbage_collector,
             .error_reporter = error_reporter,
+
+            .frames = undefined,
+            .frame_count = 0,
+
+            .stack = undefined,
+            .stack_top = 0,
+
             .current_module = null,
-            .current_chunk = undefined,
-            .current_ip = 0,
-            .current_base = 0,
+
             .string_table = string_table,
             .error_pool = error_pool,
             .execution_context = undefined,
@@ -62,9 +60,6 @@ pub const VirtualMachine = struct {
             .error_pool = self.error_pool,
         };
         self.current_module = module;
-        self.current_chunk = &module.function.chunk;
-        self.current_ip = 0;
-        self.current_base = 0;
 
         try self.call(module.function, 0);
         try self.run();
@@ -73,11 +68,13 @@ pub const VirtualMachine = struct {
     fn run(self: *VirtualMachine) !void {
         const debug: bool = false;
 
-        var ip = self.current_ip;
-        const chunk = self.current_chunk;
-        const code = chunk.code.items;
+        var current_frame = &self.frames[self.frame_count - 1];
+
+        var ip = current_frame.ip;
+        var chunk = current_frame.function.chunk;
+        var code = chunk.code.items;
         var stack = &self.stack;
-        const base = self.current_base;
+        var base = current_frame.base_pointer;
 
         const terminal = as.common.Terminal.init(std.io.getStdOut());
         const disassambler = as.frontend.debug.Disassambler.init(&terminal);
@@ -221,9 +218,7 @@ pub const VirtualMachine = struct {
                         switch (callee.object.tag) {
                             .function => {
                                 const callee_fn = callee.toObject().as(values.ObjFunction);
-                                const result = try self.call(callee_fn, arg_count);
-
-                                stack[reg_dest] = result;
+                                try self.call(callee_fn, arg_count);
                             },
                             .native_function => {
                                 const native = callee.object.as(values.ObjNative);
@@ -238,6 +233,12 @@ pub const VirtualMachine = struct {
                             else => unreachable,
                         }
                     }
+
+                    current_frame = &self.frames[self.frame_count - 1];
+                    ip = current_frame.ip;
+                    chunk = current_frame.function.chunk;
+                    code = chunk.code.items;
+                    base = current_frame.base_pointer;
                 },
 
                 .call_return => {
@@ -248,12 +249,19 @@ pub const VirtualMachine = struct {
                         return;
                     }
                     // TODO return from a function -> restore stack top, decrement frame_count, etc.
-                    const reg_dest = base + instruction.abc.a;
+                    const reg_dest = base + 0;
                     const reg_value = base + instruction.abc.b;
 
                     const return_value = stack[reg_value];
-                    // TODO write return va.lue
+                    stack[reg_dest] = return_value;
+
                     self.frame_count -= 1;
+
+                    current_frame = &self.frames[self.frame_count - 1];
+                    ip = current_frame.ip;
+                    chunk = current_frame.function.chunk;
+                    code = chunk.code.items;
+                    base = current_frame.base_pointer;
                 },
 
                 // control flow
@@ -324,7 +332,9 @@ pub const VirtualMachine = struct {
     };
 
     inline fn numericMath(self: *VirtualMachine, instruction: Instruction, comptime op: anytype) !void {
-        const base = self.current_base;
+        const current_frame = &self.frames[self.frame_count - 1];
+
+        const base = current_frame.base_pointer;
         const reg_a = base + instruction.abc.a;
         const val_b = self.stack[base + instruction.abc.b];
         const val_c = self.stack[base + instruction.abc.c];
