@@ -90,8 +90,27 @@ pub const SemanticAnalyser = struct {
         self.context.deinit();
     }
 
-    pub fn analyseAst(self: *SemanticAnalyser, ast: *AST) void {
+    pub fn analyseAst(self: *SemanticAnalyser, ast: *AST, buildin_functions: []BuildinFunction) void {
         self.ast = ast;
+
+        for (buildin_functions) |buildin| {
+            self.symbol_table.declare(
+                buildin.name_id,
+                buildin.type_id,
+                0,
+                false,
+            ) catch {
+                @panic("failed to register buildin");
+            };
+            self.symbol_table.initialize(buildin.name_id) catch {
+                @panic("failed to register buildin");
+            };
+        }
+        defer {
+            for (buildin_functions) |_| {
+                _ = self.symbol_table.pop();
+            }
+        }
 
         for (ast.getRoots()) |node_id| {
             _ = self.analyse(node_id) catch {
@@ -648,6 +667,7 @@ const AST = as.frontend.AST;
 const SymbolTable = as.frontend.SymbolTable;
 const TypePool = as.frontend.TypePool;
 
+const BuildinFunction = as.BuildinFunction;
 const NodeExtraId = as.frontend.ast.NodeExtraId;
 const NodeId = as.frontend.ast.NodeId;
 const Node = as.frontend.ast.Node;

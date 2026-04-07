@@ -4,6 +4,12 @@ pub const CompilerOptions = struct {
     print_ast: bool = false,
 };
 
+pub const BuildinFunction = struct {
+    name_id: StringId,
+    type_id: TypeId,
+    function: NativeFn,
+};
+
 pub const Interpreter = struct {
     allocator: std.mem.Allocator,
     error_reporter: ErrorReporter,
@@ -17,7 +23,9 @@ pub const Interpreter = struct {
     virtual_machine: VirtualMachine,
 
     /// temporary workaround to insert natives without import system
-    register_natives_hook: ?*const fn (ast: *AST, semantic_analyser: *SemanticAnalyser, compiler: *Compiler, vm: *VirtualMachine) void,
+    buildinFunctions: std.ArrayList(BuildinFunction),
+
+    //    register_natives_hook: ?*const fn (ast: *AST, semantic_analyser: *SemanticAnalyser, compiler: *Compiler, vm: *VirtualMachine) void,
 
     pub fn init(error_reporter: ErrorReporter, allocator: std.mem.Allocator) !*Interpreter {
         var interpreter = try allocator.create(Interpreter);
@@ -33,7 +41,7 @@ pub const Interpreter = struct {
             .compiler = undefined,
             .virtual_machine = undefined,
 
-            .register_natives_hook = null,
+            .buildinFunctions = std.ArrayList(BuildinFunction).init(allocator),
         };
 
         interpreter.garbage_collector.stress_mode = true;
@@ -54,6 +62,11 @@ pub const Interpreter = struct {
         self.error_pool.deinit();
         self.semantic_analyser.deinit();
         self.compiler.deinit();
+        self.buildinFunctions.deinit();
+    }
+
+    pub fn registerBuildinFunction(self: *Interpreter, buildin: BuildinFunction) void {
+        self.buildinFunctions.append(buildin);
     }
 
     pub fn compileModule(self: *Interpreter, filename: []const u8, compiler_options: CompilerOptions) !*ObjModule {
@@ -73,11 +86,7 @@ pub const Interpreter = struct {
             return error.InvalidAST;
         }
 
-        if (self.register_natives_hook) |register_natives_hook| {
-            register_natives_hook(&ast, &self.semantic_analyser, &self.compiler, &self.virtual_machine);
-        }
-
-        self.semantic_analyser.analyseAst(&ast);
+        self.semantic_analyser.analyseAst(&ast, self.buildinFunctions.items);
         if (!ast.is_valid) {
             return error.InvalidAST;
         }
@@ -86,11 +95,11 @@ pub const Interpreter = struct {
             try as.frontend.debug.ASTPrinter.printAST(&ast, &compiler_options.terminal);
         }
 
-        return self.compiler.compile(&ast);
+        return self.compiler.compile(&ast, self.buildinFunctions.items);
     }
 
     pub fn runModule(self: *Interpreter, module: *ObjModule) !void {
-        try self.virtual_machine.execute(module);
+        try self.virtual_machine.execute(module, self.buildinFunctions.items);
     }
 
     pub fn readFile(self: *Interpreter, filename: []const u8) !TokenStream {
@@ -105,6 +114,10 @@ pub const Interpreter = struct {
 
 const std = @import("std");
 const as = @import("as");
+
+const StringId = as.common.StringId;
+const TypeId = as.frontend.TypeId;
+const NativeFn = as.runtime.values.natives.NativeFn;
 
 const ErrorReporter = as.common.reporting.ErrorReporter;
 const GarbageCollector = as.common.memory.GarbageCollector;

@@ -66,7 +66,7 @@ pub const Compiler = struct {
         self.context.deinit();
     }
 
-    pub fn compile(self: *Compiler, _ast: *AST) !*ObjModule {
+    pub fn compile(self: *Compiler, _ast: *AST, buildin_functions: []BuildinFunction) !*ObjModule {
         self.ast = _ast;
 
         var function = ObjFunction.init(self.garbage_collector);
@@ -79,6 +79,27 @@ pub const Compiler = struct {
             self.allocator,
         );
         defer self.context.deinit();
+
+        for (buildin_functions) |buildin| {
+            self.context.locals.append(.{
+                .name_id = buildin.name_id,
+                .depth = 0,
+                .reg_slot = 0,
+                .owns_register = true,
+                .is_captured = false,
+                .is_initialized = true,
+            }) catch {
+                @panic("failed to register natives");
+            };
+
+            self.context.next_free_reg += 1;
+        }
+        defer {
+            for (buildin_functions) |_| {
+                _ = self.context.locals.pop();
+                self.context.next_free_reg -= 1;
+            }
+        }
 
         self.is_compiling = true;
         defer self.is_compiling = false;
@@ -596,6 +617,7 @@ const StringTable = as.common.StringTable;
 const TypePool = as.frontend.TypePool;
 const Value = as.runtime.values.Value;
 
+const BuildinFunction = as.BuildinFunction;
 const NodeId = as.frontend.ast.NodeId;
 const StringId = as.common.StringId;
 

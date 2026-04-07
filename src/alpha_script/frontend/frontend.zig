@@ -15,7 +15,7 @@ pub const Token = token.Token;
 pub const Parser = @import("parser.zig").Parser;
 
 pub const ast = @import("ast.zig");
-pub const NodeInd = ast.NodeId;
+pub const NodeId = ast.NodeId;
 pub const NodeType = ast.NodeType;
 pub const Node = ast.Node;
 pub const AST = ast.AST;

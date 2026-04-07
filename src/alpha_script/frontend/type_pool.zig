@@ -395,7 +395,7 @@ pub const TypePool = struct {
         const signature_len = if (parameter_type_ids) |ids| ids.len + 1 else 1;
         const signature = try self.allocator.alloc(TypeId, signature_len);
         if (parameter_type_ids) |ids| {
-            @memcpy(signature, ids);
+            @memcpy(signature[0..ids.len], ids);
             signature[signature.len - 1] = return_type_id;
         } else {
             signature[0] = return_type_id;

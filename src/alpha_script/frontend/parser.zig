@@ -585,7 +585,10 @@ pub const Parser = struct {
                     .data = .{ .error_value = error_id },
                 });
             },
-            .function => self.function(),
+            .function => case: {
+                _ = try self.advance();
+                break :case try self.function();
+            },
             .null => case: {
                 _ = try self.advance();
 
@@ -738,6 +741,8 @@ pub const Parser = struct {
             .body = undefined,
         };
 
+        const current = self.scanner.current();
+        _ = current;
         if (self.scanner.current().tag == .identifier) {
             function_extra.name_id = self.parseIdentifier() catch unreachable; // if ensures that the current token is an identifier
         }
@@ -750,12 +755,17 @@ pub const Parser = struct {
 
         function_extra.return_type = try self.parseTypeErrorUnion();
 
-        _ = self.consume(.left_brace) catch {
+        const left_brace = self.consume(.left_brace) catch {
             self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect '{' before function body");
             return Error.UnexpectedToken;
         };
 
         function_extra.body = try self.blockStatement();
+
+        _ = self.consume(.right_brace) catch {
+            self.reportError(Error.UnexpectedToken, left_brace, "expect '}' after function block");
+            return Error.UnexpectedToken;
+        };
 
         const extra_id = try self.ast.addExtra(function_extra);
         return try self.ast.addNode(.{
@@ -957,6 +967,9 @@ pub const Parser = struct {
                 break;
             }
         }
+
+        _ = try self.consume(.right_paren);
+        return try self.nodeListFromArray(parameter_ids[0..count]);
     }
 
     /// parses a comma seperated list of expressions until end_token is found

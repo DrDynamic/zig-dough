@@ -1,4 +1,7 @@
-pub const Interpreter = @import("interpreter.zig").Interpreter;
+const interpreter = @import("interpreter.zig");
+pub const Interpreter = interpreter.Interpreter;
+pub const BuildinFunction = interpreter.BuildinFunction;
+
 pub const common = @import("common/common.zig");
 pub const frontend = @import("frontend/frontend.zig");
 pub const compiler = @import("compiler/compiler.zig");

@@ -54,7 +54,16 @@ pub const VirtualMachine = struct {
         };
     }
 
-    pub fn execute(self: *VirtualMachine, module: *ObjModule) !void {
+    pub fn execute(self: *VirtualMachine, module: *ObjModule, buildin_functions: []BuildinFunction) !void {
+        for (buildin_functions) |buildin| {
+            const native_obj = self.garbage_collector.createObject(as.runtime.values.ObjNative, .native_function);
+            native_obj.name_id = buildin.name_id;
+            native_obj.function = buildin.function;
+
+            self.stack[self.stack_top] = as.runtime.values.Value.fromObject(&native_obj.header);
+            self.stack_top += 1;
+        }
+
         self.execution_context = .{
             .string_table = self.string_table,
             .error_pool = self.error_pool,
@@ -355,6 +364,7 @@ const std = @import("std");
 const as = @import("as");
 const values = as.runtime.values;
 
+const BuildinFunction = as.BuildinFunction;
 const Chunk = as.compiler.Chunk;
 const ErrorPool = as.frontend.ErrorPool;
 const ErrorReporter = as.common.reporting.ErrorReporter;
