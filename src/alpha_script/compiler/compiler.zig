@@ -117,7 +117,7 @@ pub const Compiler = struct {
 
     fn compileFunction(self: *Compiler, node_id: NodeId) !*ObjFunction {
         const fn_node = self.ast.nodes.items[node_id];
-        const fn_extra = self.ast.getExtra(fn_node.data.error_value, FunctionExtra);
+        const fn_extra = self.ast.getExtra(fn_node.data.extra_id, FunctionExtra);
 
         var function = ObjFunction.init(self.garbage_collector);
         try self.garbage_collector.temp_objects.append(function.asObject());

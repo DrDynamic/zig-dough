@@ -82,6 +82,12 @@ pub fn main() !void {
         var interpreter = try as.Interpreter.init(error_reporter, allocator);
         defer interpreter.deinit();
 
+        try interpreter.registerBuildinFunction(.{
+            .name_id = try interpreter.string_table.add("print"),
+            .type_id = as.frontend.TypePool.VOID,
+            .function = as.runtime.values.natives.nativePrint,
+        });
+
         const module = interpreter.compileModule(path, .{
             .terminal = stdout_terminal,
             .print_tokens = start_options.print_tokens,

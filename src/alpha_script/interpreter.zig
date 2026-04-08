@@ -65,8 +65,8 @@ pub const Interpreter = struct {
         self.buildinFunctions.deinit();
     }
 
-    pub fn registerBuildinFunction(self: *Interpreter, buildin: BuildinFunction) void {
-        self.buildinFunctions.append(buildin);
+    pub fn registerBuildinFunction(self: *Interpreter, buildin: BuildinFunction) !void {
+        try self.buildinFunctions.append(buildin);
     }
 
     pub fn compileModule(self: *Interpreter, filename: []const u8, compiler_options: CompilerOptions) !*ObjModule {

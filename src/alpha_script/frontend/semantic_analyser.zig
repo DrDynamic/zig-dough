@@ -523,6 +523,18 @@ pub const SemanticAnalyser = struct {
         const node = self.ast.nodes.items[node_id];
         const extra = self.ast.getExtra(node.data.extra_id, FunctionExtra);
 
+        if (extra.name_id) |name_id| {
+            self.symbol_table.declare(
+                name_id,
+                TypePool.UNRESOLVED,
+                node_id,
+                false,
+            ) catch {
+                try self.reportRedeclarationError(node, name_id);
+                return Error.RedeclarationError;
+            };
+        }
+
         var signature: [32]TypeId = undefined;
         var count: u8 = 0;
         if (extra.parameters) |list_id| {
@@ -530,13 +542,30 @@ pub const SemanticAnalyser = struct {
             while (iterator.next()) |parameter_id| {
                 const parameter_node = self.ast.nodes.items[parameter_id];
                 const parameter_type_id = parameter_node.resolved_type_id;
+                const parameter_name = parameter_node.data.string_id;
 
                 signature[count] = parameter_type_id;
                 count += 1;
+
+                self.symbol_table.declare(
+                    parameter_name,
+                    parameter_node.resolved_type_id,
+                    parameter_id,
+                    false,
+                ) catch {
+                    try self.reportRedeclarationError(parameter_node, parameter_name);
+                    return Error.RedeclarationError;
+                };
+                self.symbol_table.initialize(parameter_name) catch unreachable; // Error.NotFound is unreachabe (declared above)
             }
         }
 
         const type_id = try self.ast.type_pool.getOrCreateFunctionType(signature[0..count], extra.return_type);
+
+        if (extra.name_id) |name_id| {
+            self.symbol_table.setType(name_id, type_id) catch unreachable; // Error.NotFound is unreachabe (declared above)
+            self.symbol_table.initialize(name_id) catch unreachable; // Error.NotFound is unreachabe (declared above)
+        }
 
         try self.context.pushFunction(node_id, extra);
 
