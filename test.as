@@ -1,7 +1,10 @@
 function sayHello(name:String) String {
     return "Hello " + name
 }
-print(sayHello("World"))
+
+var a = sayHello("World")
+
+print(a)
 
 // type Number = Int|Float
 // 

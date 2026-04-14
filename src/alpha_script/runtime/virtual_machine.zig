@@ -72,7 +72,37 @@ pub const VirtualMachine = struct {
         try self.run();
     }
 
-    //    fn printCallframe(self: *const VirtualMachine, terminal: *const as.common.Terminal, register: usize) void {}
+    fn printCallframe(self: *const VirtualMachine, terminal: *const as.common.Terminal, register: usize) void {
+        //        const stack = self.stack;
+        //
+        //        const current_frame = self.frames[self.frame_count - 1];
+        //        const chunk = current_frame.function.chunk;
+
+        for (self.frames[0..self.frame_count]) |frame| {
+            const reg_frame_start = frame.base_pointer;
+            const reg_frame_end = frame.base_pointer + (frame.function.max_registers);
+
+            if (register == frame.base_pointer) {
+                const local_address = register - frame.base_pointer;
+
+                // start of callframe ┐
+                terminal.print(" {d:0>2}┐", .{local_address});
+            } else if (register > reg_frame_start and register < reg_frame_end) {
+                const local_address = register - frame.base_pointer;
+
+                // inside callframe   │
+                terminal.print(" {d:0>2}│", .{local_address});
+            } else if (register == reg_frame_end) {
+                const local_address = register - frame.base_pointer;
+
+                // end of callframe   ┘
+                terminal.print(" {d:0>2}┘", .{local_address});
+            } else {
+                // outside of callframe
+                terminal.print("    ", .{});
+            }
+        }
+    }
 
     fn printStack(self: *const VirtualMachine, disassambler: *const as.frontend.debug.Disassambler) void {
         const Terminal = as.common.Terminal;
@@ -81,7 +111,10 @@ pub const VirtualMachine = struct {
             .styles = &.{.faint},
         };
         const register_mutated_style: Terminal.PrintOptions = .{
-            .styles = &.{.faint},
+            .color = .{ .ansi = .red },
+        };
+        const register_read_style: Terminal.PrintOptions = .{
+            .color = .{ .ansi = .blue },
         };
 
         const stack = self.stack;
@@ -93,11 +126,34 @@ pub const VirtualMachine = struct {
         disassambler.terminal.print("\n", .{});
 
         const description = disassambler.disassambleInstruction(&chunk, instruction, current_frame.ip);
-        _ = description;
 
         for (stack[0..self.stack_top], 0..) |value, register| {
-            disassambler.terminal.printWithOptions("{d:0>4}: ", .{register}, register_mutated_style);
-            disassambler.terminal.printWithOptions("[{: <30}]\n", .{value}, register_style);
+            const local_address = if (register >= current_frame.base_pointer)
+                register - current_frame.base_pointer
+            else
+                std.math.maxInt(usize);
+
+            const mutate_a = description.parameter_type_a == .mutate_register_id and instruction.abc.a == local_address;
+            const mutate_b = description.parameter_type_b == .mutate_register_id and instruction.abc.b == local_address;
+            const mutate_c = description.parameter_type_c == .mutate_register_id and instruction.abc.c == local_address;
+
+            const read_a = description.parameter_type_a == .register_id and instruction.abc.a == local_address;
+            const read_b = description.parameter_type_b == .register_id and instruction.abc.b == local_address;
+            const read_c = description.parameter_type_c == .register_id and instruction.abc.c == local_address;
+
+            const style = if (mutate_a or mutate_b or mutate_c)
+                register_mutated_style
+            else if (read_a or read_b or read_c)
+                register_read_style
+            else
+                register_style;
+
+            disassambler.terminal.printWithOptions("{d:0>4}: ", .{register}, style);
+            disassambler.terminal.printWithOptions("[{: <30}]", .{value}, style);
+
+            self.printCallframe(disassambler.terminal, register);
+
+            disassambler.terminal.print("\n", .{});
         }
     }
 
