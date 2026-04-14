@@ -6,6 +6,7 @@ const StartOptions = struct {
     print_tokens: bool,
     print_ast: bool,
     print_asm: bool,
+    debug_vm: bool,
     error_output: OutputType,
 };
 
@@ -20,6 +21,7 @@ fn makeStartOptions(iterator: *std.process.ArgIterator) !StartOptions {
         .print_tokens = false,
         .print_ast = false,
         .print_asm = false,
+        .debug_vm = false,
         .error_output = .pretty,
     };
 
@@ -34,6 +36,8 @@ fn makeStartOptions(iterator: *std.process.ArgIterator) !StartOptions {
                 options.print_ast = true;
             } else if (std.mem.eql(u8, arg, "--print-asm")) {
                 options.print_asm = true;
+            } else if (std.mem.eql(u8, arg, "--debug-vm")) {
+                options.debug_vm = true;
             } else if (std.mem.eql(u8, arg, "--errors=test")) {
                 options.error_output = .integration_test;
             } else {
@@ -101,56 +105,16 @@ pub fn main() !void {
             disassambler.disassambleChunk(&module.function.chunk, "debug");
         }
 
+        if (start_options.print_tokens or start_options.print_ast or start_options.print_asm) {
+            return;
+        }
+
         interpreter.runModule(module) catch {
             std.process.exit(EXIT_CODE_RUNTIME_ERROR);
         };
     } else {
         stderr_terminal.print("no file specified!\n", .{});
     }
-}
-
-fn registerNatives(ast: *as.frontend.AST, semantic_analyser: *as.frontend.SemanticAnalyzer, compiler: *as.compiler.Compiler, vm: *as.runtime.VirtualMachine) void {
-    const name_id = ast.string_table.add("print") catch {
-        @panic("failed to register natives");
-    };
-
-    semantic_analyser.symbol_table.declare(
-        name_id,
-        as.frontend.TypePool.VOID,
-        0,
-        false,
-    ) catch {
-        @panic("failed to register natives");
-    };
-    semantic_analyser.symbol_table.initialize(name_id) catch {
-        @panic("failed to register natives");
-    };
-
-    compiler.context.locals.append(.{
-        .name_id = name_id,
-        .depth = 0,
-        .reg_slot = 0,
-        .owns_register = true,
-        .is_captured = false,
-        .is_initialized = true,
-    }) catch {
-        @panic("failed to register natives");
-    };
-
-    compiler.context.next_free_reg += 1;
-
-    const native_print = vm.allocator.create(as.runtime.values.ObjNative) catch {
-        @panic("failed to register natives");
-    };
-
-    native_print.* = .{
-        .header = .{ .tag = .native_function, .is_marked = false, .next = null, .next_gray = null },
-        .name_id = name_id,
-        .function = as.runtime.values.natives.nativePrint,
-    };
-
-    vm.stack[0] = as.runtime.values.Value.fromObject(&native_print.header);
-    vm.stack_top += 1;
 }
 
 const std = @import("std");

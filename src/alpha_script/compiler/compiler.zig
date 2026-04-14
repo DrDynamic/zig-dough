@@ -63,7 +63,8 @@ pub const Compiler = struct {
     }
 
     pub fn deinit(self: *Compiler) void {
-        self.context.deinit();
+        _ = self;
+        //        self.context.deinit();
     }
 
     pub fn compile(self: *Compiler, _ast: *AST, buildin_functions: []BuildinFunction) !*ObjModule {
@@ -140,7 +141,7 @@ pub const Compiler = struct {
             while (iterator.next()) |parameter_id| {
                 const parameter_node = self.ast.nodes.items[parameter_id];
                 const parameter_reg = self.allocateRegister();
-                try self.addLocal(parameter_node.data.string_id, parameter_reg, true, true);
+                _ = try self.addLocal(parameter_node.data.string_id, parameter_reg, true, true);
             }
         }
 
@@ -168,8 +169,7 @@ pub const Compiler = struct {
 
                 if (extra.init_value) |init_value_id| {
                     // create the local before initializing it, so compileExpression can reference the variable
-                    const local_index = self.context.locals.items.len;
-                    try self.addLocal(extra.name_id, self.context.next_free_reg, false, true);
+                    const local_index = try self.addLocal(extra.name_id, self.context.next_free_reg, false, true);
 
                     try self.compileExpressionEnsureRegister(init_value_id, self.context.next_free_reg);
                     _ = self.allocateRegister();
@@ -182,7 +182,7 @@ pub const Compiler = struct {
                         init_reg,
                         Value.makeUninitialized(),
                     );
-                    try self.addLocal(extra.name_id, init_reg, true, true);
+                    _ = try self.addLocal(extra.name_id, init_reg, true, true);
                 }
             },
             // statements
@@ -303,7 +303,7 @@ pub const Compiler = struct {
                 if (fn_extra.name_id) |name_id| {
                     result_reg = self.allocateRegister();
                     try self.emitLoadConstant(.load_const, result_reg, fn_value);
-                    try self.addLocal(name_id, result_reg, true, true);
+                    _ = try self.addLocal(name_id, result_reg, true, true);
                 } else {
                     result_reg = self.context.next_free_reg;
                     try self.emitLoadConstant(.load_const, result_reg, fn_value);
@@ -347,7 +347,7 @@ pub const Compiler = struct {
                     const void_identifier_id = try self.ast.string_table.add("_");
 
                     if (capture_name_id != void_identifier_id) {
-                        try self.addLocal(capture_name_id, reg_condition, true, false);
+                        _ = try self.addLocal(capture_name_id, reg_condition, true, false);
                     }
                 }
 
@@ -372,7 +372,7 @@ pub const Compiler = struct {
                         const void_identifier_id = try self.ast.string_table.add("_");
 
                         if (capture_name_id != void_identifier_id) {
-                            try self.addLocal(capture_name_id, reg_condition, true, false);
+                            _ = try self.addLocal(capture_name_id, reg_condition, true, false);
                         }
                     }
 
@@ -533,7 +533,7 @@ pub const Compiler = struct {
     }
 
     /// bind a variable to a register
-    fn addLocal(self: *Compiler, name_id: StringId, register: RegisterId, is_initialized: bool, owns_register: bool) !void {
+    fn addLocal(self: *Compiler, name_id: StringId, register: RegisterId, is_initialized: bool, owns_register: bool) !usize {
         // std.debug.print("## addLocal {{\n", .{});
         // std.debug.print("##   name: {s}\n", .{self.ast.string_table.get(name_id)});
         // std.debug.print("##   depth: {d}\n", .{self.scope_depth});
@@ -542,6 +542,7 @@ pub const Compiler = struct {
         // std.debug.print("## }}\n", .{});
         // std.debug.print("\n", .{});
 
+        const index = self.context.locals.items.len;
         try self.context.locals.append(.{
             .name_id = name_id,
             .depth = self.context.scope_depth,
@@ -550,6 +551,7 @@ pub const Compiler = struct {
             .is_captured = false,
             .is_initialized = is_initialized,
         });
+        return index;
     }
 
     /// searches for the register of a variable

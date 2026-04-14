@@ -55,10 +55,9 @@ pub const VirtualMachine = struct {
     }
 
     pub fn execute(self: *VirtualMachine, module: *ObjModule, buildin_functions: []BuildinFunction) !void {
+        self.current_module = module;
         for (buildin_functions) |buildin| {
-            const native_obj = self.garbage_collector.createObject(as.runtime.values.ObjNative, .native_function);
-            native_obj.name_id = buildin.name_id;
-            native_obj.function = buildin.function;
+            const native_obj = as.runtime.values.ObjNative.init(buildin.name_id, buildin.function, self.garbage_collector);
 
             self.stack[self.stack_top] = as.runtime.values.Value.fromObject(&native_obj.header);
             self.stack_top += 1;
@@ -68,7 +67,6 @@ pub const VirtualMachine = struct {
             .string_table = self.string_table,
             .error_pool = self.error_pool,
         };
-        self.current_module = module;
 
         try self.call(module.function, 0);
         try self.run();
@@ -222,6 +220,8 @@ pub const VirtualMachine = struct {
                     const arg_count = instruction.abc.c;
 
                     const callee = stack[reg_callee];
+
+                    current_frame.ip = ip;
 
                     if (callee.isObject()) {
                         switch (callee.object.tag) {

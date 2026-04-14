@@ -1,7 +1,7 @@
-function sayHello(name:String) Void {
-    print("Hello " + name)
+function sayHello(name:String) String {
+    return "Hello " + name
 }
-sayHello("World")
+print(sayHello("World"))
 
 // type Number = Int|Float
 // 

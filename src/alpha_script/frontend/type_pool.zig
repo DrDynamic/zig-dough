@@ -295,7 +295,7 @@ pub const TypePool = struct {
         const target = self.types.items[target_id];
         switch (target) {
             .unresolved => unreachable,
-            .void => unreachable,
+            .void => return false,
             .null => return false, // null is only assignable to null. Since target_id != source_id , the source can not be of type null
             .bool => return false, // same with bool
             .int => return false, // and so on
