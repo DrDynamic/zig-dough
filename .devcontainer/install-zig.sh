@@ -14,7 +14,7 @@ ZIG_URL="https://ziglang.org/download/${ZIG_VERSION}/${ZIG_TARGET_NAME}.tar.xz"
 ZIG_SIGNATURE_URL="https://ziglang.org/download/${ZIG_VERSION}/${ZIG_TARGET_NAME}.tar.xz.minisig"
 ZIG_PUBKEY="RWSGOq2NVecA2UPNdBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb/U"
 
-ZLS_TARGET_NAME="zls-linux-x86_64-${ZLS_VERSION}"
+ZLS_TARGET_NAME="zls-x86_64-linux-${ZLS_VERSION}"
 ZLS_URL="https://builds.zigtools.org/${ZLS_TARGET_NAME}.tar.xz"
 ZLS_SIGNATURE_URL="https://builds.zigtools.org/${ZLS_TARGET_NAME}.tar.xz.minisig"
 ZLS_PUBKEY="RWR+9B91GBZ0zOjh6Lr17+zKf5BoSuFvrx2xSeDE57uIYvnKBGmMjOex"

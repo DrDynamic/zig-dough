@@ -11,8 +11,8 @@ ENV USER_GID=$USER_GID
 
 # Zig Specific part
 ARG MINISIGN_VERSION="0.12"
-ARG ZIG_VERSION="0.14.1"
-ARG ZLS_VERSION="0.14.0"
+ARG ZIG_VERSION="0.15.2"
+ARG ZLS_VERSION="0.15.0"
 
 RUN apt-get update -yqq \
 && apt-get install -yqq \
@@ -36,6 +36,7 @@ USER developer
 WORKDIR /opt
 ENV PATH="$PATH:/opt/bin"
 
+RUN echo "Installing ZIG ${MINISIGN_VERSION} ${ZIG_VERSION} ${ZLS_VERSION}"
 ADD --chown=developer:developer --chmod=555 ./install-zig.sh /opt/build/install-zig.sh
 RUN /opt/build/install-zig.sh ${MINISIGN_VERSION} ${ZIG_VERSION} ${ZLS_VERSION}
 

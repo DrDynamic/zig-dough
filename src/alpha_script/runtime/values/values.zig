@@ -62,12 +62,18 @@ pub const UnionValue = union(ValueType) {
         options: std.fmt.FormatOptions,
         writer: anytype,
     ) !void {
+        std.debug.print("{s}", .{fmt});
         switch (self) {
-            .uninitialized => try writer.print("uninitialized", .{}),
-            .null => try writer.print("null", .{}),
-            .bool => try writer.print("{s}", .{if (self.bool) "true" else "false"}),
-            .integer => try writer.print("{d}", .{self.integer}),
-            .float => try writer.print("{d}", .{self.float}),
+            .uninitialized => try std.fmt.formatText("uninitialized", "s", options, writer),
+            .null => try std.fmt.formatText("null", "s", options, writer),
+            .bool => try std.fmt.formatText(
+                if (self.bool) "true" else "false",
+                "s",
+                options,
+                writer,
+            ),
+            .integer => try std.fmt.formatInt(self.integer, 10, .upper, options, writer),
+            .float => try std.fmt.formatType(self.float, "d", options, writer, 1),
             .error_value => {
                 // TODO: needs access to strings table
                 try writer.print("ErrorValue (name serialization not implemented yet)", .{});

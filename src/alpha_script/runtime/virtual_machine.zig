@@ -72,8 +72,37 @@ pub const VirtualMachine = struct {
         try self.run();
     }
 
+    //    fn printCallframe(self: *const VirtualMachine, terminal: *const as.common.Terminal, register: usize) void {}
+
+    fn printStack(self: *const VirtualMachine, disassambler: *const as.frontend.debug.Disassambler) void {
+        const Terminal = as.common.Terminal;
+
+        const register_style: Terminal.PrintOptions = .{
+            .styles = &.{.faint},
+        };
+        const register_mutated_style: Terminal.PrintOptions = .{
+            .styles = &.{.faint},
+        };
+
+        const stack = self.stack;
+
+        const current_frame = self.frames[self.frame_count - 1];
+        const chunk = current_frame.function.chunk;
+        const instruction = chunk.code.items[current_frame.ip];
+
+        disassambler.terminal.print("\n", .{});
+
+        const description = disassambler.disassambleInstruction(&chunk, instruction, current_frame.ip);
+        _ = description;
+
+        for (stack[0..self.stack_top], 0..) |value, register| {
+            disassambler.terminal.printWithOptions("{d:0>4}: ", .{register}, register_mutated_style);
+            disassambler.terminal.printWithOptions("[{: <30}]\n", .{value}, register_style);
+        }
+    }
+
     fn run(self: *VirtualMachine) !void {
-        const debug: bool = false;
+        const debug: bool = true;
 
         var current_frame = &self.frames[self.frame_count - 1];
 
@@ -96,17 +125,6 @@ pub const VirtualMachine = struct {
             if (ip >= code.len) return;
             const instruction = code[ip];
             ip += 1;
-
-            if (debug) {
-                for (stack, 0..) |register, index| {
-                    terminal.printWithOptions("[{d:0>2} ", .{index}, .{});
-                    terminal.printWithOptions("{} ", .{register}, .{ .styles = &.{.faint} });
-                    terminal.printWithOptions("] ", .{}, .{});
-                    if (index > 8) break;
-                }
-                terminal.print("\n", .{});
-                disassambler.disassambleInstruction(chunk, instruction, ip);
-            }
 
             switch (instruction.abc.opcode) {
                 .load_const => {
@@ -292,6 +310,10 @@ pub const VirtualMachine = struct {
                         ip += offset - 1;
                     }
                 },
+            }
+
+            if (debug) {
+                self.printStack(&disassambler);
             }
         }
     }

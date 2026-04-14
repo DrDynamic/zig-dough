@@ -1,6 +1,29 @@
 const value_options: Terminal.PrintOptions = .{
     .styles = &.{.faint},
 };
+
+pub const InstructionType = enum {
+    ab,
+    abc,
+};
+
+pub const ParameterType = enum {
+    mutate_register_id,
+    register_id,
+    constant_id,
+    code_offset,
+    number,
+    unused,
+};
+
+pub const InstructionDescription = struct {
+    instruction_type: InstructionType,
+
+    parameter_type_a: ParameterType,
+    parameter_type_b: ParameterType,
+    parameter_type_c: ParameterType,
+};
+
 pub const Disassambler = struct {
     terminal: *const Terminal,
 
@@ -13,11 +36,11 @@ pub const Disassambler = struct {
     pub fn disassambleChunk(self: *const Disassambler, chunk: *const Chunk, name: []const u8) void {
         self.terminal.print("===== {s} =====\n", .{name});
         for (chunk.code.items, 0..) |instruction, index| {
-            self.disassambleInstruction(chunk, instruction, index);
+            _ = self.disassambleInstruction(chunk, instruction, index);
         }
     }
 
-    pub fn disassambleInstruction(self: *const Disassambler, chunk: *const Chunk, instruction: Instruction, offset: usize) void {
+    pub fn disassambleInstruction(self: *const Disassambler, chunk: *const Chunk, instruction: Instruction, offset: usize) InstructionDescription {
         self.terminal.print("{d:0>4} ", .{offset});
 
         const op = instruction.abc.opcode;
@@ -31,8 +54,28 @@ pub const Disassambler = struct {
                 self.terminal.print("{s:<16} R{d:<2}, K{d:<3}    ; ", .{ @tagName(op), dest_reg, constant_id });
                 self.terminal.printWithOptions("{}", .{value}, value_options);
                 self.terminal.print("\n", .{});
+
+                return .{
+                    .instruction_type = .ab,
+                    .parameter_type_a = .mutate_register_id,
+                    .parameter_type_b = .constant_id,
+                    .parameter_type_c = .unused,
+                };
             },
-            .move => self.printABCTwoAgrs(instruction),
+            .move => {
+                self.terminal.print("{s:<16} R{d:<2}, R{d:<2}     ;\n", .{
+                    @tagName(instruction.abc.opcode),
+                    instruction.abc.a,
+                    instruction.abc.b,
+                });
+
+                return .{
+                    .instruction_type = .abc,
+                    .parameter_type_a = .mutate_register_id,
+                    .parameter_type_b = .register_id,
+                    .parameter_type_c = .unused,
+                };
+            },
             // math
             .add,
             .sub,
@@ -49,10 +92,22 @@ pub const Disassambler = struct {
             .logical_not,
             //string
             .string_concat,
-            => self.printABC(instruction),
+            => return self.printABCMutate(instruction),
             // interaction
-            .call => self.printCall(instruction),
-            .call_return => self.printA(instruction),
+            .call => return self.printCall(instruction),
+            .call_return => {
+                self.terminal.print("{s:<16}    , R{d:<2}\n", .{
+                    @tagName(instruction.abc.opcode),
+                    instruction.abc.b,
+                });
+
+                return .{
+                    .instruction_type = .abc,
+                    .parameter_type_a = .unused,
+                    .parameter_type_b = .register_id,
+                    .parameter_type_c = .unused,
+                };
+            },
             // controlflow
             .jump => {
                 self.terminal.print(
@@ -64,6 +119,13 @@ pub const Disassambler = struct {
                 );
                 self.terminal.printWithOptions("#{d:0>4}", .{instruction.ab.b + offset}, value_options);
                 self.terminal.print("\n", .{});
+
+                return .{
+                    .instruction_type = .ab,
+                    .parameter_type_a = .unused,
+                    .parameter_type_b = .code_offset,
+                    .parameter_type_c = .unused,
+                };
             },
             .jump_if_false,
             .jump_if_true,
@@ -78,11 +140,18 @@ pub const Disassambler = struct {
                 );
                 self.terminal.printWithOptions("#{d:0>4}", .{instruction.ab.b + offset}, value_options);
                 self.terminal.print("\n", .{});
+
+                return .{
+                    .instruction_type = .ab,
+                    .parameter_type_a = .register_id,
+                    .parameter_type_b = .code_offset,
+                    .parameter_type_c = .unused,
+                };
             },
         }
     }
 
-    fn printCall(self: *const Disassambler, instruction: Instruction) void {
+    fn printCall(self: *const Disassambler, instruction: Instruction) InstructionDescription {
         self.terminal.print("{s:<16} R{d:<2}, R{d:<2}, {d:<3}; ", .{
             @tagName(instruction.abc.opcode),
             instruction.abc.a,
@@ -91,30 +160,29 @@ pub const Disassambler = struct {
         });
         self.terminal.printWithOptions("REG_RETURN REG_CALLEE ARG_COUNT", .{}, value_options);
         self.terminal.print("\n", .{});
+
+        return .{
+            .instruction_type = .abc,
+            .parameter_type_a = .mutate_register_id,
+            .parameter_type_b = .register_id,
+            .parameter_type_c = .number,
+        };
     }
 
-    fn printABCTwoAgrs(self: *const Disassambler, instruction: Instruction) void {
-        self.terminal.print("{s:<16} R{d:<2}, R{d:<2}     ;\n", .{
-            @tagName(instruction.abc.opcode),
-            instruction.abc.a,
-            instruction.abc.b,
-        });
-    }
-
-    fn printABC(self: *const Disassambler, instruction: Instruction) void {
+    fn printABCMutate(self: *const Disassambler, instruction: Instruction) InstructionDescription {
         self.terminal.print("{s:<16} R{d:<2}, R{d:<2}, R{d:<2};\n", .{
             @tagName(instruction.abc.opcode),
             instruction.abc.a,
             instruction.abc.b,
             instruction.abc.c,
         });
-    }
 
-    fn printA(self: *const Disassambler, instruction: Instruction) void {
-        self.terminal.print("{s:<16} R{d:<2}\n", .{
-            @tagName(instruction.abc.opcode),
-            instruction.abc.a,
-        });
+        return .{
+            .instruction_type = .abc,
+            .parameter_type_a = .mutate_register_id,
+            .parameter_type_b = .register_id,
+            .parameter_type_c = .register_id,
+        };
     }
 };
 

@@ -41,10 +41,23 @@ pub const ObjectHeader = struct {
         writer: anytype,
     ) !void {
         _ = fmt;
-        _ = options;
         switch (self.tag) {
-            .string => try writer.print("{s}", .{self.as(ObjString).data}),
-            else => try writer.print("<object {s}>", .{@tagName(self.tag)}),
+            .string => try std.fmt.formatText(self.as(ObjString).data, "s", options, writer),
+            else => {
+                const name = @tagName(self.tag);
+                try writer.print("<object {s}", .{name});
+                try std.fmt.formatText(
+                    ">",
+                    "s",
+                    .{
+                        .precision = null,
+                        .width = if (options.width) |width| width - name.len - 8 else null,
+                        .alignment = options.alignment,
+                        .fill = options.fill,
+                    },
+                    writer,
+                );
+            },
         }
     }
 };
@@ -80,6 +93,7 @@ pub const ObjFunction = struct {
     pub fn init(garbage_collector: *GarbageCollector) *ObjFunction {
         var function = garbage_collector.createObject(ObjFunction, .function);
         function.arity = 0;
+        function.max_registers = 0;
         function.chunk = Chunk.init(garbage_collector.allocator());
         function.name = null;
 
