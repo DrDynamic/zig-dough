@@ -1,5 +1,10 @@
 # next
-
+- vm stack
+  - reset stack_top after call_return
+  - initialize stack correctly (right amount of registers)
+- max_registers
+  - check correctness when using temporary register (like in 9+9*9)
+  
 # backlog
 - string concat via ++
 - enforce const (when identifier is never written)

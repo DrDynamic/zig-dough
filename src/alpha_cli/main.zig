@@ -102,7 +102,16 @@ pub fn main() !void {
 
         if (start_options.print_asm) {
             const disassambler = as.frontend.debug.Disassambler.init(&stdout_terminal);
-            disassambler.disassambleChunk(&module.function.chunk, "debug");
+            disassambler.disassambleChunk(&module.function.chunk, "root");
+
+            for (module.function.chunk.constants.items) |constant| {
+                if (constant.isObject()) {
+                    if (constant.toObject().is(.function)) {
+                        const function = constant.toObject().as(as.runtime.values.ObjFunction);
+                        disassambler.disassambleChunk(&function.chunk, if (function.name) |name| name.data else "anonymous");
+                    }
+                }
+            }
         }
 
         if (start_options.print_tokens or start_options.print_ast or start_options.print_asm) {

@@ -405,6 +405,7 @@ pub const Compiler = struct {
 
                     while (iterator.next()) |arg_node_id| {
                         _ = try self.compileExpressionEnsureRegister(arg_node_id, reg_start + arg_count);
+                        _ = self.allocateRegister();
                         arg_count += 1;
                     }
                 }
@@ -442,7 +443,8 @@ pub const Compiler = struct {
 
             .logical_and => {
                 const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
-                const reg_result = self.context.next_free_reg;
+                const reg_result = self.allocateRegister();
+                self.context.next_free_reg -= 1;
 
                 try self.compileExpressionEnsureRegister(extra.lhs, reg_result);
                 const pos_end_jump = try self.emitJump(.jump_if_false, reg_result);
@@ -453,7 +455,8 @@ pub const Compiler = struct {
             },
             .logical_or => {
                 const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
-                const reg_result = self.context.next_free_reg;
+                const reg_result = self.allocateRegister();
+                self.context.next_free_reg -= 1;
 
                 try self.compileExpressionEnsureRegister(extra.lhs, reg_result);
                 const pos_end_jump = try self.emitJump(.jump_if_true, reg_result);
@@ -469,9 +472,9 @@ pub const Compiler = struct {
         const result = try self.compileExpression(node_id);
         if (result != register) {
             try self.context.chunk.emit(Instruction.fromABC(.move, register, result, 0));
-            if (register <= self.context.next_free_reg) {
-                self.context.next_free_reg = register + 1;
-            }
+            // if (register <= self.context.next_free_reg) {
+            //     self.context.next_free_reg = register + 1;
+            // }
         }
     }
 
