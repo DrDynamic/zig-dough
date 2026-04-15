@@ -217,7 +217,8 @@ pub const Compiler = struct {
 
             // literals
             .literal_null => {
-                const register = self.context.next_free_reg;
+                const register = self.allocateRegister();
+                self.context.next_free_reg -= 1;
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -227,7 +228,8 @@ pub const Compiler = struct {
                 return register;
             },
             .literal_bool => {
-                const register = self.context.next_free_reg;
+                const register = self.allocateRegister();
+                self.context.next_free_reg -= 1;
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -237,7 +239,8 @@ pub const Compiler = struct {
                 return register;
             },
             .literal_int => {
-                const register = self.context.next_free_reg;
+                const register = self.allocateRegister();
+                self.context.next_free_reg -= 1;
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -247,7 +250,8 @@ pub const Compiler = struct {
                 return register;
             },
             .literal_float => {
-                const register = self.context.next_free_reg;
+                const register = self.allocateRegister();
+                self.context.next_free_reg -= 1;
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -257,7 +261,8 @@ pub const Compiler = struct {
                 return register;
             },
             .literal_error => {
-                const register = self.context.next_free_reg;
+                const register = self.allocateRegister();
+                self.context.next_free_reg -= 1;
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -269,7 +274,9 @@ pub const Compiler = struct {
 
             // objects
             .object_string => {
-                const register = self.context.next_free_reg;
+                const register = self.allocateRegister();
+                self.context.next_free_reg -= 1;
+
                 const string_data = self.ast.string_table.get(node.data.string_id);
                 const string_object = ObjString.copydata(string_data, self.garbage_collector).asObject();
 

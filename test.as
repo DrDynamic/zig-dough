@@ -1,10 +1,12 @@
-function sayHello(name:String) String {
-    return "Hello " + name
-}
+//function sayHello(name:String) String {
+//    return "Hello " + name
+//}
+//
+//var a = sayHello("World")
+//
+//print(a)
 
-var a = sayHello("World")
-
-print(a)
+print(9+9*9)
 
 // type Number = Int|Float
 // 
