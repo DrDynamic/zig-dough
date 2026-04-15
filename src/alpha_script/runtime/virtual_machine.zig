@@ -10,6 +10,7 @@ pub const CallFrame = struct {
     function: *ObjFunction,
     ip: usize,
     base_pointer: usize,
+    reg_return: u8,
 };
 
 pub const VirtualMachine = struct {
@@ -68,43 +69,53 @@ pub const VirtualMachine = struct {
             .error_pool = self.error_pool,
         };
 
-        try self.call(module.function, 0);
+        try self.call(module.function, 0, 0);
         try self.run();
     }
 
-    fn printCallframe(self: *const VirtualMachine, terminal: *const as.common.Terminal, register: usize) void {
-        //        const stack = self.stack;
-        //
-        //        const current_frame = self.frames[self.frame_count - 1];
-        //        const chunk = current_frame.function.chunk;
+    fn printCallframe(self: *const VirtualMachine, terminal: *const as.common.Terminal, register: usize, color: ?as.common.Terminal.Color) void {
+        const frame_style: as.common.Terminal.PrintOptions = .{
+            .color = color,
+            .styles = &.{.faint},
+        };
 
-        for (self.frames[0..self.frame_count]) |frame| {
+        const active_frame_style: as.common.Terminal.PrintOptions = .{
+            .color = color,
+        };
+
+        var style: as.common.Terminal.PrintOptions = undefined;
+        for (0.., self.frames[0..self.frame_count]) |index, frame| {
             const reg_frame_start = frame.base_pointer;
             const reg_frame_end = frame.base_pointer + (frame.function.max_registers);
+
+            style = if (index == self.frame_count - 1)
+                active_frame_style
+            else
+                frame_style;
 
             if (register == frame.base_pointer) {
                 const local_address = register - frame.base_pointer;
 
                 // start of callframe ┐
-                terminal.print(" {d:0>2}┐", .{local_address});
+                terminal.printWithOptions(" {d:0>2}┐", .{local_address}, style);
             } else if (register > reg_frame_start and register < reg_frame_end) {
                 const local_address = register - frame.base_pointer;
 
                 // inside callframe   │
-                terminal.print(" {d:0>2}│", .{local_address});
+                terminal.printWithOptions(" {d:0>2}│", .{local_address}, style);
             } else if (register == reg_frame_end) {
                 const local_address = register - frame.base_pointer;
 
                 // end of callframe   ┘
-                terminal.print(" {d:0>2}┘", .{local_address});
+                terminal.printWithOptions(" {d:0>2}┘", .{local_address}, style);
             } else {
                 // outside of callframe
-                terminal.print("    ", .{});
+                terminal.printWithOptions("    ", .{}, style);
             }
         }
     }
 
-    fn printStack(self: *const VirtualMachine, disassambler: *const as.frontend.debug.Disassambler) void {
+    fn printStack(self: *const VirtualMachine, disassambler: *const as.frontend.debug.Disassambler, used_frame: *const CallFrame) void {
         const Terminal = as.common.Terminal;
 
         const register_style: Terminal.PrintOptions = .{
@@ -119,17 +130,17 @@ pub const VirtualMachine = struct {
 
         const stack = self.stack;
 
+        const chunk = used_frame.function.chunk;
+        const instruction = chunk.code.items[used_frame.ip - 1];
         const current_frame = self.frames[self.frame_count - 1];
-        const chunk = current_frame.function.chunk;
-        const instruction = chunk.code.items[current_frame.ip];
 
         disassambler.terminal.print("\n", .{});
 
-        const description = disassambler.disassambleInstruction(&chunk, instruction, current_frame.ip);
+        const description = disassambler.disassambleInstruction(&chunk, instruction, used_frame.ip);
 
         for (stack[0..self.stack_top], 0..) |value, register| {
-            const local_address = if (register >= current_frame.base_pointer)
-                register - current_frame.base_pointer
+            const local_address = if (register >= used_frame.base_pointer)
+                register - used_frame.base_pointer
             else
                 std.math.maxInt(usize);
 
@@ -141,7 +152,16 @@ pub const VirtualMachine = struct {
             const read_b = description.parameter_type_b == .register_id and instruction.abc.b == local_address;
             const read_c = description.parameter_type_c == .register_id and instruction.abc.c == local_address;
 
-            const style = if (mutate_a or mutate_b or mutate_c)
+            const call_callee = instruction.ab.opcode == as.compiler.OpCode.call and instruction.abc.b == local_address;
+            const call_args = instruction.ab.opcode == as.compiler.OpCode.call and local_address > instruction.abc.b and local_address <= instruction.abc.b + instruction.abc.c;
+
+            const call_return = instruction.ab.opcode == as.compiler.OpCode.call_return and used_frame.reg_return == register - current_frame.base_pointer;
+
+            const style = if (call_callee or call_args)
+                register_read_style
+            else if (call_return)
+                register_mutated_style
+            else if (mutate_a or mutate_b or mutate_c)
                 register_mutated_style
             else if (read_a or read_b or read_c)
                 register_read_style
@@ -151,7 +171,7 @@ pub const VirtualMachine = struct {
             disassambler.terminal.printWithOptions("{d:0>4}: ", .{register}, style);
             disassambler.terminal.printWithOptions("[{: <30}]", .{value}, style);
 
-            self.printCallframe(disassambler.terminal, register);
+            self.printCallframe(disassambler.terminal, register, style.color);
 
             disassambler.terminal.print("\n", .{});
         }
@@ -161,8 +181,8 @@ pub const VirtualMachine = struct {
         const debug: bool = true;
 
         var current_frame = &self.frames[self.frame_count - 1];
+        var used_frame: *CallFrame = undefined;
 
-        var ip = current_frame.ip;
         var chunk = current_frame.function.chunk;
         var code = chunk.code.items;
         var stack = &self.stack;
@@ -178,9 +198,13 @@ pub const VirtualMachine = struct {
         }
 
         while (true) {
-            if (ip >= code.len) return;
-            const instruction = code[ip];
-            ip += 1;
+            if (current_frame.ip >= code.len) return;
+            const instruction = code[current_frame.ip];
+            current_frame.ip += 1;
+
+            if (debug) {
+                used_frame = current_frame;
+            }
 
             switch (instruction.abc.opcode) {
                 .load_const => {
@@ -295,13 +319,11 @@ pub const VirtualMachine = struct {
 
                     const callee = stack[reg_callee];
 
-                    current_frame.ip = ip;
-
                     if (callee.isObject()) {
                         switch (callee.object.tag) {
                             .function => {
                                 const callee_fn = callee.toObject().as(values.ObjFunction);
-                                try self.call(callee_fn, arg_count);
+                                try self.call(callee_fn, arg_count, instruction.abc.a);
                             },
                             .native_function => {
                                 const native = callee.object.as(values.ObjNative);
@@ -318,7 +340,6 @@ pub const VirtualMachine = struct {
                     }
 
                     current_frame = &self.frames[self.frame_count - 1];
-                    ip = current_frame.ip;
                     chunk = current_frame.function.chunk;
                     code = chunk.code.items;
                     base = current_frame.base_pointer;
@@ -332,49 +353,49 @@ pub const VirtualMachine = struct {
                         return;
                     }
                     // TODO return from a function -> restore stack top, decrement frame_count, etc.
-                    const reg_dest = base + 0;
+                    const offset_return = current_frame.reg_return;
                     const reg_value = base + instruction.abc.b;
 
                     const return_value = stack[reg_value];
-                    stack[reg_dest] = return_value;
 
                     self.frame_count -= 1;
 
                     current_frame = &self.frames[self.frame_count - 1];
-                    ip = current_frame.ip;
                     chunk = current_frame.function.chunk;
                     code = chunk.code.items;
                     base = current_frame.base_pointer;
+
+                    stack[base + offset_return] = return_value;
                 },
 
                 // control flow
                 .jump => {
                     const offset = instruction.ab.b;
-                    ip += offset - 1;
+                    current_frame.ip += offset - 1;
                 },
                 .jump_if_false => {
                     const reg_condition = base + instruction.ab.a;
                     if (stack[reg_condition].isFalsey()) {
                         const offset = instruction.ab.b;
-                        ip += offset - 1;
+                        current_frame.ip += offset - 1;
                     }
                 },
                 .jump_if_true => {
                     const reg_condition = base + instruction.ab.a;
                     if (!stack[reg_condition].isFalsey()) {
                         const offset = instruction.ab.b;
-                        ip += offset - 1;
+                        current_frame.ip += offset - 1;
                     }
                 },
             }
 
             if (debug) {
-                self.printStack(&disassambler);
+                self.printStack(&disassambler, used_frame);
             }
         }
     }
 
-    inline fn call(self: *VirtualMachine, function: *ObjFunction, arg_count: u8) Error!void {
+    inline fn call(self: *VirtualMachine, function: *ObjFunction, arg_count: u8, reg_return: u8) Error!void {
         // TODO is this needed? (already checked by SemanticAnalyser?)
         if (arg_count < function.arity) {
             const error_string = std.fmt.allocPrint(self.allocator, "Expected {d} arguments but got {d}", .{ function.arity, arg_count }) catch {
@@ -397,6 +418,7 @@ pub const VirtualMachine = struct {
         frame.function = function;
         frame.ip = 0;
         frame.base_pointer = self.stack_top - arg_count - 1;
+        frame.reg_return = reg_return;
 
         var index = self.stack_top;
         while (index < self.stack_top + function.max_registers) : (index += 1) {
