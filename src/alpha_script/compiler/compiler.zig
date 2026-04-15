@@ -492,6 +492,10 @@ pub const Compiler = struct {
         return next_free;
     }
 
+    inline fn freeRegister(self: *Compiler) void {
+        self.context.next_free_reg -= 1;
+    }
+
     fn emitUnaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {
         const snapshot = self.context.next_free_reg;
 
