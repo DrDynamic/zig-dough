@@ -1,5 +1,3 @@
-const RegisterId = u8;
-
 /// a variable bound to a register
 pub const Local = struct {
     name_id: StringId,
@@ -93,12 +91,12 @@ pub const Compiler = struct {
                 @panic("failed to register natives");
             };
 
-            self.context.next_free_reg += 1;
+            _ = self.allocateRegister();
         }
         defer {
             for (buildin_functions) |_| {
                 _ = self.context.locals.pop();
-                self.context.next_free_reg -= 1;
+                self.freeRegister();
             }
         }
 
@@ -218,7 +216,7 @@ pub const Compiler = struct {
             // literals
             .literal_null => {
                 const register = self.allocateRegister();
-                self.context.next_free_reg -= 1;
+                self.freeRegister();
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -229,7 +227,7 @@ pub const Compiler = struct {
             },
             .literal_bool => {
                 const register = self.allocateRegister();
-                self.context.next_free_reg -= 1;
+                self.freeRegister();
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -240,7 +238,7 @@ pub const Compiler = struct {
             },
             .literal_int => {
                 const register = self.allocateRegister();
-                self.context.next_free_reg -= 1;
+                self.freeRegister();
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -251,7 +249,7 @@ pub const Compiler = struct {
             },
             .literal_float => {
                 const register = self.allocateRegister();
-                self.context.next_free_reg -= 1;
+                self.freeRegister();
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -262,7 +260,7 @@ pub const Compiler = struct {
             },
             .literal_error => {
                 const register = self.allocateRegister();
-                self.context.next_free_reg -= 1;
+                self.freeRegister();
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -275,7 +273,7 @@ pub const Compiler = struct {
             // objects
             .object_string => {
                 const register = self.allocateRegister();
-                self.context.next_free_reg -= 1;
+                self.freeRegister();
 
                 const string_data = self.ast.string_table.get(node.data.string_id);
                 const string_object = ObjString.copydata(string_data, self.garbage_collector).asObject();
@@ -451,7 +449,7 @@ pub const Compiler = struct {
             .logical_and => {
                 const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
                 const reg_result = self.allocateRegister();
-                self.context.next_free_reg -= 1;
+                self.freeRegister();
 
                 try self.compileExpressionEnsureRegister(extra.lhs, reg_result);
                 const pos_end_jump = try self.emitJump(.jump_if_false, reg_result);
@@ -463,7 +461,7 @@ pub const Compiler = struct {
             .logical_or => {
                 const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
                 const reg_result = self.allocateRegister();
-                self.context.next_free_reg -= 1;
+                self.freeRegister();
 
                 try self.compileExpressionEnsureRegister(extra.lhs, reg_result);
                 const pos_end_jump = try self.emitJump(.jump_if_true, reg_result);
@@ -635,6 +633,7 @@ const Value = as.runtime.values.Value;
 
 const BuildinFunction = as.BuildinFunction;
 const NodeId = as.frontend.ast.NodeId;
+const RegisterId = as.runtime.RegisterId;
 const StringId = as.common.StringId;
 
 const NodeListIterator = as.frontend.ast.NodeListIterator;

@@ -1,6 +1,8 @@
 const FRAMES_MAX = 128;
 const STACK_MAX = FRAMES_MAX * 256;
 
+pub const RegisterId = u8;
+
 pub const ExecutionContext = struct {
     string_table: *const StringTable,
     error_pool: *const ErrorPool,
@@ -10,7 +12,7 @@ pub const CallFrame = struct {
     function: *ObjFunction,
     ip: usize,
     base_pointer: usize,
-    reg_return: u8,
+    reg_return: RegisterId, // id of the register in the calling CallFrame
 };
 
 pub const VirtualMachine = struct {
@@ -402,7 +404,7 @@ pub const VirtualMachine = struct {
         }
     }
 
-    inline fn call(self: *VirtualMachine, function: *ObjFunction, first_arg_id: usize, arg_count: u8, reg_return: u8) Error!void {
+    inline fn call(self: *VirtualMachine, function: *ObjFunction, first_arg_id: usize, arg_count: u8, reg_return: RegisterId) Error!void {
         // TODO is this needed? (already checked by SemanticAnalyser?)
         if (arg_count < function.arity) {
             const error_string = std.fmt.allocPrint(self.allocator, "Expected {d} arguments but got {d}", .{ function.arity, arg_count }) catch {
