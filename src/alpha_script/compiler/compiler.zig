@@ -8,11 +8,7 @@ pub const Local = struct {
     is_initialized: bool,
 };
 
-/// description on an UpValue
-pub const UpValue = struct {
-    index: u8,
-    is_local: bool,
-};
+const UpValueLocation = struct { index: u8, is_local: bool };
 
 pub const CompilerContext = struct {
     parent_context: ?*CompilerContext = null,
@@ -20,7 +16,7 @@ pub const CompilerContext = struct {
     max_registers: *u8 = undefined,
     chunk: *Chunk = undefined,
     locals: std.ArrayList(Local),
-    upvalues: std.ArrayList(UpValue),
+    upvalues: std.ArrayList(UpValueLocation),
     scope_depth: i32,
     next_free_reg: RegisterId,
 
@@ -29,7 +25,7 @@ pub const CompilerContext = struct {
             .parent_context = parent,
 
             .locals = std.ArrayList(Local).init(allocator),
-            .upvalues = std.ArrayList(UpValue).init(allocator),
+            .upvalues = std.ArrayList(UpValueLocation).init(allocator),
             .scope_depth = 0,
             .next_free_reg = 0,
 
@@ -40,7 +36,7 @@ pub const CompilerContext = struct {
 
     pub fn deinit(self: *CompilerContext) void {
         self.locals.deinit();
-        self.upvalues.deinit();
+        //self.upvalues.deinit(); ownership moves into compiled function
     }
 };
 
@@ -158,11 +154,7 @@ pub const Compiler = struct {
 
         self.exitScope();
 
-        // todo: what if there are no upvalues for the function?
-        function.up_value_locations = self.allocator.alloc(struct { index: u8, is_local: bool }, self.context.upvalues.items.len);
-        for (self.context.upvalues.items, 0..) |location, index| {
-            function.up_value_locations[index] = location;
-        }
+        function.upvalue_locations = self.context.upvalues;
 
         self.context = parent_context;
 

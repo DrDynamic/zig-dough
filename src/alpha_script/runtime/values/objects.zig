@@ -88,7 +88,7 @@ pub const ObjModule = struct {
 pub const ObjFunction = struct {
     header: ObjectHeader,
     arity: u8,
-    up_value_locations: []struct { index: u8, is_local: bool },
+    upvalue_locations: []struct { index: u8, is_local: bool },
     max_registers: u8,
     chunk: Chunk,
     name: ?ObjString,
@@ -104,7 +104,7 @@ pub const ObjFunction = struct {
     }
 
     pub fn deinit(self: *ObjFunction, allocator: std.mem.Allocator) void {
-        allocator.free(self.up_value_locations);
+        allocator.free(self.upvalue_locations);
         self.chunk.deinit();
         if (self.name != null) {
             self.name.?.deinit(allocator);
