@@ -4,7 +4,9 @@
   - initialize stack correctly (right amount of registers)
 - max_registers
   - check correctness when using temporary register (like in 9+9*9)
-  
+- refactor OpCode.call 
+  - replace ARGS_COUNT with REG_ARGS_START so the function doesn't need to be copied every time
+
 # backlog
 - string concat via ++
 - enforce const (when identifier is never written)

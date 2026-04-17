@@ -1,4 +1,6 @@
 pub const ObjectType = enum(u8) {
+    up_value,
+    closure,
     function,
     native_function,
     module,
@@ -86,6 +88,7 @@ pub const ObjModule = struct {
 pub const ObjFunction = struct {
     header: ObjectHeader,
     arity: u8,
+    up_value_locations: []struct { index: u8, is_local: bool },
     max_registers: u8,
     chunk: Chunk,
     name: ?ObjString,
@@ -101,6 +104,7 @@ pub const ObjFunction = struct {
     }
 
     pub fn deinit(self: *ObjFunction, allocator: std.mem.Allocator) void {
+        allocator.free(self.up_value_locations);
         self.chunk.deinit();
         if (self.name != null) {
             self.name.?.deinit(allocator);
@@ -109,6 +113,57 @@ pub const ObjFunction = struct {
     }
 
     pub fn asObject(self: *ObjFunction) *ObjectHeader {
+        return &self.header;
+    }
+};
+
+pub const ObjClosure = struct {
+    header: ObjectHeader,
+    up_values: []?*ObjUpValue,
+    function: *ObjFunction,
+
+    pub fn init(garbage_collector: *GarbageCollector, function: *ObjFunction) *ObjClosure {
+        const closure = garbage_collector.createObject(ObjClosure, .closure);
+        closure.function = function;
+
+        closure.up_values = try garbage_collector.allocator().alloc(?*ObjUpValue, function.up_value_locations.len);
+        for (closure.up_values) |*up_value| {
+            up_value.* = null;
+        }
+    }
+
+    pub fn deinit(self: *ObjClosure, allocator: std.mem.Allocator) void {
+        allocator.free(self.up_values);
+        allocator.destroy(self);
+    }
+
+    pub fn asObject(self: *ObjClosure) *ObjectHeader {
+        return &self.header;
+    }
+};
+
+pub const ObjUpValue = struct {
+    header: ObjectHeader,
+    location: *Value,
+    closed: bool,
+
+    pub fn init(garbage_collector: *GarbageCollector, location: *Value) *ObjUpValue {
+        var up_value = garbage_collector.createObject(ObjUpValue, .up_value);
+        up_value.location = location;
+        up_value.closed = false;
+
+        return up_value;
+    }
+
+    pub fn deinit(self: *ObjUpValue, allocator: std.mem.Allocator) void {
+        if (self.closed and self.location.isObject()) {
+            const obj = self.location.toObject();
+            obj.deinit(allocator);
+        }
+        allocator.destroy(self);
+    }
+
+    pub fn asObject(self: *ObjUpValue) *ObjectHeader {
         return &self.header;
     }
 };

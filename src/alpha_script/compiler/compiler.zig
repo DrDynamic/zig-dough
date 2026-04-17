@@ -8,12 +8,19 @@ pub const Local = struct {
     is_initialized: bool,
 };
 
+/// description on an UpValue
+pub const UpValue = struct {
+    index: u8,
+    is_local: bool,
+};
+
 pub const CompilerContext = struct {
     parent_context: ?*CompilerContext = null,
 
     max_registers: *u8 = undefined,
     chunk: *Chunk = undefined,
     locals: std.ArrayList(Local),
+    upvalues: std.ArrayList(UpValue),
     scope_depth: i32,
     next_free_reg: RegisterId,
 
@@ -22,6 +29,7 @@ pub const CompilerContext = struct {
             .parent_context = parent,
 
             .locals = std.ArrayList(Local).init(allocator),
+            .upvalues = std.ArrayList(UpValue).init(allocator),
             .scope_depth = 0,
             .next_free_reg = 0,
 
@@ -32,6 +40,7 @@ pub const CompilerContext = struct {
 
     pub fn deinit(self: *CompilerContext) void {
         self.locals.deinit();
+        self.upvalues.deinit();
     }
 };
 
@@ -40,6 +49,7 @@ pub const Compiler = struct {
         UndefinedIdentifier,
 
         ConstantOverflow,
+        UpValueOverflow,
         OutOfMemory,
     };
 
@@ -107,7 +117,7 @@ pub const Compiler = struct {
             try self.compileStatement(node_id);
         }
 
-        try self.context.chunk.emit(Instruction.fromABC(.call_return, 0, 0, 0));
+        try self.emitInstruction(Instruction.fromABC(.call_return, 0, 0, 0));
 
         const module = ObjModule.init(function, self.garbage_collector);
         _ = self.garbage_collector.temp_objects.pop(); // pop compiled function
@@ -148,6 +158,12 @@ pub const Compiler = struct {
 
         self.exitScope();
 
+        // todo: what if there are no upvalues for the function?
+        function.up_value_locations = self.allocator.alloc(struct { index: u8, is_local: bool }, self.context.upvalues.items.len);
+        for (self.context.upvalues.items, 0..) |location, index| {
+            function.up_value_locations[index] = location;
+        }
+
         self.context = parent_context;
 
         return function;
@@ -186,7 +202,7 @@ pub const Compiler = struct {
             // statements
             .statement_return => {
                 const reg = try self.compileExpression(node.data.node_id);
-                try self.context.chunk.emit(Instruction.fromABC(.call_return, 0, reg, 0));
+                try self.emitInstruction(Instruction.fromABC(.call_return, 0, reg, 0));
             },
             else => { // expression statements
                 const snapshot = self.context.next_free_reg;
@@ -293,10 +309,20 @@ pub const Compiler = struct {
             .expression_assignment => {
                 const extra = self.ast.getExtra(node.data.extra_id, AssignmentExtra);
                 const target_node = self.ast.nodes.items[extra.target]; // semantic analyser assures that this is an identifier_expr
-                const reg_target = self.resolveLocal(target_node.data.string_id) catch unreachable; // assured by semyntc analyser
 
-                try self.compileExpressionEnsureRegister(extra.source, reg_target);
-                return reg_target;
+                if (self.resolveLocal(target_node.data.string_id)) |reg_target| {
+                    try self.compileExpressionEnsureRegister(extra.source, reg_target);
+                    return reg_target;
+                } else {
+                    const reg_target = self.allocateRegister();
+                    self.freeRegister();
+
+                    const upvalue_index = self.resolveUpValue(target_node.data.string_id) catch unreachable; // identifier has to be somewhere (checked by semantic analyser)
+                    try self.compileExpressionEnsureRegister(extra.source, reg_target);
+                    self.emitInstruction(Instruction.fromABC(.store_upvalue, upvalue_index, reg_target, 0));
+
+                    return reg_target;
+                }
             },
             .expression_function => {
                 const fn_extra = self.ast.getExtra(node.data.extra_id, FunctionExtra);
@@ -393,7 +419,19 @@ pub const Compiler = struct {
 
             // access
 
-            .identifier_expr => self.resolveLocal(node.data.string_id) catch unreachable, // assured by semyntc analyser
+            .identifier_expr => {
+                if (self.resolveLocal(node.data.string_id)) |reg_identifier| {
+                    return reg_identifier;
+                } else {
+                    const reg_identifier = self.allocateRegister();
+                    self.freeRegister();
+
+                    const upvalue_index = self.resolveUpValue(node.data.string_id) catch unreachable; // identifier has to be somewhere (checked by semantic analyser)
+                    self.emitInstruction(Instruction.fromABC(.load_upvalue, upvalue_index, reg_identifier, 0));
+
+                    return reg_identifier;
+                }
+            }, // assured by semyntc analyser
             .call => {
                 const extra = self.ast.getExtra(node.data.extra_id, CallExtra);
 
@@ -415,7 +453,7 @@ pub const Compiler = struct {
                     }
                 }
 
-                try self.context.chunk.emit(Instruction.fromABC(.call, reg_callee, reg_callee, arg_count));
+                try self.emitInstruction(Instruction.fromABC(.call, reg_callee, reg_callee, arg_count));
                 self.context.next_free_reg = snapshot;
                 return reg_callee;
             },
@@ -476,7 +514,7 @@ pub const Compiler = struct {
     inline fn compileExpressionEnsureRegister(self: *Compiler, node_id: ast.NodeId, register: RegisterId) !void {
         const result = try self.compileExpression(node_id);
         if (result != register) {
-            try self.context.chunk.emit(Instruction.fromABC(.move, register, result, 0));
+            try self.emitInstruction(Instruction.fromABC(.move, register, result, 0));
             // if (register <= self.context.next_free_reg) {
             //     self.context.next_free_reg = register + 1;
             // }
@@ -494,13 +532,17 @@ pub const Compiler = struct {
         self.context.next_free_reg -= 1;
     }
 
+    inline fn emitInstruction(self: *Compiler, instruction: Instruction) void {
+        try self.context.chunk.emit(instruction);
+    }
+
     fn emitUnaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {
         const snapshot = self.context.next_free_reg;
 
         const reg_rhs = try self.compileExpression(node.data.node_id);
         const reg_dest = if (reg_rhs < snapshot) snapshot else reg_rhs;
 
-        try self.context.chunk.emit(Instruction.fromABC(opcode, reg_dest, reg_rhs, 0));
+        try self.emitInstruction(Instruction.fromABC(opcode, reg_dest, reg_rhs, 0));
 
         // free all regs
         self.context.next_free_reg = snapshot;
@@ -518,7 +560,7 @@ pub const Compiler = struct {
 
         const reg_dest = if (reg_lhs < snapshot) snapshot else reg_lhs;
 
-        try self.context.chunk.emit(Instruction.fromABC(opcode, reg_dest, reg_lhs, reg_rhs));
+        try self.emitInstruction(Instruction.fromABC(opcode, reg_dest, reg_lhs, reg_rhs));
 
         // free all regs
         self.context.next_free_reg = snapshot;
@@ -527,14 +569,14 @@ pub const Compiler = struct {
 
     fn emitLoadConstant(self: *Compiler, opcode: OpCode, register: RegisterId, constant: Value) !void {
         const constant_id = try self.context.chunk.addConstant(constant);
-        try self.context.chunk.emit(Instruction.fromAB(opcode, register, constant_id));
+        try self.emitInstruction(Instruction.fromAB(opcode, register, constant_id));
     }
 
     /// emits a InstructionAB with the given jump.
     /// Returns the position of the jump
     inline fn emitJump(self: *Compiler, opcode: OpCode, arg: u8) !usize {
         const pos = self.context.chunk.code.items.len;
-        try self.context.chunk.emit(Instruction.fromAB(opcode, arg, 0));
+        try self.emitInstruction(Instruction.fromAB(opcode, arg, 0));
         return pos;
     }
 
@@ -566,18 +608,62 @@ pub const Compiler = struct {
         return index;
     }
 
-    /// searches for the register of a variable
-    fn resolveLocal(self: *const Compiler, name_id: StringId) Error!RegisterId {
-        const str = self.ast.string_table.get(name_id);
+    /// searches for the register of a variable in the current context
+    inline fn resolveLocal(self: *const Compiler, name_id: StringId) Error!RegisterId {
+        return try self.resolveLocalInContext(self.context, name_id);
+    }
 
-        _ = str;
-        var local_index: isize = @as(isize, @intCast(self.context.locals.items.len)) - 1;
+    /// searches for the register of a variable in the given context
+    inline fn resolveLocalInContext(_: *const Compiler, context: *const CompilerContext, name_id: StringId) Error!RegisterId {
+        var local_index: isize = @as(isize, @intCast(context.locals.items.len)) - 1;
         while (local_index >= 0) : (local_index -= 1) {
-            const local = self.context.locals.items[@intCast(local_index)];
+            const local = context.locals.items[@intCast(local_index)];
             if (local.name_id == name_id) return local.reg_slot;
         }
 
         return Error.UndefinedIdentifier;
+    }
+
+    inline fn resolveUpValue(self: *const Compiler, name_id: StringId) Error!RegisterId {
+        return try self.resolveUpValueInContext(self.context, name_id);
+    }
+
+    /// searches and/or creates an UpValue recursivly in all contexts
+    inline fn resolveUpValueInContext(self: *const Compiler, context: *const CompilerContext, name_id: StringId) Error!u8 {
+        if (context.parent_context) |parent_context| {
+            // check if variable is local
+            if (self.resolveLocalInContext(parent_context, name_id)) |reg_local| {
+                parent_context.locals.items[reg_local].is_captured = true;
+                return self.addUpValue(parent_context, reg_local, true);
+            }
+
+            // recursively check search the variable in outer scopes
+            if (self.resolveUpValueInContext(parent_context, name_id)) |upvalue_index| {
+                return try self.addUpValue(parent_context, upvalue_index, false);
+            }
+        }
+
+        unreachable; // variable must be anywhere (checked by semantic analyser)
+    }
+
+    fn addUpValue(_: *Compiler, context: *CompilerContext, index: u8, is_local: bool) u8 {
+        for (context.upvalues, 0..) |upvalue, i| {
+            if (upvalue.index == index and upvalue.is_local == is_local) {
+                return i;
+            }
+        }
+
+        const upvalue_index = context.upvalues.items.len;
+        if (upvalue_index >= std.math.maxInt(u8)) {
+            return Error.UpValueOverflow;
+        }
+
+        context.upvalues.append(.{
+            .index = index,
+            .is_local = is_local,
+        });
+
+        return @intCast(upvalue_index);
     }
 
     fn enterScope(self: *Compiler) void {

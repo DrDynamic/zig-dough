@@ -19,7 +19,12 @@ pub const OpCode = enum(u8) {
     // strings
     string_concat,
 
+    // upvalues
+    load_upvalue, // REG_DEST INDEX_UPVALUE // load the Value from the UpValue at INDEX_UPVALUE in REG_DEST
+    store_upvalue, // INDEX_DEST REG_SOURCE // store the Value from REG_SOURCE in the UpValue at INDEX_UPVALUE
+
     // interaction
+    // TODO: refactor call arguments. Should get REG_DEST REG_CALLEE REG_ARGS_START so the function doesn't need to be copied every time
     call, // REG_DEST REG_CALLEE ARGS_COUNT // call REG_CALLEE and store the return Value in REG_DEST (ARG_COUNT registers after REG_CALLEE are reserved for call arguments)
     call_return, // 0 REG_VALUE // return from a call and put REG_VALUE at callees register 0
 
