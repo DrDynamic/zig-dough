@@ -1,11 +1,17 @@
 # next
-- vm stack
-  - reset stack_top after call_return
-  - initialize stack correctly (right amount of registers)
-- max_registers
-  - check correctness when using temporary register (like in 9+9*9)
 - refactor OpCode.call 
   - replace ARGS_COUNT with REG_ARGS_START so the function doesn't need to be copied every time
+- Register Allocator zur verwalltung von Registern eibführen 
+  - allocate- und releaseRegister hierher verschieben
+  - liste freigegebener register pflegen (für das register recycling und elegantere max_registers ermittling)
+- minipass für discovery und lliveness einführen 
+  - in jedem Block über unmittelbare children iterieren und symbole als nicht inittialisiert in die symboltabelle schreiben
+  - last_read_node_id einführen und setzen
+- architecture documentation
+  - instruction size 32 bit (for cache locality)
+  - request isolated state (Hybrid model for shared symbols / connections and background tasks for cron like execution)
+- function / closure  hoisting
+
 
 # backlog
 - string concat via ++
@@ -35,9 +41,23 @@
   - explicit shapes (interfaces)
   - magic methods (constructor / invoke / get / set / array access?)
 - imports
+  - return Modules as first class citisens
+  - Modules are Namespace Isolated
+  - Modules work as singletons
+
 - std library
 - lsp
 - debugger
 
 - Compiler Settings
   - enforce const
+
+- implement register Spilling, when registers are used up
+
+# Optimizations
+- liveness analysis (release registers prematurely, when they are read the last time)
+- NaN Boxing
+- Packed union for Instsructions
+- Use ArenaAllocator 
+  - should auto grow
+  - environment config for min and max size

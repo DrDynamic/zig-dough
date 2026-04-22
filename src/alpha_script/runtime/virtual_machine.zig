@@ -9,6 +9,7 @@ pub const ExecutionContext = struct {
 };
 
 pub const CallFrame = struct {
+    closure: ?*ObjClosure,
     function: *ObjFunction,
     ip: usize,
     base_pointer: usize,
@@ -30,6 +31,8 @@ pub const VirtualMachine = struct {
 
     stack: [STACK_MAX]Value,
     stack_top: usize,
+
+    open_upvalues: ?*ObjUpValue,
 
     current_module: ?*ObjModule,
 
@@ -77,7 +80,7 @@ pub const VirtualMachine = struct {
             }
         }
 
-        try self.call(module.function, 0, 0, 0);
+        try self.callFunction(module.function, 0, 0);
         try self.run();
     }
 
@@ -329,9 +332,13 @@ pub const VirtualMachine = struct {
 
                     if (callee.isObject()) {
                         switch (callee.object.tag) {
+                            .closure => {
+                                const callee_fn = callee.toObject().as(values.ObjClosure);
+                                try self.callClosure(callee_fn, reg_callee + 1, instruction.abc.a);
+                            },
                             .function => {
                                 const callee_fn = callee.toObject().as(values.ObjFunction);
-                                try self.call(callee_fn, reg_callee + 1, arg_count, instruction.abc.a);
+                                try self.callFunction(callee_fn, reg_callee + 1, instruction.abc.a);
                             },
                             .native_function => {
                                 const native = callee.object.as(values.ObjNative);
@@ -376,6 +383,26 @@ pub const VirtualMachine = struct {
                     stack[base + offset_return] = return_value;
                     self.stack_top = base + current_frame.function.max_registers;
                 },
+                .create_closure => {
+                    const reg_dest = base + instruction.ab.a;
+                    const value_function = chunk.constants.items[instruction.ab.b];
+                    const obj_function = value_function.toObject().as(ObjFunction);
+
+                    const closure = ObjClosure.init(self.garbage_collector, obj_function);
+                    stack[reg_dest] = Value.fromObject(closure.asObject());
+
+                    for (closure.upvalues, 0..) |*upvalue, index| {
+                        const location = obj_function.upvalue_locations[index];
+                        if (location.is_local) {
+                            upvalue.* = self.captureUpvalue(&stack[@intCast(location.index)]);
+                        } else {
+                            upvalue.* = current_frame.closure.?.upvalues[location.index];
+                        }
+                    }
+                },
+                .close_upvalue => {
+                    self.closeUpvalue(last: *Value)
+                },
 
                 // control flow
                 .jump => {
@@ -404,18 +431,13 @@ pub const VirtualMachine = struct {
         }
     }
 
-    inline fn call(self: *VirtualMachine, function: *ObjFunction, first_arg_id: usize, arg_count: u8, reg_return: RegisterId) Error!void {
-        // TODO is this needed? (already checked by SemanticAnalyser?)
-        if (arg_count < function.arity) {
-            const error_string = std.fmt.allocPrint(self.allocator, "Expected {d} arguments but got {d}", .{ function.arity, arg_count }) catch {
-                @panic("Allocation failed!");
-            };
-            defer self.allocator.free(error_string);
-            self.error_reporter.virtualMachineError(self, Error.ArgumentCount, error_string);
+    inline fn callClosure(self: *VirtualMachine, closure: *ObjClosure, first_arg_id: usize, reg_return: RegisterId) Error!*CallFrame {
+        const frame = try self.callFunction(closure.function, first_arg_id, reg_return);
+        frame.closure = closure;
+        return frame;
+    }
 
-            return Error.ArgumentCount;
-        }
-
+    inline fn callFunction(self: *VirtualMachine, function: *ObjFunction, first_arg_id: usize, reg_return: RegisterId) Error!*CallFrame {
         if (self.frame_count >= FRAMES_MAX) {
             self.error_reporter.virtualMachineError(self, Error.StackOverflow, "Stack overflow");
             return Error.StackOverflow;
@@ -435,6 +457,56 @@ pub const VirtualMachine = struct {
         }
 
         self.stack_top = frame.base_pointer + function.max_registers;
+
+        return frame;
+    }
+
+    inline fn captureUpvalue(self: *VirtualMachine, local: *Value) !*ObjUpValue {
+        var prev_upvalue: ?*ObjUpValue = null;
+        var maybe_upvalue = self.open_upvalues;
+
+        // search upvalue
+        while (maybe_upvalue) |up_value| {
+            if (@intFromPtr(up_value.location) <= @intFromPtr(local)) {
+                break;
+            }
+
+            prev_upvalue = up_value;
+            maybe_upvalue = up_value.next_open;
+        }
+
+        if (maybe_upvalue) |upvalue| {
+            if (upvalue.location == local) {
+                return upvalue;
+            }
+        }
+
+        // Not found - Inert new upvalue in list
+        const created_upvalue = ObjUpValue.init(self.garbage_collector, local);
+        created_upvalue.next_open = maybe_upvalue;
+
+        if (prev_upvalue) |prev| {
+            prev.next_open = created_upvalue;
+        } else {
+            self.open_upvalues = created_upvalue;
+        }
+
+        return created_upvalue;
+    }
+
+    inline fn closeUpvalue(self: *VirtualMachine, last: *Value) void {
+        while (self.open_upvalues) |upvalue| {
+            if (@intFromPtr(upvalue.location) < @intFromPtr(last)) {
+                break;
+            }
+
+            // close upvalue
+            upvalue.closed = upvalue.location.*;
+            upvalue.location = &upvalue.closed;
+
+            // remove from list
+            self.open_upvalues = upvalue.next_open;
+        }
     }
 
     const MathOps = struct {
@@ -479,9 +551,11 @@ const ErrorPool = as.frontend.ErrorPool;
 const ErrorReporter = as.common.reporting.ErrorReporter;
 const GarbageCollector = as.common.memory.GarbageCollector;
 const Instruction = as.compiler.Instruction;
+const ObjClosure = as.runtime.values.ObjClosure;
 const ObjFunction = as.runtime.values.ObjFunction;
 const ObjModule = as.runtime.values.ObjModule;
 const ObjString = as.runtime.values.ObjString;
+const ObjUpValue = as.runtime.values.ObjUpValue;
 const StringTable = as.common.StringTable;
 const TypePool = as.frontend.TypePool;
 const Value = as.runtime.values.Value;

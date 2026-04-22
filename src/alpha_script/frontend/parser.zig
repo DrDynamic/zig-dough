@@ -534,11 +534,12 @@ pub const Parser = struct {
             if (try self.match(.left_paren)) {
                 const token = self.scanner.previous();
                 // finish Call
-                const list_start = try self.expressionList(.right_paren);
+                const list_result = try self.expressionList(.right_paren);
 
                 const extra_id = try self.ast.addExtra(CallExtra{
                     .callee = callee,
-                    .args_start = list_start,
+                    .args_start = list_result.extra_id,
+                    .arg_count = list_result.count,
                 });
                 callee = try self.ast.addNode(.{
                     .tag = .call,
@@ -737,21 +738,26 @@ pub const Parser = struct {
         var function_extra = FunctionExtra{
             .name_id = null,
             .parameters = null,
+            .parameter_count = undefined,
             .return_type = undefined,
             .body = undefined,
         };
 
-        const current = self.scanner.current();
-        _ = current;
+        // function name
         if (self.scanner.current().tag == .identifier) {
             function_extra.name_id = self.parseIdentifier() catch unreachable; // if ensures that the current token is an identifier
         }
+
+        // args start
         _ = self.consume(.left_paren) catch {
             self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect '(' after function declaration");
             return Error.UnexpectedToken;
         };
 
-        function_extra.parameters = try self.parameterList();
+        const list_result = try self.parameterList();
+
+        function_extra.parameters = list_result.extra_id;
+        function_extra.parameter_count = list_result.count;
 
         function_extra.return_type = try self.parseTypeErrorUnion();
 
@@ -926,7 +932,7 @@ pub const Parser = struct {
 
     /// parses a comma seperated list of parameters until ')' is found
     /// returns the start of a node_list with all parameters
-    fn parameterList(self: *Parser) Error!?NodeExtraId {
+    fn parameterList(self: *Parser) Error!struct { extra_id: ?NodeExtraId, count: u8 } {
         var parameter_ids: [32]NodeId = undefined;
         var count: u8 = 0;
         while (true) {
@@ -969,12 +975,12 @@ pub const Parser = struct {
         }
 
         _ = try self.consume(.right_paren);
-        return try self.nodeListFromArray(parameter_ids[0..count]);
+        return .{ .extra_id = try self.nodeListFromArray(parameter_ids[0..count]), .count = count };
     }
 
     /// parses a comma seperated list of expressions until end_token is found
     /// returns the start of a node_list with all expressions
-    fn expressionList(self: *Parser, end_token: TokenType) Error!?NodeExtraId {
+    fn expressionList(self: *Parser, end_token: TokenType) Error!struct { extra_id: ?NodeExtraId, count: u8 } {
         var expression_ids: [255]NodeId = undefined;
         var count: u8 = 0;
         while (!self.check(end_token)) {
@@ -990,7 +996,7 @@ pub const Parser = struct {
         }
         _ = try self.consume(end_token);
 
-        return try self.nodeListFromArray(expression_ids[0..count]);
+        return .{ .extra_id = try self.nodeListFromArray(expression_ids[0..count]), .count = count };
     }
 
     // node list
@@ -1092,14 +1098,9 @@ pub const Parser = struct {
     }
 
     pub inline fn reportHintToTypeDeclaration(self: *const Parser, type_name_id: StringId, message: []const u8) void {
-        for (self.ast.nodes.items) |node| {
-            if (node.tag == .declaration_type or node.tag == .declaration_error_set) {
-                const extra = self.ast.getExtra(node.data.extra_id, DeclarationExtra);
-                if (extra.name_id == type_name_id) {
-                    const token = self.ast.scanner.token_stream.scanPosition(node.token_position) catch unreachable;
-                    self.reportHint(token, message);
-                }
-            }
+        if (self.ast.getTypeDeclarationNode(type_name_id)) |node| {
+            const token = self.ast.scanner.token_stream.scanPosition(node.token_position) catch unreachable;
+            self.reportHint(token, message);
         }
     }
 };

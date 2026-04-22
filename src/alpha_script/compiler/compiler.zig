@@ -524,7 +524,7 @@ pub const Compiler = struct {
         self.context.next_free_reg -= 1;
     }
 
-    inline fn emitInstruction(self: *Compiler, instruction: Instruction) void {
+    inline fn emitInstruction(self: *Compiler, instruction: Instruction) !void {
         try self.context.chunk.emit(instruction);
     }
 

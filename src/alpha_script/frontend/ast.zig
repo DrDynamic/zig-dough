@@ -73,6 +73,7 @@ pub const BlockExtra = struct {
 pub const CallExtra = struct {
     callee: NodeId,
     args_start: ?NodeExtraId, // NodeListExtra
+    arg_count: u8,
 };
 
 pub const DeclarationExtra = struct {
@@ -84,6 +85,7 @@ pub const DeclarationExtra = struct {
 pub const FunctionExtra = struct {
     name_id: ?StringId,
     parameters: ?NodeExtraId, // NodeListExtra
+    parameter_count: u8,
     return_type: TypeId,
     body: NodeId, // expression_block
 };
@@ -207,6 +209,30 @@ pub const AST = struct {
     pub fn getExtra(self: AST, index: u32, comptime T: type) T {
         const bytes = self.extra_data.items[index .. index + @sizeOf(T)];
         return std.mem.bytesToValue(T, bytes);
+    }
+
+    pub fn getTypeDeclarationNode(self: *const AST, type_name_id: StringId) ?Node {
+        for (self.nodes.items) |node| {
+            if (node.tag == .declaration_type or node.tag == .declaration_error_set) {
+                const extra = self.ast.getExtra(node.data.extra_id, DeclarationExtra);
+                if (extra.name_id == type_name_id) {
+                    return node;
+                }
+            }
+        }
+        return null;
+    }
+
+    pub fn getSymbolDeclarationNode(self: *const AST, type_name_id: StringId) ?Node {
+        for (self.nodes.items) |node| {
+            if (node.tag == .declaration_type or node.tag == .declaration_error_set) {
+                const extra = self.ast.getExtra(node.data.extra_id, DeclarationExtra);
+                if (extra.name_id == type_name_id) {
+                    return node;
+                }
+            }
+        }
+        return null;
     }
 };
 

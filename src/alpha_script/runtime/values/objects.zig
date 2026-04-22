@@ -1,5 +1,5 @@
 pub const ObjectType = enum(u8) {
-    up_value,
+    upvalue,
     closure,
     function,
     native_function,
@@ -29,10 +29,12 @@ pub const ObjectHeader = struct {
 
     pub fn deinit(self: *ObjectHeader, allocator: std.mem.Allocator) void {
         switch (self.tag) {
+            .closure => self.as(ObjClosure).deinit(allocator),
             .function => self.as(ObjFunction).deinit(allocator),
-            .native_function => self.as(ObjNative).deinit(allocator),
             .module => self.as(ObjModule).deinit(allocator),
+            .native_function => self.as(ObjNative).deinit(allocator),
             .string => self.as(ObjString).deinit(allocator),
+            .upvalue => self.as(ObjUpValue).deinit(allocator),
         }
     }
 
@@ -119,21 +121,21 @@ pub const ObjFunction = struct {
 
 pub const ObjClosure = struct {
     header: ObjectHeader,
-    up_values: []?*ObjUpValue,
+    upvalues: []?*ObjUpValue,
     function: *ObjFunction,
 
     pub fn init(garbage_collector: *GarbageCollector, function: *ObjFunction) *ObjClosure {
         const closure = garbage_collector.createObject(ObjClosure, .closure);
         closure.function = function;
 
-        closure.up_values = try garbage_collector.allocator().alloc(?*ObjUpValue, function.up_value_locations.len);
-        for (closure.up_values) |*up_value| {
-            up_value.* = null;
+        closure.upvalues = try garbage_collector.allocator().alloc(?*ObjUpValue, function.upvalue_locations.len);
+        for (closure.upvalues) |*upvalue| {
+            upvalue.* = null;
         }
     }
 
     pub fn deinit(self: *ObjClosure, allocator: std.mem.Allocator) void {
-        allocator.free(self.up_values);
+        allocator.free(self.upvalues);
         allocator.destroy(self);
     }
 
@@ -144,15 +146,16 @@ pub const ObjClosure = struct {
 
 pub const ObjUpValue = struct {
     header: ObjectHeader,
+    next_open: ?*ObjUpValue,
     location: *Value,
-    closed: bool,
+    closed: Value,
 
     pub fn init(garbage_collector: *GarbageCollector, location: *Value) *ObjUpValue {
-        var up_value = garbage_collector.createObject(ObjUpValue, .up_value);
-        up_value.location = location;
-        up_value.closed = false;
+        var upvalue = garbage_collector.createObject(ObjUpValue, .upvalue);
+        upvalue.location = location;
+        upvalue.closed = Value.makeUninitialized();
 
-        return up_value;
+        return upvalue;
     }
 
     pub fn deinit(self: *ObjUpValue, allocator: std.mem.Allocator) void {

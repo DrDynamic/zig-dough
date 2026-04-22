@@ -51,6 +51,7 @@ const SemanticAnalyserContext = struct {
 
 pub const SemanticAnalyser = struct {
     pub const Error = error{
+        ArgumentMissmatch,
         OutOfMemory,
         UnhandledNodeType,
         TypeMismatch,
@@ -438,12 +439,40 @@ pub const SemanticAnalyser = struct {
             .call => |_| case: {
                 const extra = self.ast.getExtra(node.data.extra_id, CallExtra);
                 const type_callee = try self.analyse(extra.callee);
+                const callee = self.ast.nodes.items[extra.callee];
+                const callee_extra = self.ast.getExtra(callee.data.extra_id, FunctionExtra);
 
+                if (callee_extra.parameter_count != extra.arg_count) {
+                    const message = std.fmt.allocPrint(self.allocator, "expects {d} arguments but got {d}", .{ callee_extra.parameter_count, extra.arg_count });
+                    defer self.allocator.free(message);
+
+                    self.error_reporter.semanticAnalyserError(self, Error.ArgumentMissmatch, node.*, message);
+                    self.error_reporter.semanticAnalyserHint(self, callee, "function declered here:");
+
+                    return Error.ArgumentMissmatch;
+                }
+
+                var had_type_missmatch = false;
                 if (extra.args_start) |args_start| {
-                    var iterator = NodeListIterator.init(self.ast, args_start);
-                    while (iterator.next()) |list_node_id| {
-                        _ = try self.analyse(list_node_id);
+                    var param_iterator = NodeListIterator.init(self.ast, callee_extra.parameters.?);
+                    var arg_iterator = NodeListIterator.init(self.ast, args_start);
+
+                    while (arg_iterator.next()) |arg_node_id| {
+                        const param_node_id = param_iterator.next().?;
+
+                        const type_param = self.ast.nodes.items[param_node_id].resolved_type_id;
+                        const type_arg = try self.analyse(arg_node_id);
+
+                        if (self.ast.type_pool.isAssignable(type_param, type_arg)) {
+                            had_type_missmatch = true;
+                            self.reportNotAssignable(arg_node_id, type_param, type_arg);
+                        }
                     }
+                }
+
+                if (had_type_missmatch) {
+                    self.error_reporter.semanticAnalyserHint(self, callee, "function declared here:");
+                    return Error.TypeMismatch;
                 }
 
                 break :case type_callee;
