@@ -28,7 +28,7 @@ pub const OpCode = enum(u8) {
     call, // REG_DEST REG_CALLEE ARGS_COUNT // call REG_CALLEE and store the return Value in REG_DEST (ARG_COUNT registers after REG_CALLEE are reserved for call arguments)
     call_return, // 0 REG_VALUE // return from a call and put REG_VALUE at callees register 0
     create_closure, // REG_DEST CONST_ADDR // create a closure from a function at CONST_ADDR and save it in REG_DEST
-    close_upvalue, // INDEX_UPVALUE // close the UpValue at INDEX_UPVALUE
+    close_upvalue, // 0 REG_TO_THIS_VALUE // close the UpValue of a given register and all above
 
     // controlflow
     jump, // 0 OFFSET // jump to the instruction at the current instruction index + OFFSET

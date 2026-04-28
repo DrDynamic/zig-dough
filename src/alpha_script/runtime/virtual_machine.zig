@@ -367,7 +367,7 @@ pub const VirtualMachine = struct {
                         self.frame_count = 0;
                         return;
                     }
-                    // TODO return from a function -> restore stack top, decrement frame_count, etc.
+
                     const offset_return = current_frame.reg_return;
                     const reg_value = base + instruction.abc.b;
 
@@ -401,7 +401,8 @@ pub const VirtualMachine = struct {
                     }
                 },
                 .close_upvalue => {
-                    self.closeUpvalue(last: *Value)
+                    const reg_b = base + instruction.abc.b;
+                    self.closeUpvalue(&stack[reg_b]);
                 },
 
                 // control flow
