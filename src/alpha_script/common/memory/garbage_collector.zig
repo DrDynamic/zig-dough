@@ -167,7 +167,7 @@ pub const GarbageCollector = struct {
         if (self.compiler.is_compiling) {
             var maybe_context: ?*CompilerContext = &self.compiler.context;
             while (maybe_context) |context| {
-                self.markArray(context.chunk.constants.items);
+                self.markValueArray(context.chunk.constants.items);
                 maybe_context = context.parent_context;
             }
         }
@@ -228,9 +228,18 @@ pub const GarbageCollector = struct {
         }
 
         switch (object.tag) {
+            .closure => {
+                const closure = object.as(ObjClosure);
+
+                for (closure.upvalues) |upvalue| {
+                    self.markObject(upvalue.?.asObject());
+                }
+
+                self.markObject(closure.function.asObject());
+            },
             .function => {
                 const function = object.as(ObjFunction);
-                self.markArray(function.chunk.constants.items);
+                self.markValueArray(function.chunk.constants.items);
             },
             .module => {
                 const module = object.as(ObjModule);
@@ -238,10 +247,14 @@ pub const GarbageCollector = struct {
             },
             .native_function => {},
             .string => {},
+            .upvalue => {
+                const upvalue = object.as(ObjUpValue);
+                self.markValue(upvalue.closed);
+            },
         }
     }
 
-    fn markArray(self: *GarbageCollector, array: []Value) void {
+    fn markValueArray(self: *GarbageCollector, array: []Value) void {
         for (array) |value| {
             self.markValue(value);
         }
@@ -435,9 +448,11 @@ const as = @import("as");
 const Compiler = as.compiler.Compiler;
 const CompilerContext = as.compiler.CompilerContext;
 const ObjectHeader = as.runtime.values.ObjectHeader;
+const ObjClosure = as.runtime.values.ObjClosure;
 const ObjFunction = as.runtime.values.ObjFunction;
 const ObjModule = as.runtime.values.ObjModule;
 const ObjString = as.runtime.values.ObjString;
+const ObjUpValue = as.runtime.values.ObjUpValue;
 const Value = as.runtime.values.Value;
 const VirtualMachine = as.runtime.VirtualMachine;
 

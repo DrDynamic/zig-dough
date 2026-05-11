@@ -8,15 +8,13 @@ pub const Local = struct {
     is_initialized: bool,
 };
 
-const UpValueLocation = struct { index: u8, is_local: bool };
-
 pub const CompilerContext = struct {
     parent_context: ?*CompilerContext = null,
 
     max_registers: *u8 = undefined,
     chunk: *Chunk = undefined,
     locals: std.ArrayList(Local),
-    upvalues: std.ArrayList(UpValueLocation),
+    upvalues: std.ArrayList(ObjFunction.UpValueLocation),
     scope_depth: i32,
     next_free_reg: RegisterId,
 
@@ -25,7 +23,7 @@ pub const CompilerContext = struct {
             .parent_context = parent,
 
             .locals = std.ArrayList(Local).init(allocator),
-            .upvalues = std.ArrayList(UpValueLocation).init(allocator),
+            .upvalues = std.ArrayList(ObjFunction.UpValueLocation).init(allocator),
             .scope_depth = 0,
             .next_free_reg = 0,
 
@@ -152,9 +150,9 @@ pub const Compiler = struct {
         // compile function body
         try self.compileStatement(fn_extra.body);
 
-        self.exitScope();
+        try self.exitScope();
 
-        function.upvalue_locations = self.context.upvalues;
+        function.upvalue_locations = self.context.upvalues.items;
 
         self.context = parent_context;
 
@@ -305,13 +303,13 @@ pub const Compiler = struct {
                 if (self.resolveLocal(target_node.data.string_id)) |reg_target| {
                     try self.compileExpressionEnsureRegister(extra.source, reg_target);
                     return reg_target;
-                } else {
+                } else |_| {
                     const reg_target = self.allocateRegister();
                     self.freeRegister();
 
                     const upvalue_index = self.resolveUpValue(target_node.data.string_id) catch unreachable; // identifier has to be somewhere (checked by semantic analyser)
                     try self.compileExpressionEnsureRegister(extra.source, reg_target);
-                    self.emitInstruction(Instruction.fromABC(.store_upvalue, upvalue_index, reg_target, 0));
+                    try self.emitInstruction(Instruction.fromABC(.store_upvalue, upvalue_index, reg_target, 0));
 
                     return reg_target;
                 }
@@ -347,7 +345,7 @@ pub const Compiler = struct {
                     }
                 }
 
-                self.exitScope();
+                try self.exitScope();
 
                 return 0;
             },
@@ -377,7 +375,7 @@ pub const Compiler = struct {
                 const reg_result = self.context.next_free_reg;
                 try self.compileExpressionEnsureRegister(extra.then_branch, reg_result);
 
-                self.exitScope();
+                try self.exitScope();
 
                 const pos_jump_end = try self.emitJump(.jump, 0);
 
@@ -400,7 +398,7 @@ pub const Compiler = struct {
                     }
 
                     try self.compileExpressionEnsureRegister(else_branch_id, reg_result);
-                    self.exitScope();
+                    try self.exitScope();
                 }
 
                 // patch jump at the end of then branch to jump to the end of else branch
@@ -414,12 +412,12 @@ pub const Compiler = struct {
             .identifier_expr => {
                 if (self.resolveLocal(node.data.string_id)) |reg_identifier| {
                     return reg_identifier;
-                } else {
+                } else |_| {
                     const reg_identifier = self.allocateRegister();
                     self.freeRegister();
 
                     const upvalue_index = self.resolveUpValue(node.data.string_id) catch unreachable; // identifier has to be somewhere (checked by semantic analyser)
-                    self.emitInstruction(Instruction.fromABC(.load_upvalue, upvalue_index, reg_identifier, 0));
+                    try self.emitInstruction(Instruction.fromABC(.load_upvalue, upvalue_index, reg_identifier, 0));
 
                     return reg_identifier;
                 }
@@ -602,7 +600,7 @@ pub const Compiler = struct {
 
     /// searches for the register of a variable in the current context
     inline fn resolveLocal(self: *const Compiler, name_id: StringId) Error!RegisterId {
-        return try self.resolveLocalInContext(self.context, name_id);
+        return try self.resolveLocalInContext(&self.context, name_id);
     }
 
     /// searches for the register of a variable in the given context
@@ -616,32 +614,36 @@ pub const Compiler = struct {
         return Error.UndefinedIdentifier;
     }
 
-    inline fn resolveUpValue(self: *const Compiler, name_id: StringId) Error!RegisterId {
-        return try self.resolveUpValueInContext(self.context, name_id);
+    inline fn resolveUpValue(self: *Compiler, name_id: StringId) Error!RegisterId {
+        return try self.resolveUpValueInContext(&self.context, name_id);
     }
 
     /// searches and/or creates an UpValue recursivly in all contexts
-    inline fn resolveUpValueInContext(self: *const Compiler, context: *const CompilerContext, name_id: StringId) Error!u8 {
+    inline fn resolveUpValueInContext(self: *Compiler, context: *const CompilerContext, name_id: StringId) Error!u8 {
         if (context.parent_context) |parent_context| {
             // check if variable is local
             if (self.resolveLocalInContext(parent_context, name_id)) |reg_local| {
                 parent_context.locals.items[reg_local].is_captured = true;
                 return self.addUpValue(parent_context, reg_local, true);
+            } else |err| {
+                return err;
             }
 
             // recursively check search the variable in outer scopes
             if (self.resolveUpValueInContext(parent_context, name_id)) |upvalue_index| {
                 return try self.addUpValue(parent_context, upvalue_index, false);
+            } else |err| {
+                return err;
             }
         }
 
         unreachable; // variable must be anywhere (checked by semantic analyser)
     }
 
-    fn addUpValue(_: *Compiler, context: *CompilerContext, index: u8, is_local: bool) u8 {
-        for (context.upvalues, 0..) |upvalue, i| {
+    fn addUpValue(_: *Compiler, context: *CompilerContext, index: u8, is_local: bool) Error!u8 {
+        for (context.upvalues.items, 0..) |upvalue, i| {
             if (upvalue.index == index and upvalue.is_local == is_local) {
-                return i;
+                return @intCast(i);
             }
         }
 
@@ -650,7 +652,7 @@ pub const Compiler = struct {
             return Error.UpValueOverflow;
         }
 
-        context.upvalues.append(.{
+        try context.upvalues.append(.{
             .index = index,
             .is_local = is_local,
         });
@@ -663,9 +665,10 @@ pub const Compiler = struct {
         // TODO error handling (overflow of scopes?)
     }
 
-    fn exitScope(self: *Compiler) void {
+    fn exitScope(self: *Compiler) Error!void {
         self.context.scope_depth -= 1;
         // TODO error handlich (underflow of scopes?)
+        var any_captured = false;
         while (self.context.locals.items.len > 0 and self.context.locals.items[self.context.locals.items.len - 1].depth > self.context.scope_depth) {
             const local = self.context.locals.pop();
 
@@ -678,9 +681,14 @@ pub const Compiler = struct {
             // std.debug.print("\n", .{});
 
             if (local.?.owns_register) {
+                if (local.?.is_captured) {
+                    any_captured = true;
+                }
                 self.context.next_free_reg = local.?.reg_slot;
             }
         }
+
+        try self.emitInstruction(Instruction.fromABC(.close_upvalue, 0, self.context.next_free_reg, 0));
     }
 };
 

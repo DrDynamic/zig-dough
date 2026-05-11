@@ -443,7 +443,7 @@ pub const SemanticAnalyser = struct {
                 const callee_extra = self.ast.getExtra(callee.data.extra_id, FunctionExtra);
 
                 if (callee_extra.parameter_count != extra.arg_count) {
-                    const message = std.fmt.allocPrint(self.allocator, "expects {d} arguments but got {d}", .{ callee_extra.parameter_count, extra.arg_count });
+                    const message = try std.fmt.allocPrint(self.allocator, "expects {d} arguments but got {d}", .{ callee_extra.parameter_count, extra.arg_count });
                     defer self.allocator.free(message);
 
                     self.error_reporter.semanticAnalyserError(self, Error.ArgumentMissmatch, node.*, message);
@@ -464,8 +464,9 @@ pub const SemanticAnalyser = struct {
                         const type_arg = try self.analyse(arg_node_id);
 
                         if (self.ast.type_pool.isAssignable(type_param, type_arg)) {
+                            const arg_node = self.ast.nodes.items[arg_node_id];
                             had_type_missmatch = true;
-                            self.reportNotAssignable(arg_node_id, type_param, type_arg);
+                            try self.reportNotAssignable(arg_node, type_param, type_arg);
                         }
                     }
                 }

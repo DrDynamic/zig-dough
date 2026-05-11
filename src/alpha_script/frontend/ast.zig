@@ -214,7 +214,7 @@ pub const AST = struct {
     pub fn getTypeDeclarationNode(self: *const AST, type_name_id: StringId) ?Node {
         for (self.nodes.items) |node| {
             if (node.tag == .declaration_type or node.tag == .declaration_error_set) {
-                const extra = self.ast.getExtra(node.data.extra_id, DeclarationExtra);
+                const extra = self.getExtra(node.data.extra_id, DeclarationExtra);
                 if (extra.name_id == type_name_id) {
                     return node;
                 }
@@ -226,7 +226,7 @@ pub const AST = struct {
     pub fn getSymbolDeclarationNode(self: *const AST, type_name_id: StringId) ?Node {
         for (self.nodes.items) |node| {
             if (node.tag == .declaration_type or node.tag == .declaration_error_set) {
-                const extra = self.ast.getExtra(node.data.extra_id, DeclarationExtra);
+                const extra = self.getExtra(node.data.extra_id, DeclarationExtra);
                 if (extra.name_id == type_name_id) {
                     return node;
                 }

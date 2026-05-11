@@ -11,6 +11,7 @@ pub const ParameterType = enum {
     mutate_register_id,
     register_id,
     constant_id,
+    upvalue_id,
     code_offset,
     number,
     unused,
@@ -51,7 +52,7 @@ pub const Disassambler = struct {
                 const constant_id = instruction.ab.b;
                 const value = chunk.constants.items[constant_id];
 
-                self.terminal.print("{s:<16} R{d:<2}, K{d:<3}    ; ", .{ @tagName(op), dest_reg, constant_id });
+                self.terminal.print("{s:<16} R{d:<2}, C{d:<3}    ; ", .{ @tagName(op), dest_reg, constant_id });
                 self.terminal.printWithOptions("{}", .{value}, value_options);
                 self.terminal.print("\n", .{});
 
@@ -94,6 +95,61 @@ pub const Disassambler = struct {
             .string_concat,
             => return self.printABCMutate(instruction),
             // interaction
+            .load_upvalue => {
+                self.terminal.print("{s:<16} R{d:<2}, U{d:<2},   ;\n", .{
+                    @tagName(instruction.abc.opcode),
+                    instruction.abc.a,
+                    instruction.abc.b,
+                });
+
+                return .{
+                    .instruction_type = .abc,
+                    .parameter_type_a = .mutate_register_id,
+                    .parameter_type_b = .upvalue_id,
+                    .parameter_type_c = .unused,
+                };
+            },
+            .store_upvalue => {
+                self.terminal.print("{s:<16} U{d:<2}, R{d:<2},   ;\n", .{
+                    @tagName(instruction.abc.opcode),
+                    instruction.abc.a,
+                    instruction.abc.b,
+                });
+
+                return .{
+                    .instruction_type = .abc,
+                    .parameter_type_a = .upvalue_id,
+                    .parameter_type_b = .register_id,
+                    .parameter_type_c = .unused,
+                };
+            },
+            .create_closure => {
+                self.terminal.print("{s:<16} R{d:<2}, C{d:<2},   ;\n", .{
+                    @tagName(instruction.abc.opcode),
+                    instruction.ab.a,
+                    instruction.ab.b,
+                });
+
+                return .{
+                    .instruction_type = .ab,
+                    .parameter_type_a = .mutate_register_id,
+                    .parameter_type_b = .constant_id,
+                    .parameter_type_c = .unused,
+                };
+            },
+            .close_upvalue => {
+                self.terminal.print("{s:<16}   , R{d:<2},   ;\n", .{
+                    @tagName(instruction.abc.opcode),
+                    instruction.abc.b,
+                });
+
+                return .{
+                    .instruction_type = .abc,
+                    .parameter_type_a = .unused,
+                    .parameter_type_b = .register_id,
+                    .parameter_type_c = .unused,
+                };
+            },
             .call => return self.printCall(instruction),
             .call_return => {
                 self.terminal.print("{s:<16}    , R{d:<2}\n", .{

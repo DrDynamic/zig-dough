@@ -88,9 +88,11 @@ pub const ObjModule = struct {
 };
 
 pub const ObjFunction = struct {
+    pub const UpValueLocation = struct { index: u8, is_local: bool };
+
     header: ObjectHeader,
     arity: u8,
-    upvalue_locations: []struct { index: u8, is_local: bool },
+    upvalue_locations: []UpValueLocation,
     max_registers: u8,
     chunk: Chunk,
     name: ?ObjString,
@@ -128,10 +130,16 @@ pub const ObjClosure = struct {
         const closure = garbage_collector.createObject(ObjClosure, .closure);
         closure.function = function;
 
-        closure.upvalues = try garbage_collector.allocator().alloc(?*ObjUpValue, function.upvalue_locations.len);
+        closure.upvalues = garbage_collector.allocator().alloc(?*ObjUpValue, function.upvalue_locations.len) catch {
+            // TODO runtime error?
+            @panic("Failed to create Object");
+        };
+
         for (closure.upvalues) |*upvalue| {
             upvalue.* = null;
         }
+
+        return closure;
     }
 
     pub fn deinit(self: *ObjClosure, allocator: std.mem.Allocator) void {
@@ -159,10 +167,6 @@ pub const ObjUpValue = struct {
     }
 
     pub fn deinit(self: *ObjUpValue, allocator: std.mem.Allocator) void {
-        if (self.closed and self.location.isObject()) {
-            const obj = self.location.toObject();
-            obj.deinit(allocator);
-        }
         allocator.destroy(self);
     }
 

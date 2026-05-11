@@ -52,6 +52,8 @@ pub const VirtualMachine = struct {
             .stack = undefined,
             .stack_top = 0,
 
+            .open_upvalues = null,
+
             .current_module = null,
 
             .string_table = string_table,
@@ -80,7 +82,7 @@ pub const VirtualMachine = struct {
             }
         }
 
-        try self.callFunction(module.function, 0, 0);
+        _ = try self.callFunction(module.function, 0, 0);
         try self.run();
     }
 
@@ -323,6 +325,16 @@ pub const VirtualMachine = struct {
                     stack[reg_a] = Value.fromObject(str_result.asObject());
                 },
                 // interaction
+                .load_upvalue => {
+                    const reg_dest = base + instruction.abc.a;
+                    const upvalue = current_frame.closure.?.upvalues[instruction.abc.b].?;
+                    stack[reg_dest] = upvalue.location.*;
+                },
+                .store_upvalue => {
+                    const upvalue = current_frame.closure.?.upvalues[instruction.abc.a].?;
+                    const reg_source = base + instruction.abc.b;
+                    upvalue.location.* = stack[reg_source];
+                },
                 .call => {
                     const reg_dest = base + instruction.abc.a;
                     const reg_callee = base + instruction.abc.b;
@@ -334,11 +346,11 @@ pub const VirtualMachine = struct {
                         switch (callee.object.tag) {
                             .closure => {
                                 const callee_fn = callee.toObject().as(values.ObjClosure);
-                                try self.callClosure(callee_fn, reg_callee + 1, instruction.abc.a);
+                                _ = try self.callClosure(callee_fn, reg_callee + 1, instruction.abc.a);
                             },
                             .function => {
                                 const callee_fn = callee.toObject().as(values.ObjFunction);
-                                try self.callFunction(callee_fn, reg_callee + 1, instruction.abc.a);
+                                _ = try self.callFunction(callee_fn, reg_callee + 1, instruction.abc.a);
                             },
                             .native_function => {
                                 const native = callee.object.as(values.ObjNative);
@@ -394,7 +406,7 @@ pub const VirtualMachine = struct {
                     for (closure.upvalues, 0..) |*upvalue, index| {
                         const location = obj_function.upvalue_locations[index];
                         if (location.is_local) {
-                            upvalue.* = self.captureUpvalue(&stack[@intCast(location.index)]);
+                            upvalue.* = try self.captureUpvalue(&stack[@intCast(location.index)]);
                         } else {
                             upvalue.* = current_frame.closure.?.upvalues[location.index];
                         }
