@@ -440,10 +440,25 @@ pub const SemanticAnalyser = struct {
                 const extra = self.ast.getExtra(node.data.extra_id, CallExtra);
                 const type_callee = try self.analyse(extra.callee);
                 const callee = self.ast.nodes.items[extra.callee];
-                const callee_extra = self.ast.getExtra(callee.data.extra_id, FunctionExtra);
 
-                if (callee_extra.parameter_count != extra.arg_count) {
-                    const message = try std.fmt.allocPrint(self.allocator, "expects {d} arguments but got {d}", .{ callee_extra.parameter_count, extra.arg_count });
+                var callee_declaration: FunctionExtra = undefined;
+
+                if (callee.tag == .expression_function) {
+                    callee_declaration = self.ast.getExtra(callee.data.extra_id, FunctionExtra);
+                } else if (callee.tag == .identifier_expr) {
+                    const maybe_symbol = self.symbol_table.lookup(callee.data.string_id);
+
+                    if (maybe_symbol == null) {
+                        unreachable; // identifier existence already checked
+                    }
+
+                    callee_declaration = self.ast.getExtra(self.ast.nodes.items[maybe_symbol.?.node_id].data.extra_id, FunctionExtra);
+                } else {
+                    unreachable; // callee must be a callabke or identifier
+                }
+
+                if (callee_declaration.parameter_count != extra.arg_count) {
+                    const message = try std.fmt.allocPrint(self.allocator, "expects {d} arguments but got {d}", .{ callee_declaration.parameter_count, extra.arg_count });
                     defer self.allocator.free(message);
 
                     self.error_reporter.semanticAnalyserError(self, Error.ArgumentMissmatch, node.*, message);
@@ -454,7 +469,7 @@ pub const SemanticAnalyser = struct {
 
                 var had_type_missmatch = false;
                 if (extra.args_start) |args_start| {
-                    var param_iterator = NodeListIterator.init(self.ast, callee_extra.parameters.?);
+                    var param_iterator = NodeListIterator.init(self.ast, callee_declaration.parameters.?);
                     var arg_iterator = NodeListIterator.init(self.ast, args_start);
 
                     while (arg_iterator.next()) |arg_node_id| {
@@ -463,7 +478,7 @@ pub const SemanticAnalyser = struct {
                         const type_param = self.ast.nodes.items[param_node_id].resolved_type_id;
                         const type_arg = try self.analyse(arg_node_id);
 
-                        if (self.ast.type_pool.isAssignable(type_param, type_arg)) {
+                        if (!self.ast.type_pool.isAssignable(type_param, type_arg)) {
                             const arg_node = self.ast.nodes.items[arg_node_id];
                             had_type_missmatch = true;
                             try self.reportNotAssignable(arg_node, type_param, type_arg);
