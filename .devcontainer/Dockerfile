@@ -1,4 +1,4 @@
-FROM ubuntu:questing-20250601
+FROM ubuntu:26.04
 
 # Common part (in every dev image)
 ARG USERNAME="developer"

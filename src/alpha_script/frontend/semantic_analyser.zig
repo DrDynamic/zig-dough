@@ -452,7 +452,11 @@ pub const SemanticAnalyser = struct {
                         unreachable; // identifier existence already checked
                     }
 
-                    callee_declaration = self.ast.getExtra(self.ast.nodes.items[maybe_symbol.?.node_id].data.extra_id, FunctionExtra);
+                    const declaration_node = self.ast.nodes.items[maybe_symbol.?.node_id];
+
+                    std.debug.print("declaration_node.tag {s}\n", .{@tagName(declaration_node.tag)});
+
+                    callee_declaration = self.ast.getExtra(declaration_node.data.extra_id, FunctionExtra);
                 } else {
                     unreachable; // callee must be a callabke or identifier
                 }
