@@ -7,6 +7,22 @@ var a = sayHello("World")
 print(a)
 
 
+//function () {
+//    print("Lorem")
+//}()
+
+//function printName(name: String) {
+//    print(name)
+//}
+// printName(name: "John")
+
+//function printDefault(name: String="Doe") {
+//    print(name)
+//}
+// printDefault()
+// printDefault("John")
+
+
 // type Number = Int|Float
 // 
 // print(add(2, 2.5))

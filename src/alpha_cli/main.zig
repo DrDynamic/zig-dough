@@ -88,7 +88,10 @@ pub fn main() !void {
 
         try interpreter.registerBuildinFunction(.{
             .name_id = try interpreter.string_table.add("print"),
-            .type_id = as.frontend.TypePool.VOID,
+            .parameter_type_ids = &[_]as.frontend.TypeId{
+                as.frontend.TypePool.STRING,
+            },
+            .return_type_id = as.frontend.TypePool.VOID,
             .function = as.runtime.values.natives.nativePrint,
         });
 

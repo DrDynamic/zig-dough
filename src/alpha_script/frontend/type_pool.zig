@@ -93,6 +93,7 @@ pub const TypePool = struct {
     const Error = error{
         RedaclarationError,
         NotFound,
+        NotCallable,
     };
     allocator: std.mem.Allocator,
     error_pool: *ErrorPool,
@@ -168,7 +169,7 @@ pub const TypePool = struct {
             .string => try type_name.appendSlice("String"),
             .module => try type_name.appendSlice("Module"),
             .function => {
-                try type_name.append('(');
+                try type_name.appendSlice("fn (");
                 const signature = self.getFunctionSignature(t);
                 for (signature[0 .. signature.len - 1]) |parameter_id| {
                     const name = try self.getTypeNameAlloc(allocator, parameter_id, string_table);
@@ -182,10 +183,12 @@ pub const TypePool = struct {
                     _ = type_name.pop();
                 }
 
-                try type_name.append(')');
+                try type_name.appendSlice("): ");
 
                 const return_name = try self.getTypeNameAlloc(allocator, signature[signature.len - 1], string_table);
                 defer allocator.free(return_name);
+
+                try type_name.appendSlice(return_name);
 
                 return type_name.items;
             },
@@ -229,6 +232,11 @@ pub const TypePool = struct {
             },
         }
         return type_name.items;
+    }
+
+    pub fn isCallable(self: *const TypePool, type_id: TypeId) bool {
+        const t = self.types.items[type_id];
+        return t == .function;
     }
 
     /// a type is nullable when the type is null or a union type that contains null
@@ -370,6 +378,19 @@ pub const TypePool = struct {
                 }
             },
         }
+    }
+
+    pub fn getCallableSignature(self: *const TypePool, type_id: TypeId) !struct { param_types: []const TypeId, return_type: TypeId } {
+        if (!self.isCallable(type_id)) {
+            return Error.NotCallable;
+        }
+
+        const t = self.types.items[type_id];
+        const signature = self.getFunctionSignature(t);
+        return .{
+            .param_types = signature[0 .. signature.len - 1],
+            .return_type = signature[signature.len - 1],
+        };
     }
 
     /// bind a StringId (name) to a type_id
@@ -591,7 +612,7 @@ pub const TypePool = struct {
         return false;
     }
 
-    /// retrive all members of an error set
+    /// retrive the signature oof a function type, the last type_id in the returned slice is the return type
     inline fn getFunctionSignature(self: *const TypePool, function: Type) []const TypeId {
         return self.type_list_buffer.items[function.function.type_list_index .. function.function.type_list_index + function.function.count];
     }

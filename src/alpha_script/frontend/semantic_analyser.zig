@@ -66,6 +66,7 @@ pub const SemanticAnalyser = struct {
         InvalidAssignmentTarget,
         IllegalAssignment,
         UnexpectedReturn,
+        NotCallable,
         //
         NotFound,
     };
@@ -95,9 +96,11 @@ pub const SemanticAnalyser = struct {
         self.ast = ast;
 
         for (buildin_functions) |buildin| {
+            const type_id = self.ast.type_pool.getOrCreateFunctionType(buildin.parameter_type_ids.?, buildin.return_type_id) catch unreachable;
+
             self.symbol_table.declare(
                 buildin.name_id,
-                buildin.type_id,
+                type_id,
                 0,
                 false,
             ) catch {
@@ -441,45 +444,30 @@ pub const SemanticAnalyser = struct {
                 const type_callee = try self.analyse(extra.callee);
                 const callee = self.ast.nodes.items[extra.callee];
 
-                var callee_declaration: FunctionExtra = undefined;
-
-                if (callee.tag == .expression_function) {
-                    callee_declaration = self.ast.getExtra(callee.data.extra_id, FunctionExtra);
-                } else if (callee.tag == .identifier_expr) {
-                    const maybe_symbol = self.symbol_table.lookup(callee.data.string_id);
-
-                    if (maybe_symbol == null) {
-                        unreachable; // identifier existence already checked
-                    }
-
-                    const declaration_node = self.ast.nodes.items[maybe_symbol.?.node_id];
-
-                    std.debug.print("declaration_node.tag {s}\n", .{@tagName(declaration_node.tag)});
-
-                    callee_declaration = self.ast.getExtra(declaration_node.data.extra_id, FunctionExtra);
-                } else {
-                    unreachable; // callee must be a callabke or identifier
+                if (!self.ast.type_pool.isCallable(type_callee)) {
+                    self.error_reporter.semanticAnalyserError(self, Error.NotCallable, node.*, "called value is not callable");
+                    return Error.NotCallable;
                 }
 
-                if (callee_declaration.parameter_count != extra.arg_count) {
-                    const message = try std.fmt.allocPrint(self.allocator, "expects {d} arguments but got {d}", .{ callee_declaration.parameter_count, extra.arg_count });
+                // match arg count
+                const signature = self.ast.type_pool.getCallableSignature(type_callee) catch unreachable; // assured by isCalable() above
+
+                if (signature.param_types.len != extra.arg_count) {
+                    const message = try std.fmt.allocPrint(self.allocator, "expects {d} arguments but got {d}", .{ signature.param_types.len, extra.arg_count });
                     defer self.allocator.free(message);
 
                     self.error_reporter.semanticAnalyserError(self, Error.ArgumentMissmatch, node.*, message);
-                    self.error_reporter.semanticAnalyserHint(self, callee, "function declered here:");
+                    self.error_reporter.semanticAnalyserHint(self, callee, "declaration:");
 
                     return Error.ArgumentMissmatch;
                 }
 
                 var had_type_missmatch = false;
                 if (extra.args_start) |args_start| {
-                    var param_iterator = NodeListIterator.init(self.ast, callee_declaration.parameters.?);
                     var arg_iterator = NodeListIterator.init(self.ast, args_start);
 
-                    while (arg_iterator.next()) |arg_node_id| {
-                        const param_node_id = param_iterator.next().?;
-
-                        const type_param = self.ast.nodes.items[param_node_id].resolved_type_id;
+                    for (signature.param_types) |type_param| {
+                        const arg_node_id = arg_iterator.next().?;
                         const type_arg = try self.analyse(arg_node_id);
 
                         if (!self.ast.type_pool.isAssignable(type_param, type_arg)) {
@@ -491,11 +479,11 @@ pub const SemanticAnalyser = struct {
                 }
 
                 if (had_type_missmatch) {
-                    self.error_reporter.semanticAnalyserHint(self, callee, "function declared here:");
+                    self.error_reporter.semanticAnalyserHint(self, callee, "declaration:");
                     return Error.TypeMismatch;
                 }
 
-                break :case type_callee;
+                break :case signature.return_type;
             },
             // logical operations
             .logical_or,

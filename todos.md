@@ -1,4 +1,8 @@
 # next
+- closures
+  - named parameters
+  - default parameters
+  - hoisting
 - refactor OpCode.call 
   - replace ARGS_COUNT with REG_ARGS_START so the function doesn't need to be copied every time
 - Register Allocator zur verwalltung von Registern eibführen 

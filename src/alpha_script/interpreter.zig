@@ -6,7 +6,8 @@ pub const CompilerOptions = struct {
 
 pub const BuildinFunction = struct {
     name_id: StringId,
-    type_id: TypeId,
+    parameter_type_ids: ?[]const TypeId,
+    return_type_id: TypeId,
     function: NativeFn,
 };
 
