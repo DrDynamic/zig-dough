@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Debug",
+            "name": "Debug gdb",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/zig-out/bin/as",
@@ -17,6 +17,15 @@
             "internalConsoleOptions": "openOnSessionStart",
             "MIMode": "gdb",
             "preLaunchTask": "build"
+        },
+        {
+            "name": "Debug lldb",
+            "type": "lldb",                // Nutzt die installierte CodeLLDB-Erweiterung
+            "request": "launch",
+            "program": "${workspaceFolder}/zig-out/bin/as",
+            "args": ["test.as"],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "build"        // Führt deinen Build-Task vor dem Debuggen aus
         }
     ]
 }
