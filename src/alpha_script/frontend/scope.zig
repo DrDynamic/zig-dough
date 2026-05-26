@@ -1,12 +1,18 @@
 pub const SymbolId = u32;
 
+pub const SymbolState = enum {
+    Declared, // symbol is partialy added (eg. while hoistin).It is in the TDZ
+    Defined, // symbol is fully added. It has no Value yet. So it is still in the TDZ
+    Initialized, // symbol is fully added and initialized. It is ready to be used
+};
+
 pub const Symbol = struct {
     name_id: StringId,
     type_id: TypeId,
     node_id: NodeId,
+    state: SymbolState,
     is_mutable: bool,
     scope_depth: u32,
-    initialized: bool,
     shadows_symbol: ?SymbolId,
 };
 
@@ -71,8 +77,8 @@ pub const SymbolTable = struct {
             const self_symbol = self.lookup(name_id.*) orelse unreachable; // iterating over own symbols, so it must exist
             const other_symbol = other.lookup(name_id.*) orelse continue; // don't make changes, when other symbol does not exist
 
-            if (!self_symbol.initialized or !other_symbol.initialized) {
-                self_symbol.initialized = false;
+            if (self_symbol.state != .Initialized or other_symbol.state != .Initialized) {
+                self_symbol.state = .Defined;
             }
         }
     }
@@ -115,9 +121,9 @@ pub const SymbolTable = struct {
             .name_id = name_id,
             .type_id = type_id,
             .node_id = node_id,
+            .state = .Declared,
             .is_mutable = is_mutable,
             .scope_depth = self.scope_depth,
-            .initialized = false,
             .shadows_symbol = maybe_shadowed_id,
         });
     }
@@ -130,12 +136,22 @@ pub const SymbolTable = struct {
         symbol.type_id = type_id;
     }
 
+    pub inline fn define(self: *SymbolTable, name_id: StringId) Error!void {
+        const symbol = self.lookup(name_id) orelse {
+            return Error.NotFound;
+        };
+
+        std.debug.assert(symbol.state == .Declared);
+
+        symbol.state = .Defined;
+    }
+
     pub inline fn initialize(self: *SymbolTable, name_id: StringId) Error!void {
         const symbol = self.lookup(name_id) orelse {
             return Error.NotFound;
         };
 
-        symbol.initialized = true;
+        symbol.state = .Initialized;
     }
 
     /// Lookup a symbol by name, searching through parent scopes if necessary

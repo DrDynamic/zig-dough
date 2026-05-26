@@ -124,6 +124,52 @@ pub const SemanticAnalyser = struct {
         }
     }
 
+    /// registers names and types of symbols that are hoisted
+    fn hoistScan(self: *SemanticAnalyser, node_list: NodeExtraId) Error!void {
+        var iterator = NodeListIterator.init(self.ast, node_list);
+        while (iterator.next()) |node_id| {
+            const node = self.ast.nodes.items[node_id];
+            switch (node.tag) {
+                .expression_function => {
+                    // declaration is hoisted
+                    const extra = self.ast.getExtra(node.data.extra_id, FunctionExtra);
+
+                    if (extra.name_id) |name_id| {
+                        self.symbol_table.declare(
+                            name_id,
+                            TypePool.UNRESOLVED,
+                            node_id,
+                            false,
+                        ) catch {
+                            try self.reportRedeclarationError(node, name_id);
+                            return Error.RedeclarationError;
+                        };
+                    }
+
+                    var signature: [32]TypeId = undefined;
+                    var count: u8 = 0;
+                    if (extra.parameters) |list_id| {
+                        var param_iterator = NodeListIterator.init(self.ast, list_id);
+                        while (param_iterator.next()) |parameter_id| {
+                            const parameter_node = self.ast.nodes.items[parameter_id];
+                            const parameter_type_id = parameter_node.resolved_type_id;
+
+                            signature[count] = parameter_type_id;
+                            count += 1;
+                        }
+                    }
+
+                    const type_id = try self.ast.type_pool.getOrCreateFunctionType(signature[0..count], extra.return_type);
+
+                    if (extra.name_id) |name_id| {
+                        self.symbol_table.setType(name_id, type_id) catch unreachable; // Error.NotFound is unreachabe (declared above)
+                    }
+                },
+                else => {},
+            }
+        }
+    }
+
     fn analyse(self: *SemanticAnalyser, node_id: NodeId) Error!TypeId {
         var node = &self.ast.nodes.items[node_id];
 
@@ -388,7 +434,7 @@ pub const SemanticAnalyser = struct {
             // access
             .identifier_expr => |_| case: {
                 if (self.symbol_table.lookup(node.data.string_id)) |symbol| {
-                    if (symbol.initialized == false) {
+                    if (symbol.state != .Initialized) {
                         self.error_reporter.semanticAnalyserError(self, Error.IllegalMutation, node.*, "can not read uninitialized variable");
 
                         const symbol_node = self.ast.nodes.items[symbol.node_id];

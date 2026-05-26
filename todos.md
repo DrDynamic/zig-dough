@@ -65,3 +65,4 @@
 - Use ArenaAllocator 
   - should auto grow
   - environment config for min and max size
+- shard symbol table between semantic analyser and compiler
