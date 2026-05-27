@@ -211,14 +211,13 @@ pub const Parser = struct {
         const left_brace = self.scanner.previous();
 
         var statements = std.ArrayList(NodeId).init(self.allocator);
-        defer statements.deinit();
 
         while (!self.check(.right_brace)) {
             try statements.append(try self.declaration());
         }
 
         const extra_id = try self.ast.addExtra(BlockExtra{
-            .statements = try self.nodeListFromArray(statements.items),
+            .statements = statements.items,
         });
 
         return self.ast.addNode(.{

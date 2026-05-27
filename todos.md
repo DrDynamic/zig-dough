@@ -66,3 +66,4 @@
   - should auto grow
   - environment config for min and max size
 - shard symbol table between semantic analyser and compiler
+- don't put all statements in a ExtraList (e.g. Parameter lists)

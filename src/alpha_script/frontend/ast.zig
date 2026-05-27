@@ -67,7 +67,7 @@ pub const BinaryOpExtra = struct {
 };
 
 pub const BlockExtra = struct {
-    statements: ?NodeExtraId, // NodeListExtra
+    statements: ?[]NodeId, // NodeListExtra
 };
 
 pub const CallExtra = struct {

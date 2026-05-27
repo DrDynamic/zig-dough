@@ -116,7 +116,11 @@ pub const SemanticAnalyser = struct {
             }
         }
 
-        for (ast.getRoots()) |node_id| {
+        const roots = self.ast.getRoots();
+        self.hoistScan(roots) catch |err| {
+            @panic(@errorName(err));
+        };
+        for (roots) |node_id| {
             _ = self.analyse(node_id) catch {
                 ast.invalidate();
                 return;
@@ -125,48 +129,14 @@ pub const SemanticAnalyser = struct {
     }
 
     /// registers names and types of symbols that are hoisted
-    fn hoistScan(self: *SemanticAnalyser, node_list: NodeExtraId) Error!void {
-        var iterator = NodeListIterator.init(self.ast, node_list);
-        while (iterator.next()) |node_id| {
-            const node = self.ast.nodes.items[node_id];
-            switch (node.tag) {
-                .expression_function => {
-                    // declaration is hoisted
-                    const extra = self.ast.getExtra(node.data.extra_id, FunctionExtra);
-
-                    if (extra.name_id) |name_id| {
-                        self.symbol_table.declare(
-                            name_id,
-                            TypePool.UNRESOLVED,
-                            node_id,
-                            false,
-                        ) catch {
-                            try self.reportRedeclarationError(node, name_id);
-                            return Error.RedeclarationError;
-                        };
-                    }
-
-                    var signature: [32]TypeId = undefined;
-                    var count: u8 = 0;
-                    if (extra.parameters) |list_id| {
-                        var param_iterator = NodeListIterator.init(self.ast, list_id);
-                        while (param_iterator.next()) |parameter_id| {
-                            const parameter_node = self.ast.nodes.items[parameter_id];
-                            const parameter_type_id = parameter_node.resolved_type_id;
-
-                            signature[count] = parameter_type_id;
-                            count += 1;
-                        }
-                    }
-
-                    const type_id = try self.ast.type_pool.getOrCreateFunctionType(signature[0..count], extra.return_type);
-
-                    if (extra.name_id) |name_id| {
-                        self.symbol_table.setType(name_id, type_id) catch unreachable; // Error.NotFound is unreachabe (declared above)
-                    }
-                },
-                else => {},
-            }
+    fn hoistScan(self: *SemanticAnalyser, node_ids: []const NodeId) Error!void {
+        for (node_ids) |node_id| {
+            var node = &self.ast.nodes.items[node_id];
+            const resolved_type = switch (node.tag) {
+                .expression_function => try self.analyseFunctionDeclaration(node_id),
+                else => node.resolved_type_id,
+            };
+            node.resolved_type_id = resolved_type;
         }
     }
 
@@ -264,16 +234,16 @@ pub const SemanticAnalyser = struct {
 
                 break :case source_type;
             },
-            .expression_function => try self.analyseFunction(node_id),
+            .expression_function => try self.analyseFunctionDefinition(node_id),
             .expression_grouping => try self.analyse(node.data.node_id),
             .expression_block => |_| case: {
                 self.symbol_table.enterScope();
-
                 const extra = self.ast.getExtra(node.data.extra_id, BlockExtra);
 
                 if (extra.statements) |statements| {
-                    var iterator = NodeListIterator.init(self.ast, statements);
-                    while (iterator.next()) |list_node_id| {
+                    try self.hoistScan(statements);
+
+                    for (statements) |list_node_id| {
                         _ = self.analyse(list_node_id) catch {
                             self.ast.invalidate();
                             break;
@@ -602,7 +572,8 @@ pub const SemanticAnalyser = struct {
         return TypePool.VOID;
     }
 
-    fn analyseFunction(self: *SemanticAnalyser, node_id: NodeId) Error!TypeId {
+    fn analyseFunctionDeclaration(self: *SemanticAnalyser, node_id: NodeId) Error!TypeId {
+        // declaration is hoisted
         const node = self.ast.nodes.items[node_id];
         const extra = self.ast.getExtra(node.data.extra_id, FunctionExtra);
 
@@ -621,14 +592,36 @@ pub const SemanticAnalyser = struct {
         var signature: [32]TypeId = undefined;
         var count: u8 = 0;
         if (extra.parameters) |list_id| {
-            var iterator = NodeListIterator.init(self.ast, list_id);
-            while (iterator.next()) |parameter_id| {
+            var param_iterator = NodeListIterator.init(self.ast, list_id);
+            while (param_iterator.next()) |parameter_id| {
                 const parameter_node = self.ast.nodes.items[parameter_id];
                 const parameter_type_id = parameter_node.resolved_type_id;
-                const parameter_name = parameter_node.data.string_id;
 
                 signature[count] = parameter_type_id;
                 count += 1;
+            }
+        }
+
+        const type_id = try self.ast.type_pool.getOrCreateFunctionType(signature[0..count], extra.return_type);
+
+        if (extra.name_id) |name_id| {
+            self.symbol_table.setType(name_id, type_id) catch unreachable; // Error.NotFound is unreachabe (declared above)
+        }
+
+        return type_id;
+    }
+
+    fn analyseFunctionDefinition(self: *SemanticAnalyser, node_id: NodeId) Error!TypeId {
+        const node = self.ast.nodes.items[node_id];
+        const extra = self.ast.getExtra(node.data.extra_id, FunctionExtra);
+
+        try self.context.pushFunction(node_id, extra);
+
+        if (extra.parameters) |list_id| {
+            var iterator = NodeListIterator.init(self.ast, list_id);
+            while (iterator.next()) |parameter_id| {
+                const parameter_node = self.ast.nodes.items[parameter_id];
+                const parameter_name = parameter_node.data.string_id;
 
                 self.symbol_table.declare(
                     parameter_name,
@@ -643,20 +636,15 @@ pub const SemanticAnalyser = struct {
             }
         }
 
-        const type_id = try self.ast.type_pool.getOrCreateFunctionType(signature[0..count], extra.return_type);
-
-        if (extra.name_id) |name_id| {
-            self.symbol_table.setType(name_id, type_id) catch unreachable; // Error.NotFound is unreachabe (declared above)
-            self.symbol_table.initialize(name_id) catch unreachable; // Error.NotFound is unreachabe (declared above)
-        }
-
-        try self.context.pushFunction(node_id, extra);
-
         _ = try self.analyse(extra.body);
 
         _ = self.context.popFunction();
 
-        return type_id;
+        if (extra.name_id) |name_id| {
+            self.symbol_table.initialize(name_id) catch unreachable; // Error.NotFound is unreachabe (declared while hoisting)
+        }
+
+        return node.resolved_type_id;
     }
 
     fn analyseBinaryCompare(self: *SemanticAnalyser, node_id: NodeId) Error!TypeId {

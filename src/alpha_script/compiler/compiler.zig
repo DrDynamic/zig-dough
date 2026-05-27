@@ -339,8 +339,7 @@ pub const Compiler = struct {
                 const extra = self.ast.getExtra(node.data.extra_id, BlockExtra);
 
                 if (extra.statements) |statements| {
-                    var iterator = NodeListIterator.init(self.ast, statements);
-                    while (iterator.next()) |child_node_id| {
+                    for (statements) |child_node_id| {
                         _ = try self.compileStatement(child_node_id);
                     }
                 }
