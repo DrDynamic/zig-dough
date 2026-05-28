@@ -1,8 +1,10 @@
 # next
+- function / closure  hoisting
 - closures
   - named parameters
   - default parameters
   - hoisting
+- close upvalues by UpValueIndex. (by register_id could fail, if the register is already reused)
 - refactor OpCode.call 
   - replace ARGS_COUNT with REG_ARGS_START so the function doesn't need to be copied every time
 - Register Allocator zur verwalltung von Registern eibführen 
@@ -14,7 +16,6 @@
 - architecture documentation
   - instruction size 32 bit (for cache locality)
   - request isolated state (Hybrid model for shared symbols / connections and background tasks for cron like execution)
-- function / closure  hoisting
 
 
 # backlog

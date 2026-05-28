@@ -606,6 +606,7 @@ pub const SemanticAnalyser = struct {
 
         if (extra.name_id) |name_id| {
             self.symbol_table.setType(name_id, type_id) catch unreachable; // Error.NotFound is unreachabe (declared above)
+            self.symbol_table.initialize(name_id) catch unreachable; // Error.NotFound is unreachabe (declared above)
         }
 
         return type_id;

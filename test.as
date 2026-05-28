@@ -1,8 +1,10 @@
+sayHello("World")
+
+
 function sayHello(name:String) String {
     print("Hello " + name)
 }
 
-sayHello("World")
 
 
 //function () {
