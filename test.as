@@ -1,10 +1,8 @@
 function sayHello(name:String) String {
-    return "Hello " + name
+    print("Hello " + name)
 }
 
-var a = sayHello("World")
-
-print(a)
+sayHello("World")
 
 
 //function () {

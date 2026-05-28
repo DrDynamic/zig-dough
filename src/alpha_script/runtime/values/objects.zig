@@ -129,11 +129,11 @@ pub const ObjClosure = struct {
     pub fn init(garbage_collector: *GarbageCollector, function: *ObjFunction) *ObjClosure {
         const closure = garbage_collector.createObject(ObjClosure, .closure);
         closure.function = function;
+        closure.upvalues = &[_]?*ObjUpValue{};
 
-        closure.upvalues = garbage_collector.allocator().alloc(?*ObjUpValue, function.upvalue_locations.len) catch {
-            // TODO runtime error?
-            @panic("Failed to create Object");
-        };
+        garbage_collector.temp_objects.append(closure.asObject()) catch @panic("Failed to create Object");
+        closure.upvalues = garbage_collector.allocator().alloc(?*ObjUpValue, function.upvalue_locations.len) catch @panic("Failed to create Object");
+        _ = garbage_collector.temp_objects.pop();
 
         for (closure.upvalues) |*upvalue| {
             upvalue.* = null;

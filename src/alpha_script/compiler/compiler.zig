@@ -118,6 +118,38 @@ pub const Compiler = struct {
         return module;
     }
 
+    /// allocatres register for hoisetd symbols
+    fn hoistScan(self: *Compiler, node_ids: []const NodeId) !void {
+        for (node_ids) |node_id| {
+            const node = &self.ast.nodes.items[node_id];
+            switch (node.tag) {
+                .declaration_var, .declaration_const => {
+                    const extra = self.ast.getExtra(node.data.extra_id, ast.DeclarationExtra);
+                    _ = try self.addLocal(extra.name_id, self.context.next_free_reg, false, true);
+                },
+                // .expression_function => {
+                //     const fn_extra = self.ast.getExtra(node.data.extra_id, FunctionExtra);
+
+                //     const fn_obj = try self.compileFunction(node_id);
+                //     const fn_value = Value.fromObject(fn_obj.asObject());
+
+                //     var result_reg: RegisterId = undefined;
+                //     if (fn_extra.name_id) |name_id| {
+                //         result_reg = self.allocateRegister();
+                //         try self.emitLoadConstant(.load_const, result_reg, fn_value);
+                //         _ = try self.addLocal(name_id, result_reg, true, true);
+                //     } else {
+                //         result_reg = self.context.next_free_reg;
+                //         try self.emitLoadConstant(.load_const, result_reg, fn_value);
+                //     }
+
+                //     return result_reg;
+                // },
+                else => node.resolved_type_id,
+            }
+        }
+    }
+
     fn compileFunction(self: *Compiler, node_id: NodeId) !*ObjFunction {
         const fn_node = self.ast.nodes.items[node_id];
         const fn_extra = self.ast.getExtra(fn_node.data.extra_id, FunctionExtra);
@@ -323,11 +355,21 @@ pub const Compiler = struct {
                 var result_reg: RegisterId = undefined;
                 if (fn_extra.name_id) |name_id| {
                     result_reg = self.allocateRegister();
-                    try self.emitLoadConstant(.load_const, result_reg, fn_value);
+                    if (fn_obj.upvalue_locations.len > 0) {
+                        const constant_id = try self.context.chunk.addConstant(fn_value);
+                        try self.emitInstruction(Instruction.fromAB(.create_closure, result_reg, constant_id));
+                    } else {
+                        try self.emitLoadConstant(.load_const, result_reg, fn_value);
+                    }
                     _ = try self.addLocal(name_id, result_reg, true, true);
                 } else {
                     result_reg = self.context.next_free_reg;
-                    try self.emitLoadConstant(.load_const, result_reg, fn_value);
+                    if (fn_obj.upvalue_locations.len > 0) {
+                        const constant_id = try self.context.chunk.addConstant(fn_value);
+                        try self.emitInstruction(Instruction.fromAB(.create_closure, result_reg, constant_id));
+                    } else {
+                        try self.emitLoadConstant(.load_const, result_reg, fn_value);
+                    }
                 }
 
                 return result_reg;
@@ -409,6 +451,7 @@ pub const Compiler = struct {
             // access
 
             .identifier_expr => {
+                std.debug.print("Identifier: {s}\n", .{self.ast.string_table.get(node.data.string_id)});
                 if (self.resolveLocal(node.data.string_id)) |reg_identifier| {
                     return reg_identifier;
                 } else |_| {
@@ -416,7 +459,7 @@ pub const Compiler = struct {
                     self.freeRegister();
 
                     const upvalue_index = self.resolveUpValue(node.data.string_id) catch unreachable; // identifier has to be somewhere (checked by semantic analyser)
-                    try self.emitInstruction(Instruction.fromABC(.load_upvalue, upvalue_index, reg_identifier, 0));
+                    try self.emitInstruction(Instruction.fromABC(.load_upvalue, reg_identifier, upvalue_index, 0));
 
                     return reg_identifier;
                 }
@@ -618,19 +661,19 @@ pub const Compiler = struct {
     }
 
     /// searches and/or creates an UpValue recursivly in all contexts
-    inline fn resolveUpValueInContext(self: *Compiler, context: *const CompilerContext, name_id: StringId) Error!u8 {
+    inline fn resolveUpValueInContext(self: *Compiler, context: *CompilerContext, name_id: StringId) Error!u8 {
         if (context.parent_context) |parent_context| {
             // check if variable is local
             if (self.resolveLocalInContext(parent_context, name_id)) |reg_local| {
                 parent_context.locals.items[reg_local].is_captured = true;
-                return self.addUpValue(parent_context, reg_local, true);
+                return self.addUpValue(context, reg_local, true);
             } else |err| {
                 return err;
             }
 
             // recursively check search the variable in outer scopes
             if (self.resolveUpValueInContext(parent_context, name_id)) |upvalue_index| {
-                return try self.addUpValue(parent_context, upvalue_index, false);
+                return try self.addUpValue(context, upvalue_index, false);
             } else |err| {
                 return err;
             }

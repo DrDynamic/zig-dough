@@ -231,8 +231,10 @@ pub const GarbageCollector = struct {
             .closure => {
                 const closure = object.as(ObjClosure);
 
-                for (closure.upvalues) |upvalue| {
-                    self.markObject(upvalue.?.asObject());
+                for (closure.upvalues) |maybe_upvalue| {
+                    if (maybe_upvalue) |upvalue| {
+                        self.markObject(upvalue.asObject());
+                    }
                 }
 
                 self.markObject(closure.function.asObject());

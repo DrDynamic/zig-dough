@@ -96,7 +96,7 @@ pub const Disassambler = struct {
             => return self.printABCMutate(instruction),
             // interaction
             .load_upvalue => {
-                self.terminal.print("{s:<16} R{d:<2}, U{d:<2},   ;\n", .{
+                self.terminal.print("{s:<16} R{d:<2}, U{d:<2},    ;\n", .{
                     @tagName(instruction.abc.opcode),
                     instruction.abc.a,
                     instruction.abc.b,
@@ -124,7 +124,7 @@ pub const Disassambler = struct {
                 };
             },
             .create_closure => {
-                self.terminal.print("{s:<16} R{d:<2}, C{d:<2},   ;\n", .{
+                self.terminal.print("{s:<16} R{d:<2}, C{d:<2},    ;\n", .{
                     @tagName(instruction.abc.opcode),
                     instruction.ab.a,
                     instruction.ab.b,
@@ -138,7 +138,7 @@ pub const Disassambler = struct {
                 };
             },
             .close_upvalue => {
-                self.terminal.print("{s:<16}   , R{d:<2},   ;\n", .{
+                self.terminal.print("{s:<16}    , R{d:<2},    ;\n", .{
                     @tagName(instruction.abc.opcode),
                     instruction.abc.b,
                 });
