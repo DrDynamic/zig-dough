@@ -138,6 +138,13 @@ pub const Compiler = struct {
                         _ = try self.addLocal(name_id, result_reg, true, true);
 
                         const fn_obj = try self.compileFunction(node_id);
+                        try self.garbage_collector.temp_objects.append(fn_obj.asObject());
+
+                        const string_data = self.ast.string_table.get(name_id);
+                        fn_obj.name = ObjString.copydata(string_data, self.garbage_collector);
+
+                        _ = self.garbage_collector.temp_objects.pop();
+
                         try self.emitFunctionOrClosure(result_reg, fn_obj);
                     }
                 },
@@ -166,10 +173,8 @@ pub const Compiler = struct {
         self.enterScope();
         // define parameters
         if (fn_extra.parameters) |parameters| {
-            var iterator = NodeListIterator.init(self.ast, parameters);
-
-            while (iterator.next()) |parameter_id| {
-                const parameter_node = self.ast.nodes.items[parameter_id];
+            for (parameters) |parameter_node_id| {
+                const parameter_node = self.ast.nodes.items[parameter_node_id];
                 const parameter_reg = self.allocateRegister();
                 _ = try self.addLocal(parameter_node.data.string_id, parameter_reg, true, true);
             }

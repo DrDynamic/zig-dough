@@ -95,7 +95,7 @@ pub const ObjFunction = struct {
     upvalue_locations: []UpValueLocation,
     max_registers: u8,
     chunk: Chunk,
-    name: ?ObjString,
+    name: ?*ObjString,
 
     pub fn init(garbage_collector: *GarbageCollector) *ObjFunction {
         var function = garbage_collector.createObject(ObjFunction, .function);

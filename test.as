@@ -1,13 +1,58 @@
-sayHello("World")
+// functions are hoisted
+//sayHello("World")
+//
+//function sayHello(name:String) String {
+//    print("Hello " + name)
+//}
+//////////////////////////////////////////////////////
 
-
-function sayHello(name:String) String {
-    print("Hello " + name)
+// can have multiple functions
+function a() Void {
+    print("A")
 }
 
+function b() Void {
+    print("B")
+}
+
+a()
+b()
+//////////////////////////////////////////////////////
+
+// functions can have no parameters
+//a()
+//a()
+//function a () Void {
+//    print("Lorem")
+//}
+//a()
+//////////////////////////////////////////////////////
+
+// functions can be assigned to variables
+//var a = function () Void {
+//    print("Lorem")
+//}
+//a()
+//////////////////////////////////////////////////////
 
 
-//function () {
+// variables can have function type
+//var a:()Void
+//a= function(){print("A")}
+//a()
+//////////////////////////////////////////////////////
+
+
+
+//function (name_:String) Void {
+//    print("Lorem")
+//}()
+//
+//function (name:String) Void {
+//    print("Lorem")
+//}()
+//
+//function () Void {
 //    print("Lorem")
 //}()
 
@@ -45,3 +90,9 @@ function sayHello(name:String) String {
 //         print("Hello " ++ name)
 //     }
 // }
+
+
+// correct syntax:
+//fn my_fn(param:?String): void {
+//    print('Noop' ++ param)
+//}

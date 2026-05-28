@@ -737,7 +737,6 @@ pub const Parser = struct {
         var function_extra = FunctionExtra{
             .name_id = null,
             .parameters = null,
-            .parameter_count = undefined,
             .return_type = undefined,
             .body = undefined,
         };
@@ -753,11 +752,7 @@ pub const Parser = struct {
             return Error.UnexpectedToken;
         };
 
-        const list_result = try self.parameterList();
-
-        function_extra.parameters = list_result.extra_id;
-        function_extra.parameter_count = list_result.count;
-
+        function_extra.parameters = try self.parameterList();
         function_extra.return_type = try self.parseTypeErrorUnion();
 
         const left_brace = self.consume(.left_brace) catch {
@@ -931,7 +926,11 @@ pub const Parser = struct {
 
     /// parses a comma seperated list of parameters until ')' is found
     /// returns the start of a node_list with all parameters
-    fn parameterList(self: *Parser) Error!struct { extra_id: ?NodeExtraId, count: u8 } {
+    fn parameterList(self: *Parser) Error!?[]NodeId {
+        if (try self.match(.right_paren)) {
+            return null;
+        }
+
         var parameter_ids: [32]NodeId = undefined;
         var count: u8 = 0;
         while (true) {
@@ -974,7 +973,10 @@ pub const Parser = struct {
         }
 
         _ = try self.consume(.right_paren);
-        return .{ .extra_id = try self.nodeListFromArray(parameter_ids[0..count]), .count = count };
+
+        const result = try self.allocator.alloc(NodeId, count);
+        @memcpy(result, parameter_ids[0..count]);
+        return result;
     }
 
     /// parses a comma seperated list of expressions until end_token is found

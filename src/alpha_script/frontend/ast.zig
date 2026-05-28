@@ -84,8 +84,7 @@ pub const DeclarationExtra = struct {
 
 pub const FunctionExtra = struct {
     name_id: ?StringId,
-    parameters: ?NodeExtraId, // NodeListExtra
-    parameter_count: u8,
+    parameters: ?[]NodeExtraId, // NodeListExtra
     return_type: TypeId,
     body: NodeId, // expression_block
 };
@@ -173,6 +172,24 @@ pub const AST = struct {
     }
 
     pub fn deinit(self: *AST) void {
+        for (self.nodes.items) |node| {
+            switch (node.tag) {
+                .expression_block => {
+                    const extra = self.getExtra(node.data.extra_id, BlockExtra);
+                    if (extra.statements != null) {
+                        self.allocator.free(extra.statements.?);
+                    }
+                },
+                .expression_function => {
+                    const extra = self.getExtra(node.data.extra_id, FunctionExtra);
+                    if (extra.parameters != null) {
+                        self.allocator.free(extra.parameters.?);
+                    }
+                },
+                else => {},
+            }
+        }
+
         self.roots.deinit();
         self.nodes.deinit();
         self.extra_data.deinit();

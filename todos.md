@@ -1,5 +1,4 @@
 # next
-- function / closure  hoisting
 - closures
   - named parameters
   - default parameters

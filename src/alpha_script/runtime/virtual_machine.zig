@@ -192,7 +192,7 @@ pub const VirtualMachine = struct {
     }
 
     fn run(self: *VirtualMachine) !void {
-        const debug: bool = true;
+        const debug: bool = false;
 
         var current_frame = &self.frames[self.frame_count - 1];
 

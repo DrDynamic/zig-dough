@@ -589,20 +589,19 @@ pub const SemanticAnalyser = struct {
             };
         }
 
-        var signature: [32]TypeId = undefined;
-        var count: u8 = 0;
-        if (extra.parameters) |list_id| {
-            var param_iterator = NodeListIterator.init(self.ast, list_id);
-            while (param_iterator.next()) |parameter_id| {
-                const parameter_node = self.ast.nodes.items[parameter_id];
+        var signature_buffer: [32]TypeId = undefined;
+        var signature: []TypeId = &[_]TypeId{};
+        if (extra.parameters) |parameters| {
+            for (parameters, 0..) |parameter_node_id, index| {
+                const parameter_node = self.ast.nodes.items[parameter_node_id];
                 const parameter_type_id = parameter_node.resolved_type_id;
 
-                signature[count] = parameter_type_id;
-                count += 1;
+                signature_buffer[index] = parameter_type_id;
             }
+            signature = signature_buffer[0..parameters.len];
         }
 
-        const type_id = try self.ast.type_pool.getOrCreateFunctionType(signature[0..count], extra.return_type);
+        const type_id = try self.ast.type_pool.getOrCreateFunctionType(signature, extra.return_type);
 
         if (extra.name_id) |name_id| {
             self.symbol_table.setType(name_id, type_id) catch unreachable; // Error.NotFound is unreachabe (declared above)
@@ -618,16 +617,15 @@ pub const SemanticAnalyser = struct {
 
         try self.context.pushFunction(node_id, extra);
 
-        if (extra.parameters) |list_id| {
-            var iterator = NodeListIterator.init(self.ast, list_id);
-            while (iterator.next()) |parameter_id| {
-                const parameter_node = self.ast.nodes.items[parameter_id];
+        if (extra.parameters) |parameters| {
+            for (parameters) |parameter_node_id| {
+                const parameter_node = self.ast.nodes.items[parameter_node_id];
                 const parameter_name = parameter_node.data.string_id;
 
                 self.symbol_table.declare(
                     parameter_name,
                     parameter_node.resolved_type_id,
-                    parameter_id,
+                    parameter_node_id,
                     false,
                 ) catch {
                     try self.reportRedeclarationError(parameter_node, parameter_name);

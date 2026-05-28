@@ -242,6 +242,9 @@ pub const GarbageCollector = struct {
             .function => {
                 const function = object.as(ObjFunction);
                 self.markValueArray(function.chunk.constants.items);
+                if (function.name) |name| {
+                    self.markObject(name.asObject());
+                }
             },
             .module => {
                 const module = object.as(ObjModule);

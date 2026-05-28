@@ -109,8 +109,7 @@ pub const ASTPrinter = struct {
                 try prototype.append('(');
 
                 if (fn_extra.parameters) |parameters| {
-                    var iterator = NodeListIterator.init(self.ast, parameters);
-                    while (iterator.next()) |parameter_id| {
+                    for (parameters) |parameter_id| {
                         const parameter_node = self.ast.nodes.items[parameter_id];
                         const parameter_name = self.ast.string_table.get(parameter_node.data.string_id);
                         try prototype.appendSlice(parameter_name);
