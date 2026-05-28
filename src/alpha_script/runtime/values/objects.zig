@@ -47,6 +47,40 @@ pub const ObjectHeader = struct {
         _ = fmt;
         switch (self.tag) {
             .string => try std.fmt.formatText(self.as(ObjString).data, "s", options, writer),
+            .closure => {
+                const closure = self.as(ObjClosure);
+                const name = if (closure.function.name) |name| name.data else "anonymous";
+
+                try writer.print("<closure {s}", .{name});
+                try std.fmt.formatText(
+                    ">",
+                    "s",
+                    .{
+                        .precision = null,
+                        .width = if (options.width) |width| width - name.len - 9 else null,
+                        .alignment = options.alignment,
+                        .fill = options.fill,
+                    },
+                    writer,
+                );
+            },
+            .function => {
+                const function = self.as(ObjFunction);
+                const name = if (function.name) |name| name.data else "anonymous";
+
+                try writer.print("<function {s}", .{name});
+                try std.fmt.formatText(
+                    ">",
+                    "s",
+                    .{
+                        .precision = null,
+                        .width = if (options.width) |width| width - name.len - 10 else null,
+                        .alignment = options.alignment,
+                        .fill = options.fill,
+                    },
+                    writer,
+                );
+            },
             else => {
                 const name = @tagName(self.tag);
                 try writer.print("<object {s}", .{name});
