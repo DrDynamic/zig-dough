@@ -67,13 +67,13 @@ pub const Parser = struct {
             return Error.UnexpectedToken;
         };
 
-        var error_list = std.ArrayList(TypeId).init(self.allocator);
-        defer error_list.deinit();
+        var error_list: std.ArrayList(TypeId) = .{};
+        defer error_list.deinit(self.allocator);
 
         while (!self.check(.right_brace)) {
             const error_name_id = try self.parseIdentifier();
             const error_type_id = try self.ast.type_pool.getOrCreateErrorType(error_name_id);
-            try error_list.append(error_type_id);
+            try error_list.append(self.allocator, error_type_id);
 
             if (!try self.match(.comma)) break;
         }
@@ -210,10 +210,10 @@ pub const Parser = struct {
     fn blockStatement(self: *Parser) Error!NodeId {
         const left_brace = self.scanner.previous();
 
-        var statements = std.ArrayList(NodeId).init(self.allocator);
+        var statements: std.ArrayList(NodeId) = .{};
 
         while (!self.check(.right_brace)) {
-            try statements.append(try self.declaration());
+            try statements.append(self.allocator, try self.declaration());
         }
 
         const extra_id = try self.ast.addExtra(BlockExtra{
@@ -831,26 +831,26 @@ pub const Parser = struct {
     }
 
     fn parseTypeUnion(self: *Parser) !TypeId {
-        var members = std.ArrayList(TypeId).init(self.allocator);
-        defer members.deinit();
+        var members: std.ArrayList(TypeId) = .{};
+        defer members.deinit(self.allocator);
 
         var nullable_token: ?Token = null;
         if (try self.match(.question_mark)) {
             nullable_token = self.scanner.previous();
         }
-        try members.append(try self.parseTypePrimary());
+        try members.append(self.allocator, try self.parseTypePrimary());
 
         while (try self.match(.pipe)) {
             if (try self.match(.question_mark)) {
                 nullable_token = self.scanner.previous();
             }
-            try members.append(try self.parseTypePrimary());
+            try members.append(self.allocator, try self.parseTypePrimary());
         }
 
         if (members.items.len == 1) {
             // its a single type with nullable shorthand
             if (nullable_token != null) {
-                try members.append(TypePool.NULL);
+                try members.append(self.allocator, TypePool.NULL);
                 return self.ast.type_pool.getOrCreateUnionType(members.items);
             }
 

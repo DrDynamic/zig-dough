@@ -45,7 +45,7 @@ pub const GarbageCollector = struct {
             .bytes_allocated = 0,
             .next_gc = 1024 * 1024,
             .debug_logs = .{},
-            .temp_objects = std.ArrayList(*ObjectHeader).init(_allocator),
+            .temp_objects = .{},
             .interned_strings = std.StringArrayHashMap(*ObjString).init(_allocator),
         };
     }
@@ -108,8 +108,8 @@ pub const GarbageCollector = struct {
 
         if (self.debug_logs.any()) {
             if (self.debug_logs.stats) {
-                std.debug.print("   # collected {} bytes \n", .{size_before - self.bytes_allocated});
-                std.debug.print("   # still allocated {} bytes\n", .{
+                std.debug.print("   # collected {d} bytes \n", .{size_before - self.bytes_allocated});
+                std.debug.print("   # still allocated {d} bytes\n", .{
                     self.bytes_allocated,
                 });
 
@@ -206,7 +206,7 @@ pub const GarbageCollector = struct {
                 }
 
                 if (self.debug_logs.sweep) {
-                    std.debug.print("   [sweep] {*} ({s}) '{}'\n", .{ unreached, @tagName(unreached.tag), unreached });
+                    std.debug.print("   [sweep] {*} ({s}) '{f}'\n", .{ unreached, @tagName(unreached.tag), unreached });
                 }
 
                 if (unreached.tag == .string) {
@@ -220,7 +220,7 @@ pub const GarbageCollector = struct {
 
     fn blackenObject(self: *GarbageCollector, object: *ObjectHeader) void {
         if (self.debug_logs.blacken) {
-            std.debug.print("   [blacken] {*} ({s}) '{}'\n", .{
+            std.debug.print("   [blacken] {*} ({s}) '{f}'\n", .{
                 object,
                 @tagName(object.tag),
                 object,
@@ -276,7 +276,7 @@ pub const GarbageCollector = struct {
         if (object.is_marked) return;
 
         if (self.debug_logs.mark) {
-            std.debug.print("   [mark] {*} ({s}) '{}'\n", .{
+            std.debug.print("   [mark] {*} ({s}) '{f}'\n", .{
                 object,
                 @tagName(object.tag),
                 object,

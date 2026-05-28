@@ -19,7 +19,8 @@ pub const ObjNative = struct {
 };
 
 pub fn nativePrint(context: *ExecutionContext, args: []Value) Value {
-    const writer = std.io.getStdOut().writer();
+    var buffer: [4096]u8 = undefined;
+    var writer = std.fs.File.stdout().writer(&buffer).interface;
     for (args) |value| {
         if (value == .error_value) {
             const error_name_id = context.error_pool.getErrorNameId(value.error_value);
@@ -27,7 +28,7 @@ pub fn nativePrint(context: *ExecutionContext, args: []Value) Value {
 
             writer.print("{s}\n", .{error_name}) catch {};
         } else {
-            writer.print("{}\n", .{value}) catch {};
+            writer.print("{f}\n", .{value}) catch {};
         }
     }
     return Value.makeNull();

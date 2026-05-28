@@ -55,45 +55,46 @@ pub const Terminal = struct {
         .styles = &.{},
     };
 
-    supports_color: bool,
-    writer: std.fs.File.Writer,
+    supports_color: bool = undefined,
+    writer: std.io.Writer = undefined,
+    buffer: [4096]u8 = undefined,
 
-    pub fn init(io: std.fs.File) Terminal {
-        return .{
+    pub fn init(self: *Terminal, io: std.fs.File) void {
+        self.* = .{
             .supports_color = io.isTty(),
-            .writer = io.writer(),
+            .writer = io.writer(&self.buffer).interface,
         };
     }
 
-    pub fn print(self: *const Terminal, comptime fmt: []const u8, args: anytype) void {
+    pub fn print(self: *Terminal, comptime fmt: []const u8, args: anytype) void {
         self.writer.print(fmt, args) catch {};
     }
 
-    pub fn printWithOptions(self: *const Terminal, comptime fmt: []const u8, args: anytype, options: PrintOptions) void {
+    pub fn printWithOptions(self: *Terminal, comptime fmt: []const u8, args: anytype, options: PrintOptions) void {
         if (self.supports_color) {
-            printOptions(self.writer, options) catch {};
+            printOptions(&self.writer, options) catch {};
         }
 
         self.writer.print(fmt, args) catch {};
 
         if (self.supports_color) {
-            printReset(self.writer) catch {};
+            printReset(&self.writer) catch {};
         }
     }
 
-    pub fn setStyle(self: *const Terminal, options: PrintOptions) void {
+    pub fn setStyle(self: *Terminal, options: PrintOptions) void {
         if (self.supports_color) {
-            printOptions(self.writer, options) catch {};
+            printOptions(&self.writer, options) catch {};
         }
     }
 
     // private
 
-    fn printReset(writer: std.fs.File.Writer) !void {
+    fn printReset(writer: *std.io.Writer) !void {
         try writer.print("\x1b[0m", .{});
     }
 
-    fn printOptions(writer: std.fs.File.Writer, options: PrintOptions) !void {
+    fn printOptions(writer: *std.io.Writer, options: PrintOptions) !void {
         try writer.print("\x1b[", .{});
 
         if (options.color) |color| {

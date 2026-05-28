@@ -62,8 +62,10 @@ fn getFile(path: []const u8, allocator: std.mem.Allocator) ![]const u8 {
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
 
-    const stdout_terminal = as.common.Terminal.init(std.io.getStdOut());
-    const stderr_terminal = as.common.Terminal.init(std.io.getStdErr());
+    var stdout_terminal: as.common.Terminal = .{};
+    stdout_terminal.init(std.fs.File.stdout());
+    var stderr_terminal: as.common.Terminal = .{};
+    stderr_terminal.init(std.fs.File.stderr());
 
     var argsIterator = try std.process.ArgIterator.initWithAllocator(allocator);
     defer argsIterator.deinit();
@@ -96,7 +98,7 @@ pub fn main() !void {
         });
 
         const module = interpreter.compileModule(path, .{
-            .terminal = stdout_terminal,
+            .terminal = &stdout_terminal,
             .print_tokens = start_options.print_tokens,
             .print_ast = start_options.print_ast,
         }) catch {
@@ -104,7 +106,7 @@ pub fn main() !void {
         };
 
         if (start_options.print_asm) {
-            const disassambler = as.frontend.debug.Disassambler.init(&stdout_terminal);
+            var disassambler = as.frontend.debug.Disassambler.init(&stdout_terminal);
             disassambler.disassambleChunk(&module.function.chunk, "root");
 
             for (module.function.chunk.constants.items) |constant| {

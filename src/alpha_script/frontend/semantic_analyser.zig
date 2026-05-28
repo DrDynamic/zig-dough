@@ -15,6 +15,7 @@ const FunctionContext = struct {
 };
 
 const SemanticAnalyserContext = struct {
+    allocator: std.mem.Allocator,
     current_scope: CurrentScope = CurrentScope.unknown,
 
     block_stack: std.ArrayList(BlockContext),
@@ -22,19 +23,20 @@ const SemanticAnalyserContext = struct {
 
     pub fn init(allocator: std.mem.Allocator) SemanticAnalyserContext {
         return .{
+            .allocator = allocator,
             .current_scope = CurrentScope.unknown,
-            .block_stack = std.ArrayList(BlockContext).init(allocator),
-            .function_stack = std.ArrayList(FunctionContext).init(allocator),
+            .block_stack = .{},
+            .function_stack = .{},
         };
     }
 
     pub fn deinit(self: *SemanticAnalyserContext) void {
-        self.block_stack.deinit();
-        self.function_stack.deinit();
+        self.block_stack.deinit(self.allocator);
+        self.function_stack.deinit(self.allocator);
     }
 
     pub fn pushFunction(self: *SemanticAnalyserContext, node_id: NodeId, fn_extra: FunctionExtra) !void {
-        try self.function_stack.append(.{
+        try self.function_stack.append(self.allocator, .{
             .node_id = node_id,
             .return_type = fn_extra.return_type,
         });

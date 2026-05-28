@@ -165,7 +165,7 @@ pub const ObjClosure = struct {
         closure.function = function;
         closure.upvalues = &[_]?*ObjUpValue{};
 
-        garbage_collector.temp_objects.append(closure.asObject()) catch @panic("Failed to create Object");
+        garbage_collector.temp_objects.append(garbage_collector.allocator(), closure.asObject()) catch @panic("Failed to create Object");
         closure.upvalues = garbage_collector.allocator().alloc(?*ObjUpValue, function.upvalue_locations.len) catch @panic("Failed to create Object");
         _ = garbage_collector.temp_objects.pop();
 

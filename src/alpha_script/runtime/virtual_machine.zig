@@ -86,7 +86,7 @@ pub const VirtualMachine = struct {
         try self.run();
     }
 
-    fn printCallframe(self: *const VirtualMachine, terminal: *const as.common.Terminal, register: usize, used_frame_count: usize, color: ?as.common.Terminal.Color) void {
+    fn printCallframe(self: *const VirtualMachine, terminal: *as.common.Terminal, register: usize, used_frame_count: usize, color: ?as.common.Terminal.Color) void {
         const frame_style: as.common.Terminal.PrintOptions = .{
             .color = color,
             .styles = &.{.faint},
@@ -128,7 +128,7 @@ pub const VirtualMachine = struct {
         }
     }
 
-    fn printStack(self: *const VirtualMachine, disassambler: *const as.frontend.debug.Disassambler, used_tack_top: usize, used_frame_count: usize, used_frame: *const CallFrame) void {
+    fn printStack(self: *const VirtualMachine, disassambler: *as.frontend.debug.Disassambler, used_tack_top: usize, used_frame_count: usize, used_frame: *const CallFrame) void {
         const Terminal = as.common.Terminal;
 
         const register_style: Terminal.PrintOptions = .{
@@ -182,7 +182,7 @@ pub const VirtualMachine = struct {
                 register_style;
 
             disassambler.terminal.printWithOptions("{d:0>4}: ", .{register}, style);
-            disassambler.terminal.printWithOptions("[{: <30}]", .{value}, style);
+            disassambler.terminal.printWithOptions("[{f: <30}]", .{value}, style);
 
             self.printCallframe(disassambler.terminal, register, used_frame_count, style.color);
 
@@ -205,8 +205,10 @@ pub const VirtualMachine = struct {
         var stack = &self.stack;
         var base = current_frame.base_pointer;
 
-        const terminal = as.common.Terminal.init(std.io.getStdOut());
-        const disassambler = as.frontend.debug.Disassambler.init(&terminal);
+        var terminal: as.common.Terminal = .{};
+        terminal.init(std.fs.File.stdout());
+
+        var disassambler = as.frontend.debug.Disassambler.init(&terminal);
 
         while (true) {
             if (current_frame.ip >= code.len) return;

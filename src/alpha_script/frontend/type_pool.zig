@@ -119,8 +119,8 @@ pub const TypePool = struct {
         var pool = TypePool{
             .allocator = allocator,
             .error_pool = error_pool,
-            .types = ArrayList(Type).init(allocator),
-            .type_list_buffer = std.ArrayList(TypeId).init(allocator),
+            .types = .{},
+            .type_list_buffer = .{},
             .named_type_cache = std.AutoHashMap(StringId, TypeId).init(allocator),
             .function_cache = TypeListMap.init(allocator),
             .union_cache = TypeListMap.init(allocator),
@@ -128,22 +128,22 @@ pub const TypePool = struct {
             .error_type_cache = std.AutoHashMap(ErrorId, TypeId).init(allocator),
         };
 
-        try pool.types.append(.{ .unresolved = undefined });
-        try pool.types.append(.{ .anyerror = undefined });
-        try pool.types.append(.{ .void = undefined });
-        try pool.types.append(.{ .null = undefined });
-        try pool.types.append(.{ .bool = undefined });
-        try pool.types.append(.{ .int = undefined });
-        try pool.types.append(.{ .float = undefined });
-        try pool.types.append(.{ .string = undefined });
-        try pool.types.append(.{ .module = undefined });
+        try pool.types.append(allocator, .{ .unresolved = undefined });
+        try pool.types.append(allocator, .{ .anyerror = undefined });
+        try pool.types.append(allocator, .{ .void = undefined });
+        try pool.types.append(allocator, .{ .null = undefined });
+        try pool.types.append(allocator, .{ .bool = undefined });
+        try pool.types.append(allocator, .{ .int = undefined });
+        try pool.types.append(allocator, .{ .float = undefined });
+        try pool.types.append(allocator, .{ .string = undefined });
+        try pool.types.append(allocator, .{ .module = undefined });
 
         return pool;
     }
 
     pub fn deinit(self: *TypePool) void {
-        self.types.deinit();
-        self.type_list_buffer.deinit();
+        self.types.deinit(self.allocator);
+        self.type_list_buffer.deinit(self.allocator);
         self.named_type_cache.deinit();
         self.union_cache.deinit();
         self.error_set_cache.deinit();
@@ -157,45 +157,45 @@ pub const TypePool = struct {
         string_table: *const StringTable,
     ) ![]u8 {
         const t = self.types.items[type_id];
-        var type_name = std.ArrayList(u8).init(allocator);
+        var type_name: std.ArrayList(u8) = .{};
 
         switch (t) {
-            .unresolved => try type_name.appendSlice("Unresolved"),
-            .void => try type_name.appendSlice("Void"),
-            .null => try type_name.appendSlice("Null"),
-            .bool => try type_name.appendSlice("Bool"),
-            .int => try type_name.appendSlice("Int"),
-            .float => try type_name.appendSlice("Float"),
-            .string => try type_name.appendSlice("String"),
-            .module => try type_name.appendSlice("Module"),
+            .unresolved => try type_name.appendSlice(allocator, "Unresolved"),
+            .void => try type_name.appendSlice(allocator, "Void"),
+            .null => try type_name.appendSlice(allocator, "Null"),
+            .bool => try type_name.appendSlice(allocator, "Bool"),
+            .int => try type_name.appendSlice(allocator, "Int"),
+            .float => try type_name.appendSlice(allocator, "Float"),
+            .string => try type_name.appendSlice(allocator, "String"),
+            .module => try type_name.appendSlice(allocator, "Module"),
             .function => {
-                try type_name.appendSlice("fn (");
+                try type_name.appendSlice(allocator, "fn (");
                 const signature = self.getFunctionSignature(t);
                 for (signature[0 .. signature.len - 1]) |parameter_id| {
                     const name = try self.getTypeNameAlloc(allocator, parameter_id, string_table);
                     defer allocator.free(name);
 
-                    try type_name.appendSlice(name);
-                    try type_name.append(',');
+                    try type_name.appendSlice(allocator, name);
+                    try type_name.append(allocator, ',');
                 }
 
                 if (signature.len > 1) {
                     _ = type_name.pop();
                 }
 
-                try type_name.appendSlice("): ");
+                try type_name.appendSlice(allocator, "): ");
 
                 const return_name = try self.getTypeNameAlloc(allocator, signature[signature.len - 1], string_table);
                 defer allocator.free(return_name);
 
-                try type_name.appendSlice(return_name);
+                try type_name.appendSlice(allocator, return_name);
 
                 return type_name.items;
             },
-            .anyerror => try type_name.appendSlice("Anyerror"),
-            .error_type => try type_name.appendSlice(string_table.get(self.types.items[type_id].error_type)),
+            .anyerror => try type_name.appendSlice(allocator, "Anyerror"),
+            .error_type => try type_name.appendSlice(allocator, string_table.get(self.types.items[type_id].error_type)),
             .error_set => {
-                try type_name.appendSlice("error{");
+                try type_name.appendSlice(allocator, "error{");
                 const members = self.getErrorSetMembers(t);
 
                 for (members) |error_type_id| {
@@ -203,15 +203,15 @@ pub const TypePool = struct {
                     const error_name_id = self.error_pool.getErrorNameId(error_type.error_type);
                     const error_name = string_table.get(error_name_id);
 
-                    try type_name.appendSlice(error_name);
-                    try type_name.append(',');
+                    try type_name.appendSlice(allocator, error_name);
+                    try type_name.append(allocator, ',');
                 }
 
                 if (members.len > 0) {
                     _ = type_name.pop();
                 }
 
-                try type_name.append('}');
+                try type_name.append(allocator, '}');
 
                 return type_name.items;
             },
@@ -222,8 +222,8 @@ pub const TypePool = struct {
                     const name = try self.getTypeNameAlloc(allocator, member, string_table);
                     defer allocator.free(name);
 
-                    try type_name.appendSlice(name);
-                    try type_name.append('|');
+                    try type_name.appendSlice(allocator, name);
+                    try type_name.append(allocator, '|');
                 }
 
                 if (type_name.items.len > 0) {
@@ -427,10 +427,10 @@ pub const TypePool = struct {
         }
 
         const list_index: u32 = @intCast(self.type_list_buffer.items.len);
-        try self.type_list_buffer.appendUnalignedSlice(signature);
+        try self.type_list_buffer.appendSlice(self.allocator, signature);
 
         const type_id: TypeId = @intCast(self.types.items.len);
-        try self.types.append(.{ .function = .{
+        try self.types.append(self.allocator, .{ .function = .{
             .type_list_index = list_index,
             .count = @intCast(signature.len),
         } });
@@ -454,10 +454,10 @@ pub const TypePool = struct {
 
         // create type otherwise
         const list_index: u32 = @intCast(self.type_list_buffer.items.len);
-        try self.type_list_buffer.appendUnalignedSlice(sorted_members);
+        try self.type_list_buffer.appendSlice(self.allocator, sorted_members);
 
         const type_id: TypeId = @intCast(self.types.items.len);
-        try self.types.append(.{ .union_type = .{
+        try self.types.append(self.allocator, .{ .union_type = .{
             .type_list_index = list_index,
             .count = @intCast(sorted_members.len),
         } });
@@ -476,14 +476,14 @@ pub const TypePool = struct {
         switch (t) {
             .null => return TypePool.VOID,
             .union_type => {
-                var new_members = std.ArrayList(TypeId).init(self.allocator);
-                defer new_members.deinit();
+                var new_members: std.ArrayList(TypeId) = .{};
+                defer new_members.deinit(self.allocator);
 
                 const members = self.getUnionMembers(t);
                 for (members) |member| {
                     const member_type = self.types.items[member];
                     if (member_type == .null) continue;
-                    try new_members.append(member);
+                    try new_members.append(self.allocator, member);
                 }
                 if (new_members.items.len == 1) {
                     return new_members.items[0];
@@ -528,14 +528,14 @@ pub const TypePool = struct {
         switch (t) {
             .error_set => return TypePool.VOID,
             .union_type => {
-                var new_members = std.ArrayList(TypeId).init(self.allocator);
-                defer new_members.deinit();
+                var new_members: std.ArrayList(TypeId) = .{};
+                defer new_members.deinit(self.allocator);
 
                 const members = self.getUnionMembers(t);
                 for (members) |member| {
                     const member_type = self.types.items[member];
                     if (member_type == .error_set) continue;
-                    try new_members.append(member);
+                    try new_members.append(self.allocator, member);
                 }
                 if (new_members.items.len == 1) {
                     return new_members.items[0];
@@ -561,7 +561,7 @@ pub const TypePool = struct {
         }
 
         const type_id: TypeId = @intCast(self.types.items.len);
-        try self.types.append(.{
+        try self.types.append(self.allocator, .{
             .error_type = error_id,
         });
         try self.error_type_cache.putNoClobber(error_id, type_id);
@@ -588,10 +588,10 @@ pub const TypePool = struct {
 
         // create type otherwise
         const list_index: u32 = @intCast(self.type_list_buffer.items.len);
-        try self.type_list_buffer.appendUnalignedSlice(sorted_members);
+        try self.type_list_buffer.appendSlice(self.allocator, sorted_members);
 
         const type_id: TypeId = @intCast(self.types.items.len);
-        try self.types.append(.{ .error_set = .{
+        try self.types.append(self.allocator, .{ .error_set = .{
             .type_list_index = list_index,
             .count = @intCast(sorted_members.len),
         } });

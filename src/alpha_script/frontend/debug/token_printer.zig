@@ -2,7 +2,7 @@ pub const TokenPrinter = struct {
     writer: std.fs.File.Writer,
     scanner: Scanner,
 
-    pub fn printTokens(scanner: *Scanner, writer: std.fs.File.Writer) !void {
+    pub fn printTokens(scanner: *Scanner, writer: *std.io.Writer) !void {
         while (scanner.previous().tag != .eof) {
             //            try TokenPrinter.printToken(scanner.previous(), scanner, writer);
             try TokenPrinter.printToken(scanner.current(), scanner, writer);
@@ -14,7 +14,7 @@ pub const TokenPrinter = struct {
         }
     }
 
-    pub fn printToken(token: Token, scanner: *const Scanner, writer: std.fs.File.Writer) !void {
+    pub fn printToken(token: Token, scanner: *const Scanner, writer: *std.io.Writer) !void {
         const tagName = @tagName(token.tag);
         const lexeme = scanner.getLexeme(token);
         try writer.print("[{s}: '{s}'] ", .{ tagName, lexeme });
