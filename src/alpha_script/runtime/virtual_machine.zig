@@ -182,7 +182,7 @@ pub const VirtualMachine = struct {
                 register_style;
 
             disassambler.terminal.printWithOptions("{d:0>4}: ", .{register}, style);
-            disassambler.terminal.printWithOptions("[{f: <30}]", .{value}, style);
+            disassambler.terminal.printWithOptions("[{f}]", .{as.common.fmt(as.runtime.values.UnionValue).padRightChar(value, 35, '_')}, style);
 
             self.printCallframe(disassambler.terminal, register, used_frame_count, style.color);
 
@@ -205,10 +205,10 @@ pub const VirtualMachine = struct {
         var stack = &self.stack;
         var base = current_frame.base_pointer;
 
-        var terminal: as.common.Terminal = .{};
-        terminal.init(std.fs.File.stdout());
+        const terminal = try as.common.Terminal.init(std.fs.File.stdout(), self.allocator);
+        defer terminal.deinit();
 
-        var disassambler = as.frontend.debug.Disassambler.init(&terminal);
+        var disassambler = as.frontend.debug.Disassambler.init(terminal);
 
         while (true) {
             if (current_frame.ip >= code.len) return;

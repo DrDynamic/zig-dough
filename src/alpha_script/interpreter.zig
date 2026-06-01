@@ -77,7 +77,7 @@ pub const Interpreter = struct {
         var scanner = try Scanner.init(token_stream, &self.error_reporter);
 
         if (compiler_options.print_tokens) {
-            try as.frontend.debug.TokenPrinter.printTokens(&scanner, &compiler_options.terminal.writer);
+            try as.frontend.debug.TokenPrinter.printTokens(&scanner, compiler_options.terminal.writer);
             try scanner.reset();
         }
 

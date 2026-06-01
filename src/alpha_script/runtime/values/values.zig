@@ -56,29 +56,18 @@ pub const UnionValue = union(ValueType) {
         return false;
     }
 
-    pub fn format(
-        self: @This(),
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
-        writer: anytype,
-    ) !void {
-        std.debug.print("{s}", .{fmt});
+    pub fn format(self: UnionValue, writer: *std.io.Writer) std.io.Writer.Error!void {
         switch (self) {
-            .uninitialized => try std.fmt.formatText("uninitialized", "s", options, writer),
-            .null => try std.fmt.formatText("null", "s", options, writer),
-            .bool => try std.fmt.formatText(
-                if (self.bool) "true" else "false",
-                "s",
-                options,
-                writer,
-            ),
-            .integer => try std.fmt.formatInt(self.integer, 10, .upper, options, writer),
-            .float => try std.fmt.formatType(self.float, "d", options, writer, 1),
+            .uninitialized => try writer.print("{s}", .{"uninitialized"}),
+            .null => try writer.print("{s}", .{"null"}),
+            .bool => try writer.print("{s}", .{if (self.bool) "true" else "false"}),
+            .integer => try writer.print("{d}", .{self.integer}),
+            .float => try writer.print("{d}", .{self.float}),
             .error_value => {
                 // TODO: needs access to strings table
                 try writer.print("ErrorValue (name serialization not implemented yet)", .{});
             },
-            .object => try self.object.format(fmt, options, writer),
+            .object => try self.object.format(writer),
         }
     }
 

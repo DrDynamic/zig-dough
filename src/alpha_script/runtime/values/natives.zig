@@ -20,17 +20,21 @@ pub const ObjNative = struct {
 
 pub fn nativePrint(context: *ExecutionContext, args: []Value) Value {
     var buffer: [4096]u8 = undefined;
-    var writer = std.fs.File.stdout().writer(&buffer).interface;
+    var stdout = std.fs.File.stdout().writer(&buffer);
+    var writer = &stdout.interface;
+
     for (args) |value| {
         if (value == .error_value) {
             const error_name_id = context.error_pool.getErrorNameId(value.error_value);
             const error_name = context.string_table.get(error_name_id);
 
-            writer.print("{s}\n", .{error_name}) catch {};
+            writer.print("{s}\n", .{error_name}) catch @panic("WriteFailed");
         } else {
-            writer.print("{f}\n", .{value}) catch {};
+            writer.print("{f}\n", .{value}) catch @panic("WriteFailed");
         }
     }
+
+    writer.flush() catch @panic("WriteFailed");
     return Value.makeNull();
 }
 

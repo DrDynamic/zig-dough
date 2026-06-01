@@ -62,10 +62,10 @@ fn getFile(path: []const u8, allocator: std.mem.Allocator) ![]const u8 {
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
 
-    var stdout_terminal: as.common.Terminal = .{};
-    stdout_terminal.init(std.fs.File.stdout());
-    var stderr_terminal: as.common.Terminal = .{};
-    stderr_terminal.init(std.fs.File.stderr());
+    const stdout_terminal = try as.common.Terminal.init(std.fs.File.stdout(), allocator);
+    defer stdout_terminal.deinit();
+    const stderr_terminal = try as.common.Terminal.init(std.fs.File.stderr(), allocator);
+    defer stderr_terminal.deinit();
 
     var argsIterator = try std.process.ArgIterator.initWithAllocator(allocator);
     defer argsIterator.deinit();
@@ -75,11 +75,11 @@ pub fn main() !void {
     if (start_options.path) |path| {
         const output: as.common.reporting.ErrorOutput = switch (start_options.error_output) {
             .pretty => case: {
-                var pretty_output = as.common.reporting.outputs.PrettyErrorOutput.init(&stderr_terminal);
+                var pretty_output = as.common.reporting.outputs.PrettyErrorOutput.init(stderr_terminal);
                 break :case pretty_output.output();
             },
             .integration_test => case: {
-                var pretty_output = as.common.reporting.outputs.IntegrationTestErrorOutput.init(&stderr_terminal);
+                var pretty_output = as.common.reporting.outputs.IntegrationTestErrorOutput.init(stderr_terminal);
                 break :case pretty_output.output();
             },
         };
@@ -98,7 +98,7 @@ pub fn main() !void {
         });
 
         const module = interpreter.compileModule(path, .{
-            .terminal = &stdout_terminal,
+            .terminal = stdout_terminal,
             .print_tokens = start_options.print_tokens,
             .print_ast = start_options.print_ast,
         }) catch {
@@ -106,7 +106,7 @@ pub fn main() !void {
         };
 
         if (start_options.print_asm) {
-            var disassambler = as.frontend.debug.Disassambler.init(&stdout_terminal);
+            var disassambler = as.frontend.debug.Disassambler.init(stdout_terminal);
             disassambler.disassambleChunk(&module.function.chunk, "root");
 
             for (module.function.chunk.constants.items) |constant| {
