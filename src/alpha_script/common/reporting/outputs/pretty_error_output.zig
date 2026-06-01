@@ -17,9 +17,9 @@ const marker_options: Terminal.PrintOptions = .{
 };
 
 pub const PrettyErrorOutput = struct {
-    terminal: *const Terminal,
+    terminal: *Terminal,
 
-    pub fn init(terminal: *const Terminal) PrettyErrorOutput {
+    pub fn init(terminal: *Terminal) PrettyErrorOutput {
         return .{
             .terminal = terminal,
         };

@@ -9,6 +9,7 @@ pub const Local = struct {
 };
 
 pub const CompilerContext = struct {
+    allocator: std.mem.Allocator,
     parent_context: ?*CompilerContext = null,
 
     max_registers: *u8 = undefined,
@@ -20,10 +21,11 @@ pub const CompilerContext = struct {
 
     pub fn init(parent: ?*CompilerContext, max_registers: *u8, chunk: *Chunk, allocator: std.mem.Allocator) CompilerContext {
         return .{
+            .allocator = allocator,
             .parent_context = parent,
 
-            .locals = std.ArrayList(Local).init(allocator),
-            .upvalues = std.ArrayList(ObjFunction.UpValueLocation).init(allocator),
+            .locals = .{},
+            .upvalues = .{},
             .scope_depth = 0,
             .next_free_reg = 0,
 
@@ -33,7 +35,7 @@ pub const CompilerContext = struct {
     }
 
     pub fn deinit(self: *CompilerContext) void {
-        self.locals.deinit();
+        self.locals.deinit(self.allocator);
         //self.upvalues.deinit(); ownership moves into compiled function
     }
 };
@@ -73,7 +75,7 @@ pub const Compiler = struct {
         self.ast = _ast;
 
         var function = ObjFunction.init(self.garbage_collector);
-        try self.garbage_collector.temp_objects.append(function.asObject());
+        try self.garbage_collector.temp_objects.append(self.allocator, function.asObject());
 
         self.context = CompilerContext.init(
             null,
@@ -84,7 +86,7 @@ pub const Compiler = struct {
         defer self.context.deinit();
 
         for (buildin_functions) |buildin| {
-            self.context.locals.append(.{
+            self.context.locals.append(self.allocator, .{
                 .name_id = buildin.name_id,
                 .depth = 0,
                 .reg_slot = 0,
@@ -138,7 +140,7 @@ pub const Compiler = struct {
                         _ = try self.addLocal(name_id, result_reg, true, true);
 
                         const fn_obj = try self.compileFunction(node_id);
-                        try self.garbage_collector.temp_objects.append(fn_obj.asObject());
+                        try self.garbage_collector.temp_objects.append(self.allocator, fn_obj.asObject());
 
                         const string_data = self.ast.string_table.get(name_id);
                         fn_obj.name = ObjString.copydata(string_data, self.garbage_collector);
@@ -158,7 +160,7 @@ pub const Compiler = struct {
         const fn_extra = self.ast.getExtra(fn_node.data.extra_id, FunctionExtra);
 
         var function = ObjFunction.init(self.garbage_collector);
-        try self.garbage_collector.temp_objects.append(function.asObject());
+        try self.garbage_collector.temp_objects.append(self.allocator, function.asObject());
 
         var parent_context = self.context;
         var fn_context = CompilerContext.init(
@@ -305,7 +307,7 @@ pub const Compiler = struct {
                 const string_data = self.ast.string_table.get(node.data.string_id);
                 const string_object = ObjString.copydata(string_data, self.garbage_collector).asObject();
 
-                try self.garbage_collector.temp_objects.append(string_object);
+                try self.garbage_collector.temp_objects.append(self.allocator, string_object);
                 try self.emitLoadConstant(
                     .load_const,
                     register,
@@ -616,7 +618,7 @@ pub const Compiler = struct {
         // std.debug.print("\n", .{});
 
         const index = self.context.locals.items.len;
-        try self.context.locals.append(.{
+        try self.context.locals.append(self.allocator, .{
             .name_id = name_id,
             .depth = self.context.scope_depth,
             .reg_slot = register,
@@ -679,7 +681,7 @@ pub const Compiler = struct {
         unreachable; // variable must be anywhere (checked by semantic analyser)
     }
 
-    fn addUpValue(_: *Compiler, context: *CompilerContext, index: u8, is_local: bool) Error!u8 {
+    fn addUpValue(self: *Compiler, context: *CompilerContext, index: u8, is_local: bool) Error!u8 {
         for (context.upvalues.items, 0..) |upvalue, i| {
             if (upvalue.index == index and upvalue.is_local == is_local) {
                 return @intCast(i);
@@ -691,7 +693,7 @@ pub const Compiler = struct {
             return Error.UpValueOverflow;
         }
 
-        try context.upvalues.append(.{
+        try context.upvalues.append(self.allocator, .{
             .index = index,
             .is_local = is_local,
         });

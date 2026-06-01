@@ -26,22 +26,22 @@ pub const InstructionDescription = struct {
 };
 
 pub const Disassambler = struct {
-    terminal: *const Terminal,
+    terminal: *Terminal,
 
-    pub fn init(terminal: *const Terminal) Disassambler {
+    pub fn init(terminal: *Terminal) Disassambler {
         return .{
             .terminal = terminal,
         };
     }
 
-    pub fn disassambleChunk(self: *const Disassambler, chunk: *const Chunk, name: []const u8) void {
+    pub fn disassambleChunk(self: *Disassambler, chunk: *const Chunk, name: []const u8) void {
         self.terminal.print("===== {s} =====\n", .{name});
         for (chunk.code.items, 0..) |instruction, index| {
             _ = self.disassambleInstruction(chunk, instruction, index);
         }
     }
 
-    pub fn disassambleInstruction(self: *const Disassambler, chunk: *const Chunk, instruction: Instruction, offset: usize) InstructionDescription {
+    pub fn disassambleInstruction(self: *Disassambler, chunk: *const Chunk, instruction: Instruction, offset: usize) InstructionDescription {
         self.terminal.print("{d:0>4} ", .{offset});
 
         const op = instruction.abc.opcode;
@@ -53,7 +53,7 @@ pub const Disassambler = struct {
                 const value = chunk.constants.items[constant_id];
 
                 self.terminal.print("{s:<16} R{d:<2}, C{d:<3}    ; ", .{ @tagName(op), dest_reg, constant_id });
-                self.terminal.printWithOptions("{}", .{value}, value_options);
+                self.terminal.printWithOptions("{f}", .{value}, value_options);
                 self.terminal.print("\n", .{});
 
                 return .{

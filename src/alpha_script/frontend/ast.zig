@@ -160,9 +160,9 @@ pub const AST = struct {
         const ast: AST = .{
             .allocator = allocator,
             .scanner = scanner,
-            .roots = ArrayList(NodeId).init(allocator),
-            .nodes = ArrayList(Node).init(allocator),
-            .extra_data = ArrayList(u8).init(allocator),
+            .roots = .{},
+            .nodes = .{},
+            .extra_data = .{},
             .string_table = string_table,
             .type_pool = type_pool,
             .is_valid = true,
@@ -190,9 +190,9 @@ pub const AST = struct {
             }
         }
 
-        self.roots.deinit();
-        self.nodes.deinit();
-        self.extra_data.deinit();
+        self.roots.deinit(self.allocator);
+        self.nodes.deinit(self.allocator);
+        self.extra_data.deinit(self.allocator);
     }
 
     pub fn invalidate(self: *AST) void {
@@ -200,7 +200,7 @@ pub const AST = struct {
     }
 
     pub fn addRoot(self: *AST, node_id: NodeId) !void {
-        try self.roots.append(node_id);
+        try self.roots.append(self.allocator, node_id);
     }
 
     pub fn getRoots(self: AST) []const NodeId {
@@ -209,7 +209,7 @@ pub const AST = struct {
 
     pub fn addNode(self: *AST, node: Node) !NodeId {
         const id = self.nodes.items.len;
-        try self.nodes.append(node);
+        try self.nodes.append(self.allocator, node);
         return @intCast(id);
     }
 
@@ -218,7 +218,7 @@ pub const AST = struct {
         const start_idx: u32 = @intCast(self.extra_data.items.len);
 
         const extra_data = std.mem.toBytes(data);
-        try self.extra_data.appendSlice(&extra_data);
+        try self.extra_data.appendSlice(self.allocator, &extra_data);
 
         return start_idx;
     }

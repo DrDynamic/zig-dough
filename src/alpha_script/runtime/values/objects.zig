@@ -38,64 +38,22 @@ pub const ObjectHeader = struct {
         }
     }
 
-    pub fn format(
-        self: *ObjectHeader,
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
-        writer: anytype,
-    ) !void {
-        _ = fmt;
+    pub fn format(self: *ObjectHeader, writer: *std.io.Writer) std.io.Writer.Error!void {
         switch (self.tag) {
-            .string => try std.fmt.formatText(self.as(ObjString).data, "s", options, writer),
+            .string => try writer.print("{s}", .{self.as(ObjString).data}),
             .closure => {
                 const closure = self.as(ObjClosure);
                 const name = if (closure.function.name) |name| name.data else "anonymous";
 
-                try writer.print("<closure {s}", .{name});
-                try std.fmt.formatText(
-                    ">",
-                    "s",
-                    .{
-                        .precision = null,
-                        .width = if (options.width) |width| width - name.len - 9 else null,
-                        .alignment = options.alignment,
-                        .fill = options.fill,
-                    },
-                    writer,
-                );
+                try writer.print("<closure {s}>", .{name});
             },
             .function => {
                 const function = self.as(ObjFunction);
                 const name = if (function.name) |name| name.data else "anonymous";
 
-                try writer.print("<function {s}", .{name});
-                try std.fmt.formatText(
-                    ">",
-                    "s",
-                    .{
-                        .precision = null,
-                        .width = if (options.width) |width| width - name.len - 10 else null,
-                        .alignment = options.alignment,
-                        .fill = options.fill,
-                    },
-                    writer,
-                );
+                try writer.print("<function {s}>", .{name});
             },
-            else => {
-                const name = @tagName(self.tag);
-                try writer.print("<object {s}", .{name});
-                try std.fmt.formatText(
-                    ">",
-                    "s",
-                    .{
-                        .precision = null,
-                        .width = if (options.width) |width| width - name.len - 8 else null,
-                        .alignment = options.alignment,
-                        .fill = options.fill,
-                    },
-                    writer,
-                );
-            },
+            else => try writer.print("<object {t}>", .{self.tag}),
         }
     }
 };
@@ -165,7 +123,7 @@ pub const ObjClosure = struct {
         closure.function = function;
         closure.upvalues = &[_]?*ObjUpValue{};
 
-        garbage_collector.temp_objects.append(closure.asObject()) catch @panic("Failed to create Object");
+        garbage_collector.temp_objects.append(garbage_collector.allocator(), closure.asObject()) catch @panic("Failed to create Object");
         closure.upvalues = garbage_collector.allocator().alloc(?*ObjUpValue, function.upvalue_locations.len) catch @panic("Failed to create Object");
         _ = garbage_collector.temp_objects.pop();
 

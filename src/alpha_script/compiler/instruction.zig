@@ -72,28 +72,30 @@ pub const Instruction = packed union {
 pub const ConstantId = u16;
 
 pub const Chunk = struct {
+    allocator: std.mem.Allocator,
     code: std.ArrayList(Instruction),
     constants: std.ArrayList(Value),
 
     pub fn init(allocator: std.mem.Allocator) Chunk {
         return .{
-            .code = std.ArrayList(Instruction).init(allocator),
-            .constants = std.ArrayList(Value).init(allocator),
+            .allocator = allocator,
+            .code = .{},
+            .constants = .{},
         };
     }
 
     pub fn deinit(self: *Chunk) void {
-        self.code.deinit();
-        self.constants.deinit();
+        self.code.deinit(self.allocator);
+        self.constants.deinit(self.allocator);
     }
 
     pub fn emit(self: *Chunk, instruction: Instruction) !void {
-        try self.code.append(instruction);
+        try self.code.append(self.allocator, instruction);
     }
 
     pub fn addConstant(self: *Chunk, value: Value) !ConstantId {
         // TODO don't add the same Value multiple times. return the ConstantId of the Vialue that already exists in constants
-        try self.constants.append(value);
+        try self.constants.append(self.allocator, value);
         const index = self.constants.items.len - 1;
         if (index > std.math.maxInt(u16)) {
             return error.ConstantOverflow;

@@ -5,9 +5,9 @@ const branch_options: Terminal.PrintOptions = .{
 pub const ASTPrinter = struct {
     ast: *const AST,
     type_pool: *const TypePool,
-    terminal: *const Terminal,
+    terminal: *Terminal,
 
-    pub fn printAST(ast_: *const AST, terminal: *const Terminal) !void {
+    pub fn printAST(ast_: *const AST, terminal: *Terminal) !void {
         var printer = ASTPrinter{
             .ast = ast_,
             .type_pool = &ast_.type_pool,
@@ -21,7 +21,7 @@ pub const ASTPrinter = struct {
         }
     }
 
-    fn printNode(self: ASTPrinter, node_idx: ast.NodeId, prefix: []const u8, is_last: bool) std.fmt.AllocPrintError!void {
+    fn printNode(self: ASTPrinter, node_idx: ast.NodeId, prefix: []const u8, is_last: bool) error{OutOfMemory}!void {
         const node = self.ast.nodes.items[node_idx];
         const node_type = self.type_pool.types.items[node.resolved_type_id];
 
@@ -98,22 +98,22 @@ pub const ASTPrinter = struct {
             .expression_function => {
                 const fn_extra = self.ast.getExtra(node.data.extra_id, FunctionExtra);
 
-                var prototype = std.ArrayList(u8).init(self.ast.allocator);
-                defer prototype.deinit();
+                var prototype: std.ArrayList(u8) = .{};
+                defer prototype.deinit(self.ast.allocator);
 
                 if (fn_extra.name_id) |name_id| {
                     const fn_name = self.ast.string_table.get(name_id);
-                    try prototype.appendSlice(fn_name);
+                    try prototype.appendSlice(self.ast.allocator, fn_name);
                 }
 
-                try prototype.append('(');
+                try prototype.append(self.ast.allocator, '(');
 
                 if (fn_extra.parameters) |parameters| {
                     for (parameters) |parameter_id| {
                         const parameter_node = self.ast.nodes.items[parameter_id];
                         const parameter_name = self.ast.string_table.get(parameter_node.data.string_id);
-                        try prototype.appendSlice(parameter_name);
-                        try prototype.append(':');
+                        try prototype.appendSlice(self.ast.allocator, parameter_name);
+                        try prototype.append(self.ast.allocator, ':');
 
                         const type_name = try self.ast.type_pool.getTypeNameAlloc(
                             self.ast.allocator,
@@ -121,13 +121,13 @@ pub const ASTPrinter = struct {
                             self.ast.string_table,
                         );
                         defer self.ast.allocator.free(type_name);
-                        try prototype.appendSlice(type_name);
-                        try prototype.append(',');
+                        try prototype.appendSlice(self.ast.allocator, type_name);
+                        try prototype.append(self.ast.allocator, ',');
                     }
                     _ = prototype.pop(); // remove last ','
                 }
 
-                try prototype.append(')');
+                try prototype.append(self.ast.allocator, ')');
 
                 const return_type_name = try self.ast.type_pool.getTypeNameAlloc(
                     self.ast.allocator,
@@ -135,7 +135,7 @@ pub const ASTPrinter = struct {
                     self.ast.string_table,
                 );
                 defer self.ast.allocator.free(return_type_name);
-                try prototype.appendSlice(return_type_name);
+                try prototype.appendSlice(self.ast.allocator, return_type_name);
             },
             .expression_block,
             .expression_grouping,

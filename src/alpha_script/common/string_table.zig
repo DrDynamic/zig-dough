@@ -8,13 +8,13 @@ pub const StringTable = struct {
     pub fn init(allocator: Allocator) StringTable {
         return .{
             .allocator = allocator,
-            .buffer = ArrayList(u8).init(allocator),
+            .buffer = .{},
             .map = StringArrayHashMap(StringId).init(allocator),
         };
     }
 
     pub fn deinit(self: *StringTable) void {
-        self.buffer.deinit();
+        self.buffer.deinit(self.allocator);
         self.map.deinit();
     }
 
@@ -26,8 +26,8 @@ pub const StringTable = struct {
 
         // add to buffer
         const stored_text_start = self.buffer.items.len;
-        try self.buffer.appendSlice(text);
-        try self.buffer.append(0);
+        try self.buffer.appendSlice(self.allocator, text);
+        try self.buffer.append(self.allocator, 0);
 
         // add to map
         const new_id: StringId = @intCast(self.map.count());

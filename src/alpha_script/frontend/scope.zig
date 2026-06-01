@@ -52,13 +52,13 @@ pub const SymbolTable = struct {
         return .{
             .allocator = allocator,
             .scope_depth = 0,
-            .symbols = std.ArrayList(Symbol).init(allocator),
+            .symbols = .{},
             .symbol_ids = std.AutoHashMap(StringId, SymbolId).init(allocator),
         };
     }
 
     pub fn deinit(self: *SymbolTable) void {
-        self.symbols.deinit();
+        self.symbols.deinit(self.allocator);
         self.symbol_ids.deinit();
     }
 
@@ -66,7 +66,7 @@ pub const SymbolTable = struct {
         return .{
             .allocator = self.allocator,
             .scope_depth = self.scope_depth,
-            .symbols = try self.symbols.clone(),
+            .symbols = try self.symbols.clone(self.allocator),
             .symbol_ids = try self.symbol_ids.clone(),
         };
     }
@@ -117,7 +117,7 @@ pub const SymbolTable = struct {
         }
 
         try self.symbol_ids.put(name_id, @intCast(self.symbols.items.len));
-        try self.symbols.append(.{
+        try self.symbols.append(self.allocator, .{
             .name_id = name_id,
             .type_id = type_id,
             .node_id = node_id,

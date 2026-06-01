@@ -1,8 +1,8 @@
 /// provisional ErrorOutput to stay compatible with integration tests
 pub const IntegrationTestErrorOutput = struct {
-    terminal: *const Terminal,
+    terminal: *Terminal,
 
-    pub fn init(terminal: *const Terminal) IntegrationTestErrorOutput {
+    pub fn init(terminal: *Terminal) IntegrationTestErrorOutput {
         return .{
             .terminal = terminal,
         };

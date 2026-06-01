@@ -1,5 +1,5 @@
 pub const CompilerOptions = struct {
-    terminal: as.common.Terminal,
+    terminal: *as.common.Terminal,
     print_tokens: bool = false,
     print_ast: bool = false,
 };
@@ -42,7 +42,7 @@ pub const Interpreter = struct {
             .compiler = undefined,
             .virtual_machine = undefined,
 
-            .buildinFunctions = std.ArrayList(BuildinFunction).init(allocator),
+            .buildinFunctions = .{},
         };
 
         interpreter.garbage_collector.stress_mode = true;
@@ -63,11 +63,11 @@ pub const Interpreter = struct {
         self.error_pool.deinit();
         self.semantic_analyser.deinit();
         self.compiler.deinit();
-        self.buildinFunctions.deinit();
+        self.buildinFunctions.deinit(self.allocator);
     }
 
     pub fn registerBuildinFunction(self: *Interpreter, buildin: BuildinFunction) !void {
-        try self.buildinFunctions.append(buildin);
+        try self.buildinFunctions.append(self.allocator, buildin);
     }
 
     pub fn compileModule(self: *Interpreter, filename: []const u8, compiler_options: CompilerOptions) !*ObjModule {
@@ -93,7 +93,7 @@ pub const Interpreter = struct {
         }
 
         if (compiler_options.print_ast) {
-            try as.frontend.debug.ASTPrinter.printAST(&ast, &compiler_options.terminal);
+            try as.frontend.debug.ASTPrinter.printAST(&ast, compiler_options.terminal);
         }
 
         return self.compiler.compile(&ast, self.buildinFunctions.items);
@@ -107,7 +107,7 @@ pub const Interpreter = struct {
         var file = try std.fs.cwd().openFile(filename, .{});
         defer file.close();
 
-        const source = try file.readToEndAllocOptions(self.allocator, std.math.maxInt(usize), null, @alignOf(u8), 0);
+        const source = try file.readToEndAllocOptions(self.allocator, std.math.maxInt(usize), null, .of(u8), 0);
 
         return TokenStream.init(filename, source, self.error_reporter);
     }
