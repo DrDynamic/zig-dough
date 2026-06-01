@@ -147,7 +147,7 @@ pub const VirtualMachine = struct {
         const instruction = chunk.code.items[used_frame.ip - 1];
         const current_frame = self.frames[self.frame_count - 1];
 
-        const description = disassambler.disassambleInstruction(&chunk, instruction, used_frame.ip);
+        const description = disassambler.disassambleInstruction(&chunk, instruction, used_frame.ip - 1);
 
         for (stack[0..used_tack_top], 0..) |value, register| {
             const local_address = if (register >= used_frame.base_pointer)
