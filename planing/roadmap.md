@@ -8,6 +8,7 @@ A feature is done, when:
 
 # Alpha.1
 - consistant keywords and syntax (some language features are not match the vision e.G. `function` keyword or concatination via `+`)
+- datatypes consistant wir vision
 - variables
 - constants
 - functions (with closures, hoising and calls)
@@ -15,6 +16,9 @@ A feature is done, when:
 - simple garbage collection
 - simple math (+-*/)
 - concatination (++)
+- any type
+- enforce const (with option to disable)
+
 
 # Alpha.2
 - simple imports (only paz files)
@@ -24,4 +28,14 @@ A feature is done, when:
 - objects
 
 # Alpha.3
-- 
+- klasses
+- inheritance
+- attributes
+- decorators
+- Native support
+
+# later
+- traits
+- shapes
+- std lib
+

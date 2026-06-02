@@ -228,13 +228,13 @@ pub const TokenStream = struct {
         const token_end = self.pos;
 
         const tokenType = switch (self.source[token_start]) {
-            'A' => self.matchIdentifier("nyerror", 1, 7, token_start, token_end, .Anyerror),
-            'B' => self.matchIdentifier("ool", 1, 3, token_start, token_end, .Bool),
-            'F' => self.matchIdentifier("loat", 1, 4, token_start, token_end, .Float),
-            'I' => self.matchIdentifier("nt", 1, 2, token_start, token_end, .Int),
-            'N' => self.matchIdentifier("ull", 1, 3, token_start, token_end, .Null),
-            'S' => self.matchIdentifier("tring", 1, 5, token_start, token_end, .String),
-            'V' => self.matchIdentifier("oid", 1, 3, token_start, token_end, .Void),
+            'a' => self.matchIdentifier("nyerror", 1, 7, token_start, token_end, .Anyerror),
+            'b' => self.matchIdentifier("ool", 1, 3, token_start, token_end, .Bool),
+            'f' => self.matchIdentifier("loat", 1, 4, token_start, token_end, .Float),
+            'i' => self.matchIdentifier("nt", 1, 2, token_start, token_end, .Int),
+            'n' => self.matchIdentifier("ull", 1, 3, token_start, token_end, .Null),
+            's' => self.matchIdentifier("tring", 1, 5, token_start, token_end, .String),
+            'v' => self.matchIdentifier("oid", 1, 3, token_start, token_end, .Void),
 
             'a' => self.matchIdentifier("nd", 1, 2, token_start, token_end, .logical_and),
             'c' => self.matchIdentifier("onst", 1, 4, token_start, token_end, .const_),
