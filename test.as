@@ -21,16 +21,16 @@
 
 
 // can have multiple functions / calls
-function a() Void {
-    print("A")
-}
-
-function b() Void {
-    print("B")
-}
-
-a()
-b()
+//function a() Void {
+//    print("A")
+//}
+//
+//function b() Void {
+//    print("B")
+//}
+//
+//a()
+//b()
 //////////////////////////////////////////////////////
 
 // functions can have no parameters
@@ -43,10 +43,10 @@ b()
 //////////////////////////////////////////////////////
 
 // functions can be assigned to variables
-//var a = function () Void {
-//    print("Lorem")
-//}
-//a()
+var a = function () Void {
+    print("Lorem")
+}
+a()
 //////////////////////////////////////////////////////
 
 

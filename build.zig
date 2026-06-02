@@ -15,12 +15,12 @@ pub fn build(b: *std.Build) void {
     // set a preferred release mode, allowing the user to decide how to optimize.
     const optimize = b.standardOptimizeOption(.{});
 
-    const as_lib = makeAsLib(b, target, optimize);
-    const cli_exe = makeCli(b, as_lib, target, optimize);
+    const as_lib = makeAsLib("libpaz.a", b, target, optimize);
+    const cli_exe = makeCli("paz", b, as_lib, target, optimize);
     makeUnitTests(b, as_lib, cli_exe);
 }
 
-fn makeAsLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {
+fn makeAsLib(name: []const u8, b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {
     // This creates a "module", which represents a collection of source files alongside
     // some compilation options, such as optimization mode and linked system libraries.
     // Every executable or library we compile will be based on one or more modules.
@@ -33,11 +33,25 @@ fn makeAsLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
     //        .target = target,
     //        .optimize = optimize,
     //    });
+
     const alpha_script = b.createModule(.{
         .root_source_file = b.path("src/alpha_script/alpha_script.zig"),
         .target = target,
         .optimize = optimize,
     });
+
+    var library_options: std.Build.LibraryOptions = .{
+        .root_module = alpha_script,
+        .name = name,
+    };
+
+    if (optimize == .Debug) {
+        library_options.use_lld = true;
+        library_options.use_llvm = true;
+    }
+
+    const lib = b.addLibrary(library_options);
+    b.installArtifact(lib);
 
     // Modules can depend on one another using the `std.Build.Module.addImport` function.
     // This is what allows Zig source code to use `@import("foo")` where 'foo' is not a
@@ -47,7 +61,7 @@ fn makeAsLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
     return alpha_script;
 }
 
-fn makeCli(b: *std.Build, as_lib: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {
+fn makeCli(name: []const u8, b: *std.Build, as_lib: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Module {
     const cli_module = b.createModule(.{
         .root_source_file = b.path("src/alpha_cli/main.zig"),
         .target = target,
@@ -55,12 +69,18 @@ fn makeCli(b: *std.Build, as_lib: *std.Build.Module, target: std.Build.ResolvedT
     });
     cli_module.addImport("as", as_lib);
 
+    var executable_options: std.Build.ExecutableOptions = .{
+        .name = name,
+        .root_module = cli_module,
+    };
+    if (optimize == .Debug) {
+        executable_options.use_lld = true;
+        executable_options.use_llvm = true;
+    }
+
     // This creates another `std.Build.Step.Compile`, but this one builds an executable
     // rather than a static library.
-    const as_exe = b.addExecutable(.{
-        .name = "as",
-        .root_module = cli_module,
-    });
+    const as_exe = b.addExecutable(executable_options);
 
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default

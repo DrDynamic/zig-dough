@@ -545,6 +545,20 @@ pub const SemanticAnalyser = struct {
             };
         }
 
+        const type_id = try self.makeFunctionSignature(node_id);
+
+        if (extra.name_id) |name_id| {
+            self.symbol_table.setType(name_id, type_id) catch unreachable; // Error.NotFound is unreachabe (declared above)
+            self.symbol_table.initialize(name_id) catch unreachable; // Error.NotFound is unreachabe (declared above)
+        }
+
+        return type_id;
+    }
+
+    fn makeFunctionSignature(self: *SemanticAnalyser, node_id: NodeId) Error!TypeId {
+        const node = self.ast.nodes.items[node_id];
+        const extra = self.ast.getExtra(node.data.extra_id, FunctionExtra);
+
         var signature_buffer: [32]TypeId = undefined;
         var signature: []TypeId = &[_]TypeId{};
         if (extra.parameters) |parameters| {
@@ -557,19 +571,16 @@ pub const SemanticAnalyser = struct {
             signature = signature_buffer[0..parameters.len];
         }
 
-        const type_id = try self.ast.type_pool.getOrCreateFunctionType(signature, extra.return_type);
-
-        if (extra.name_id) |name_id| {
-            self.symbol_table.setType(name_id, type_id) catch unreachable; // Error.NotFound is unreachabe (declared above)
-            self.symbol_table.initialize(name_id) catch unreachable; // Error.NotFound is unreachabe (declared above)
-        }
-
-        return type_id;
+        return try self.ast.type_pool.getOrCreateFunctionType(signature, extra.return_type);
     }
 
     fn analyseFunctionDefinition(self: *SemanticAnalyser, node_id: NodeId) Error!TypeId {
-        const node = self.ast.nodes.items[node_id];
+        var node = &self.ast.nodes.items[node_id];
         const extra = self.ast.getExtra(node.data.extra_id, FunctionExtra);
+
+        if (node.resolved_type_id == TypePool.UNRESOLVED) {
+            node.resolved_type_id = try self.makeFunctionSignature(node_id);
+        }
 
         try self.context.pushFunction(node_id, extra);
 
@@ -603,7 +614,7 @@ pub const SemanticAnalyser = struct {
                 defer self.allocator.free(error_message);
 
                 //TODO: add types als ast nodes
-                self.error_reporter.semanticAnalyserError(self, Error.MissingReturn, node, error_message);
+                self.error_reporter.semanticAnalyserError(self, Error.MissingReturn, node.*, error_message);
 
                 // TODO: show hint: "control flow reaches end of body here" (marker at end of block node needed)
 

@@ -27,7 +27,9 @@ ADD --chown=developer:developer ./zshrc /home/developer/.zshrc
 
 
 RUN apt-get update -yqq && apt-get install -yqq \
-    gdb
+    gdb \
+    lldb \
+    python3-lldb
 
 
 RUN chown developer:developer /opt

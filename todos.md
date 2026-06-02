@@ -5,6 +5,7 @@
 - close upvalues by UpValueIndex. (by register_id could fail, if the register is already reused)
 - refactor OpCode.call 
   - replace ARGS_COUNT with REG_ARGS_START so the function doesn't need to be copied every time
+  - needs definitions for natives (to infer the number of needed args)
 - Register Allocator zur verwalltung von Registern eibführen 
   - allocate- und releaseRegister hierher verschieben
   - liste freigegebener register pflegen (für das register recycling und elegantere max_registers ermittling)

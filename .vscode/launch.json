@@ -22,7 +22,7 @@
             "name": "Debug lldb",
             "type": "lldb",                // Nutzt die installierte CodeLLDB-Erweiterung
             "request": "launch",
-            "program": "${workspaceFolder}/zig-out/bin/as",
+            "program": "${workspaceFolder}/zig-out/bin/paz",
             "args": ["test.as"],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "build"        // Führt deinen Build-Task vor dem Debuggen aus

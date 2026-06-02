@@ -192,7 +192,7 @@ pub const VirtualMachine = struct {
     }
 
     fn run(self: *VirtualMachine) !void {
-        const debug: bool = true;
+        const debug: bool = false;
 
         var current_frame = &self.frames[self.frame_count - 1];
 
@@ -366,7 +366,7 @@ pub const VirtualMachine = struct {
 
                             else => unreachable,
                         }
-                    }
+                    } else unreachable;
 
                     current_frame = &self.frames[self.frame_count - 1];
                     chunk = current_frame.function.chunk;
