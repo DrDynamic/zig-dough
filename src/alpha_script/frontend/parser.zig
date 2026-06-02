@@ -778,17 +778,17 @@ pub const Parser = struct {
 
     // types
 
-    fn parseTypeDeclaration(self: *Parser) !TypeId {
+    fn parseTypeDeclaration(self: *Parser) Error!TypeId {
         return try self.parseTypeUnion();
     }
 
-    fn parseTypeReference(self: *Parser) !TypeId {
+    fn parseTypeReference(self: *Parser) Error!TypeId {
         // const a:Error!?int
         // const a:Error!int|string
         return try self.parseTypeErrorUnion();
     }
 
-    fn parseTypeErrorUnion(self: *Parser) !TypeId {
+    fn parseTypeErrorUnion(self: *Parser) Error!TypeId {
         var maybe_error_type: ?TypeId = null;
 
         if (self.scanner.current().tag == .bang) {
@@ -811,7 +811,7 @@ pub const Parser = struct {
         }
     }
 
-    fn parseTypeErrorSet(self: *Parser) !TypeId {
+    fn parseTypeErrorSet(self: *Parser) Error!TypeId {
         const error_name_id = self.parseIdentifier() catch {
             self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect identifier or nothing as error type");
             return Error.UnexpectedToken;
@@ -830,7 +830,7 @@ pub const Parser = struct {
         return error_set_id;
     }
 
-    fn parseTypeUnion(self: *Parser) !TypeId {
+    fn parseTypeUnion(self: *Parser) Error!TypeId {
         var members: std.ArrayList(TypeId) = .{};
         defer members.deinit(self.allocator);
 
@@ -878,7 +878,7 @@ pub const Parser = struct {
         }
     }
 
-    fn parseTypePrimary(self: *Parser) !TypeId {
+    fn parseTypePrimary(self: *Parser) Error!TypeId {
         const token = self.scanner.current();
 
         return switch (token.tag) {
@@ -917,6 +917,35 @@ pub const Parser = struct {
                     return Error.UndefinedType;
                 };
             },
+            .left_paren => {
+                _ = try self.match(.left_paren);
+                var parameter_buffer: [32]TypeId = undefined;
+                var count: u8 = 0;
+                if (try self.match(.right_paren) == false) {
+                    while (true) : (count = 1) {
+                        _ = try self.match(.identifier); // optional parameter name
+                        _ = self.consume(.colon) catch {
+                            self.reportError(Error.UnexpectedToken, self.scanner.current(), "Expect ':' before type");
+                            return Error.UnexpectedToken;
+                        };
+
+                        const type_id = try self.parseTypeErrorUnion();
+                        parameter_buffer[count] = type_id;
+
+                        if (try self.match(.comma) == false) {
+                            break;
+                        }
+                    }
+                }
+                _ = try self.match(.right_paren);
+                _ = self.consume(.colon) catch {
+                    self.reportError(Error.UnexpectedToken, self.scanner.current(), "Expect ':' before return type");
+                    return Error.UnexpectedToken;
+                };
+
+                const return_type = try self.parseTypeErrorUnion();
+                return self.ast.type_pool.getOrCreateFunctionType(parameter_buffer[0..count], return_type);
+            },
             else => {
                 self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect type");
                 return Error.UnexpectedToken;
@@ -925,7 +954,7 @@ pub const Parser = struct {
     }
 
     /// parses a comma seperated list of parameters until ')' is found
-    /// returns the start of a node_list with all parameters
+    /// returns an array with node_ids of all parameters
     fn parameterList(self: *Parser) Error!?[]NodeId {
         if (try self.match(.right_paren)) {
             return null;
@@ -935,7 +964,7 @@ pub const Parser = struct {
         var count: u8 = 0;
         while (true) {
             const name_id: StringId = self.parseIdentifier() catch {
-                self.reportError(Error.UnexpectedToken, self.scanner.current(), "Expect variable name");
+                self.reportError(Error.UnexpectedToken, self.scanner.current(), "Expect parameter name");
                 _ = try self.advance();
                 _ = try self.match(.colon);
                 _ = try self.match(.equal);

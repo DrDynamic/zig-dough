@@ -43,17 +43,25 @@
 //////////////////////////////////////////////////////
 
 // functions can be assigned to variables
-var a = function () Void {
-    print("Lorem")
-}
-a()
+//var a = function () Void {
+//    print("Lorem")
+//}
+//a()
 //////////////////////////////////////////////////////
 
 
 // variables can have function type
-//var a:()Void
-//a= function(){print("A")}
+//var a:():Void
+//a = function()Void{print("A")}
 //a()
+//
+//type listener = (event:String, data:Int): Void;
+//type parameter_names_are_optional = (:String, :Int): Void;
+//type parameters_are_optional = (): Void;
+////type return_type_is_mandatory = (:String);
+//type parameters_can_be_error_unions = (:!String):Void;
+//type return_types_can_be_error_unions = ():!Void;
+//
 //////////////////////////////////////////////////////
 
 
