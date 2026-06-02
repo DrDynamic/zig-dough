@@ -253,7 +253,7 @@ pub const TokenStream = struct {
                     break :f_case switch (self.source[token_start + 1]) {
                         'a' => self.matchIdentifier("lse", 2, 3, token_start, token_end, .false),
                         'o' => self.matchIdentifier("r", 2, 1, token_start, token_end, .for_),
-                        'u' => self.matchIdentifier("nction", 2, 6, token_start, token_end, .function),
+                        'n' => self.matchIdentifier("", 2, 0, token_start, token_end, .function),
                         else => .identifier,
                     };
                 }

@@ -394,7 +394,7 @@ class Logged extends Decorator {
 }
 
 #[Logged]
-fn execute_heavy_logic() { ... }
+fn execute_heavy_logic():void { ... }
 
 ```
 

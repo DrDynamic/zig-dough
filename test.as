@@ -1,9 +1,9 @@
 // functions are hoisted
-//sayHello("World")
-//
-//function sayHello(name:String) String {
-//    print("Hello " + name)
-//}
+sayHello("World")
+
+fn sayHello(name:String) Void {
+    print("Hello " + name)
+}
 //////////////////////////////////////////////////////
 
 // non void functions must return a value
@@ -65,29 +65,26 @@
 //////////////////////////////////////////////////////
 
 
-
-//function (name_:String) Void {
-//    print("Lorem")
-//}()
-//
-//function (name:String) Void {
-//    print("Lorem")
-//}()
-//
+// functions can be called directly 
 //function () Void {
 //    print("Lorem")
 //}()
+//////////////////////////////////////////////////////
 
-//function printName(name: String) {
+// functions can have named parameters
+//function printName(name: String) Void {
 //    print(name)
 //}
 // printName(name: "John")
+//////////////////////////////////////////////////////
 
+// functions can have default values
 //function printDefault(name: String="Doe") {
 //    print(name)
 //}
 // printDefault()
 // printDefault("John")
+//////////////////////////////////////////////////////
 
 
 // type Number = Int|Float
