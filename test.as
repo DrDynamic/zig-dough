@@ -7,28 +7,30 @@
 //////////////////////////////////////////////////////
 
 // non void functions must return a value
-function a() Void {
-    print("i don't need a return statement")
-}
-
-function b() String {
-    print("i do")
-}
-
+//function a() Void {
+//    print("i don't need a return statement")
+//}
+//
+//function b() String {
+//    if(true) {
+//        return "";
+//    }
+//    print("i do")
+//}
 //////////////////////////////////////////////////////
 
 
-// can have multiple functions
-//function a() Void {
-//    print("A")
-//}
-//
-//function b() Void {
-//    print("B")
-//}
-//
-//a()
-//b()
+// can have multiple functions / calls
+function a() Void {
+    print("A")
+}
+
+function b() Void {
+    print("B")
+}
+
+a()
+b()
 //////////////////////////////////////////////////////
 
 // functions can have no parameters

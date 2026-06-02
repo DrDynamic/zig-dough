@@ -69,6 +69,7 @@ pub const SemanticAnalyser = struct {
         IllegalAssignment,
         UnexpectedReturn,
         NotCallable,
+        MissingReturn,
         //
         NotFound,
     };
@@ -592,6 +593,23 @@ pub const SemanticAnalyser = struct {
 
         _ = try self.analyse(extra.body);
 
+        const signature = self.ast.type_pool.getCallableSignature(node.resolved_type_id) catch unreachable; // NotCallable: we are sure it is a callable
+        if (signature.return_type != TypePool.VOID) {
+            if (self.checkReturnsOnAllPaths(extra.body) == false) {
+                const type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, signature.return_type, self.ast.string_table);
+                defer self.allocator.free(type_name);
+
+                const error_message = try std.fmt.allocPrint(self.allocator, "function with non-void return type '{s}' implicitly returns", .{type_name});
+                defer self.allocator.free(error_message);
+
+                //TODO: add types als ast nodes
+                self.error_reporter.semanticAnalyserError(self, Error.MissingReturn, node, error_message);
+
+                // TODO: show hint: "control flow reaches end of body here" (marker at end of block node needed)
+
+                return Error.MissingReturn;
+            }
+        }
         _ = self.context.popFunction();
 
         if (extra.name_id) |name_id| {
@@ -599,6 +617,41 @@ pub const SemanticAnalyser = struct {
         }
 
         return node.resolved_type_id;
+    }
+
+    fn checkReturnsOnAllPaths(self: *SemanticAnalyser, node_id: NodeId) bool {
+        const node = &self.ast.nodes.items[node_id];
+
+        return switch (node.tag) {
+            .statement_return => true,
+            .expression_block => case: {
+                const extra = self.ast.getExtra(node.data.extra_id, BlockExtra);
+                if (extra.statements) |statements| {
+                    for (statements) |statement_id| {
+                        if (self.checkReturnsOnAllPaths(statement_id)) {
+                            break :case true;
+                        }
+                    }
+                }
+                break :case false;
+            },
+            .expression_if => case: {
+                const extra = self.ast.getExtra(node.data.extra_id, IfExtra);
+
+                // we only check the branches if the else branch is present
+                // otherwise we can not guaratee a return
+                if (extra.else_branch) |else_branch| {
+                    const if_returns = self.checkReturnsOnAllPaths(extra.then_branch);
+                    const else_returns = self.checkReturnsOnAllPaths(else_branch);
+
+                    if (if_returns and else_returns) {
+                        break :case true;
+                    }
+                }
+                break :case false;
+            },
+            else => false,
+        };
     }
 
     fn analyseBinaryCompare(self: *SemanticAnalyser, node_id: NodeId) Error!TypeId {

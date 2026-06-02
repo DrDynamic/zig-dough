@@ -184,6 +184,7 @@ pub const Compiler = struct {
 
         // compile function body
         try self.compileStatement(fn_extra.body);
+        try self.emitInstruction(Instruction.fromABC(.call_return, 0, 0, 0));
 
         try self.exitScope();
 
@@ -215,7 +216,7 @@ pub const Compiler = struct {
             // statements
             .statement_return => {
                 const reg = try self.compileExpression(node.data.node_id);
-                try self.emitInstruction(Instruction.fromABC(.call_return, 0, reg, 0));
+                try self.emitInstruction(Instruction.fromABC(.call_return, 0, reg, 1));
             },
             else => { // expression statements
                 const snapshot = self.context.next_free_reg;

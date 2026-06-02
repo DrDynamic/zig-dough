@@ -384,8 +384,12 @@ pub const VirtualMachine = struct {
 
                     const offset_return = current_frame.reg_return;
                     const reg_value = base + instruction.abc.b;
+                    const return_value_count = instruction.abc.c;
 
-                    const return_value = stack[reg_value];
+                    var return_value: Value = undefined;
+                    if (return_value_count > 0) {
+                        return_value = stack[reg_value];
+                    }
 
                     self.frame_count -= 1;
 
@@ -394,7 +398,10 @@ pub const VirtualMachine = struct {
                     code = chunk.code.items;
                     base = current_frame.base_pointer;
 
-                    stack[base + offset_return] = return_value;
+                    if (return_value_count > 0) {
+                        stack[base + offset_return] = return_value;
+                    }
+
                     self.stack_top = base + current_frame.function.max_registers;
                 },
                 .create_closure => {
