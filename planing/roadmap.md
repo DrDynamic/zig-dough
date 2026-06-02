@@ -18,4 +18,10 @@ A feature is done, when:
 
 # Alpha.2
 - simple imports (only paz files)
+- native iterators
+- loops
+- arrays
+- objects
+
+# Alpha.3
 - 

@@ -6,17 +6,29 @@
 //}
 //////////////////////////////////////////////////////
 
-// can have multiple functions
+// non void functions must return a value
 function a() Void {
-    print("A")
+    print("i don't need a return statement")
 }
 
-function b() Void {
-    print("B")
+function b() String {
+    print("i do")
 }
 
-a()
-b()
+//////////////////////////////////////////////////////
+
+
+// can have multiple functions
+//function a() Void {
+//    print("A")
+//}
+//
+//function b() Void {
+//    print("B")
+//}
+//
+//a()
+//b()
 //////////////////////////////////////////////////////
 
 // functions can have no parameters

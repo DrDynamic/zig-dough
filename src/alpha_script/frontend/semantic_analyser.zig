@@ -119,13 +119,14 @@ pub const SemanticAnalyser = struct {
         }
 
         const roots = self.ast.getRoots();
-        self.hoistScan(roots) catch |err| {
-            @panic(@errorName(err));
+        self.hoistScan(roots) catch {
+            ast.invalidate();
         };
+
         for (roots) |node_id| {
             _ = self.analyse(node_id) catch {
                 ast.invalidate();
-                return;
+                continue;
             };
         }
     }
@@ -268,95 +269,49 @@ pub const SemanticAnalyser = struct {
                 self.symbol_table.enterScope();
 
                 if (type_condition == TypePool.BOOL) {
-                    var maybe_capture_error: ?Error = null;
-                    self.assertHasNode(extra.then_capture, Error.PointlessCapture, "then capture is pointless (capture is always true)") catch |err| {
-                        maybe_capture_error = err;
+                    self.assertNodeIdIsNull(extra.then_capture, Error.PointlessCapture, "then capture is pointless (capture is always true)") catch |err| {
+                        maybe_err = err;
                     };
-                    self.assertHasNode(extra.else_capture, Error.PointlessCapture, "else capture is pointless (capture is always false)") catch |err| {
-                        maybe_capture_error = err;
-                    };
-                    if (maybe_capture_error) |err| return err;
-                } else if (self.ast.type_pool.isNullable(type_condition)) {
-                    if (extra.then_capture) |then_capture| {
-                        const capture_node = &self.ast.nodes.items[then_capture];
-                        const capture_type = try self.ast.type_pool.getOrCreateNotNullableType(type_condition);
-                        const capture_extra = self.ast.getExtra(capture_node.data.extra_id, DeclarationExtra);
-
-                        capture_node.resolved_type_id = capture_type;
-
-                        self.symbol_table.declare(
-                            capture_extra.name_id,
-                            capture_type,
-                            then_capture,
-                            false,
-                        ) catch {
-                            try self.reportRedeclarationError(capture_node.*, capture_node.data.string_id);
-                            return Error.RedeclarationError;
-                        };
-                        self.symbol_table.initialize(capture_extra.name_id) catch unreachable; // declared above
-                    } else {
-                        const condition = self.ast.nodes.items[extra.condition];
-                        self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, condition, "missing then capture for Nullable condition");
-                        maybe_err = Error.MissingCapture;
-                    }
-
-                    self.assertHasNode(extra.else_capture, Error.PointlessCapture, "capture is pointless for Nullable condition (it is always null)") catch |err| {
+                    self.assertNodeIdIsNull(extra.else_capture, Error.PointlessCapture, "else capture is pointless (capture is always false)") catch |err| {
                         maybe_err = err;
                     };
                 } else if (self.ast.type_pool.isErrorUnion(type_condition)) {
-                    var maybe_capture_error: ?Error = null;
+                    self.registerIfCaptureOrFail(
+                        extra.then_branch,
+                        extra.then_capture,
+                        try self.ast.type_pool.getOrCreateNotErrorUnionType(type_condition),
+                        "missing then capture for ErrorUnion condition",
+                    ) catch |err| {
+                        maybe_err = err;
+                    };
 
-                    if (extra.then_capture) |then_capture| {
-                        const capture_node = &self.ast.nodes.items[then_capture];
-                        const capture_type = try self.ast.type_pool.getOrCreateNotErrorUnionType(type_condition);
-                        const capture_extra = self.ast.getExtra(capture_node.data.extra_id, DeclarationExtra);
-
-                        capture_node.resolved_type_id = capture_type;
-
-                        self.symbol_table.declare(
-                            capture_extra.name_id,
-                            capture_type,
-                            then_capture,
-                            false,
-                        ) catch {
-                            try self.reportRedeclarationError(capture_node.*, capture_node.data.string_id);
-                            return Error.RedeclarationError;
+                    if (extra.else_branch) |else_branch| {
+                        self.registerIfCaptureOrFail(
+                            else_branch,
+                            extra.else_capture,
+                            self.ast.type_pool.getErrorSetFromTypeUnion(type_condition) catch unreachable,
+                            "missing else capture for ErrorUnion condition",
+                        ) catch |err| {
+                            maybe_err = err;
                         };
-                        self.symbol_table.initialize(capture_extra.name_id) catch unreachable; // existence is checked above
-                    } else {
-                        const then_branch_node = self.ast.nodes.items[extra.then_branch];
-                        self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, then_branch_node, "missing then capture for ErrorUnion condition");
-                        maybe_capture_error = Error.MissingCapture;
                     }
+                } else if (self.ast.type_pool.isNullable(type_condition)) {
+                    self.registerIfCaptureOrFail(
+                        extra.then_branch,
+                        extra.then_capture,
+                        try self.ast.type_pool.getOrCreateNotNullableType(type_condition),
+                        "capture is pointless for Nullable condition (it is always null)",
+                    ) catch |err| {
+                        maybe_err = err;
+                    };
 
-                    if (extra.else_branch != null) {
-                        if (extra.else_capture) |else_capture| {
-                            const capture_node = &self.ast.nodes.items[else_capture];
-                            const capture_type = self.ast.type_pool.getErrorSetFromTypeUnion(type_condition) catch unreachable; // assured ErrorUnion by parent:  else if (self.ast.type_pool.isErrorUnion(type_condition))
-                            const capture_extra = self.ast.getExtra(capture_node.data.extra_id, DeclarationExtra);
-
-                            capture_node.resolved_type_id = capture_type;
-
-                            self.symbol_table.declare(
-                                capture_extra.name_id,
-                                capture_type,
-                                else_capture,
-                                false,
-                            ) catch {
-                                try self.reportRedeclarationError(capture_node.*, capture_node.data.string_id);
-                                return Error.RedeclarationError;
-                            };
-                            self.symbol_table.initialize(capture_extra.name_id) catch unreachable; // existence is checked above
-
-                        } else {
-                            const else_branch_node = self.ast.nodes.items[extra.else_branch.?];
-
-                            self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, else_branch_node, "missing else capture for ErrorUnion condition");
-                            maybe_capture_error = Error.MissingCapture;
-                        }
-                    }
-
-                    if (maybe_capture_error) |err| return err;
+                    self.assertNodeIdIsNull(
+                        extra.else_capture,
+                        Error.PointlessCapture,
+                        "capture is pointless for Nullable condition (it is always null)",
+                    ) catch |err| {
+                        maybe_err = err;
+                    };
                 } else {
                     const condition = self.ast.nodes.items[extra.condition];
                     self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, condition, "condition needs to evaluate to Bool, Nullable type or ErrorUnion");
@@ -399,8 +354,6 @@ pub const SemanticAnalyser = struct {
                 } else {
                     break :case try self.ast.type_pool.getOrCreateUnionType(&[_]u32{ type_then, type_else });
                 }
-
-                break :case TypePool.VOID;
             },
 
             // access
@@ -723,7 +676,32 @@ pub const SemanticAnalyser = struct {
         return TypePool.BOOL;
     }
 
-    fn assertHasNode(self: *SemanticAnalyser, node_id: ?NodeId, err: Error, message: []const u8) Error!void {
+    inline fn registerIfCaptureOrFail(self: *SemanticAnalyser, branch_id: NodeId, maybe_capture_id: ?NodeId, capture_type_id: TypeId, message: []const u8) Error!void {
+        if (maybe_capture_id) |capture_node_id| {
+            const capture_node = &self.ast.nodes.items[capture_node_id];
+            const capture_extra = self.ast.getExtra(capture_node.data.extra_id, DeclarationExtra);
+
+            capture_node.resolved_type_id = capture_type_id;
+
+            self.symbol_table.declare(
+                capture_extra.name_id,
+                capture_type_id,
+                capture_node_id,
+                false,
+            ) catch {
+                try self.reportRedeclarationError(capture_node.*, capture_node.data.string_id);
+                return Error.RedeclarationError;
+            };
+            self.symbol_table.initialize(capture_extra.name_id) catch unreachable; // declared above
+        } else {
+            const branch_node = self.ast.nodes.items[branch_id];
+
+            self.error_reporter.semanticAnalyserError(self, Error.MissingCapture, branch_node, message);
+            return Error.MissingCapture;
+        }
+    }
+
+    inline fn assertNodeIdIsNull(self: *SemanticAnalyser, node_id: ?NodeId, err: Error, message: []const u8) Error!void {
         if (node_id) |id| {
             const node = self.ast.nodes.items[id];
             self.error_reporter.semanticAnalyserError(self, err, node, message);
@@ -747,7 +725,7 @@ pub const SemanticAnalyser = struct {
         self.error_reporter.semanticAnalyserError(self, Error.TypeMismatch, node, error_message);
     }
 
-    inline fn reportRedeclarationError(self: *const SemanticAnalyser, node: Node, identifier_name: StringId) !void {
+    inline fn reportRedeclarationError(self: *const SemanticAnalyser, node: Node, identifier_name: StringId) std.mem.Allocator.Error!void {
         const error_message = try std.fmt.allocPrint(self.allocator, "identifier '{s}' has already been declared", .{self.ast.string_table.get(identifier_name)});
         defer self.allocator.free(error_message);
 
