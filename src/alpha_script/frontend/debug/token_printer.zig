@@ -3,7 +3,7 @@ pub const TokenPrinter = struct {
     scanner: Scanner,
 
     pub fn printTokens(scanner: *Scanner, writer: *std.io.Writer) !void {
-        while (scanner.previous().tag != .eof) {
+        while (scanner.previous().tag != .t_eof) {
             //            try TokenPrinter.printToken(scanner.previous(), scanner, writer);
             try TokenPrinter.printToken(scanner.current(), scanner, writer);
             //            try TokenPrinter.printToken(scanner.peek(), scanner, writer);

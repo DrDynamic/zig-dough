@@ -34,7 +34,7 @@ pub const Parser = struct {
         const type_pool = try TypePool.init(self.error_pool, self.allocator);
         self.ast = try AST.init(self.scanner, self.string_table, type_pool, self.allocator);
 
-        while (!self.check(.eof)) {
+        while (!self.check(.t_eof)) {
             const maybe_node_id = self.declaration();
             if (maybe_node_id) |node_id| {
                 try self.ast.addRoot(node_id);
@@ -48,11 +48,11 @@ pub const Parser = struct {
     }
 
     fn declaration(self: *Parser) !NodeId {
-        if (try self.match(.error_)) {
+        if (try self.match(.t_error)) {
             return self.declarationErrorSet();
-        } else if (try self.match(.type)) {
+        } else if (try self.match(.t_type)) {
             return self.declarationType();
-        } else if (try self.match(.var_)) {
+        } else if (try self.match(.t_var)) {
             return try self.declarationVar();
         }
         return try self.statement();
@@ -62,7 +62,7 @@ pub const Parser = struct {
         const start_token = self.scanner.previous();
         const set_name_id = try self.parseIdentifier();
 
-        _ = self.consume(.left_brace) catch {
+        _ = self.consume(.t_left_brace) catch {
             self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "expect '{{' after ErrorSet name");
             return Error.UnexpectedToken;
         };
@@ -70,15 +70,15 @@ pub const Parser = struct {
         var error_list: std.ArrayList(TypeId) = .{};
         defer error_list.deinit(self.allocator);
 
-        while (!self.check(.right_brace)) {
+        while (!self.check(.t_right_brace)) {
             const error_name_id = try self.parseIdentifier();
             const error_type_id = try self.ast.type_pool.getOrCreateErrorType(error_name_id);
             try error_list.append(self.allocator, error_type_id);
 
-            if (!try self.match(.comma)) break;
+            if (!try self.match(.t_comma)) break;
         }
 
-        _ = self.consume(.right_brace) catch {
+        _ = self.consume(.t_right_brace) catch {
             self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.previous(), "expecting ',' after error name");
             return Error.UnexpectedToken;
         };
@@ -117,7 +117,7 @@ pub const Parser = struct {
             return Error.UnexpectedToken;
         };
 
-        _ = self.consume(.equal) catch {
+        _ = self.consume(.t_equal) catch {
             self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect '=' after typename");
             return Error.UnexpectedToken;
         };
@@ -137,7 +137,7 @@ pub const Parser = struct {
             return Error.TypeRedeclaration;
         };
 
-        _ = try self.match(.semicolon);
+        _ = try self.match(.t_semicolon);
 
         const extra_id = try self.ast.addExtra(DeclarationExtra{
             .name_id = name_id,
@@ -156,23 +156,23 @@ pub const Parser = struct {
         const name_id: StringId = self.parseIdentifier() catch {
             self.reportError(Error.UnexpectedToken, self.scanner.current(), "Expect variable name");
             _ = try self.advance();
-            _ = try self.match(.colon);
-            _ = try self.match(.equal);
+            _ = try self.match(.t_colon);
+            _ = try self.match(.t_equal);
             return error.ParserError;
         };
         const identifier_token = self.scanner.previous();
 
         var type_id: TypeId = TypePool.UNRESOLVED;
-        if (try self.match(.colon)) {
+        if (try self.match(.t_colon)) {
             type_id = try self.parseTypeReference();
         }
 
         var assignment_node_id: ?NodeId = null;
-        if (try self.match(.equal)) {
+        if (try self.match(.t_equal)) {
             assignment_node_id = try self.expression();
         }
 
-        _ = try self.match(.semicolon);
+        _ = try self.match(.t_semicolon);
 
         const extra_id = try self.ast.addExtra(DeclarationExtra{
             .name_id = name_id,
@@ -190,12 +190,12 @@ pub const Parser = struct {
 
     // statements
     fn statement(self: *Parser) !NodeId {
-        if (try self.match(.return_)) {
+        if (try self.match(.t_return)) {
             return try self.returnStatement();
-        } else if (try self.match(.left_brace)) {
+        } else if (try self.match(.t_left_brace)) {
             const left_brace = self.scanner.previous();
             const node_id = try self.blockStatement();
-            _ = self.consume(.right_brace) catch {
+            _ = self.consume(.t_right_brace) catch {
                 self.reportError(Error.UnexpectedToken, left_brace, "expect '}' after code block");
                 return Error.UnexpectedToken;
             };
@@ -203,7 +203,7 @@ pub const Parser = struct {
         }
 
         const node_id = try self.expression();
-        _ = try self.match(.semicolon);
+        _ = try self.match(.t_semicolon);
         return node_id;
     }
 
@@ -212,7 +212,7 @@ pub const Parser = struct {
 
         var statements: std.ArrayList(NodeId) = .{};
 
-        while (!self.check(.right_brace)) {
+        while (!self.check(.t_right_brace)) {
             try statements.append(self.allocator, try self.declaration());
         }
 
@@ -231,7 +231,7 @@ pub const Parser = struct {
     fn returnStatement(self: *Parser) !NodeId {
         const token = self.scanner.previous();
         const expr = try self.expression();
-        _ = try self.match(.semicolon);
+        _ = try self.match(.t_semicolon);
         return try self.ast.addNode(.{
             .tag = .statement_return,
             .token_position = token.location.start,
@@ -242,7 +242,7 @@ pub const Parser = struct {
 
     // expressions
     fn expression(self: *Parser) Error!NodeId {
-        if (try self.match(.if_)) {
+        if (try self.match(.t_if)) {
             return try self.ifExpression();
         }
         return try self.assignment();
@@ -250,20 +250,20 @@ pub const Parser = struct {
 
     fn ifExpression(self: *Parser) Error!NodeId {
         const token_start = self.scanner.previous();
-        _ = self.consume(.left_paren) catch {
+        _ = self.consume(.t_left_paren) catch {
             self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect '(' after 'if'");
             return Error.UnexpectedToken;
         };
 
         const condition = try self.expression();
 
-        _ = self.consume(.right_paren) catch {
+        _ = self.consume(.t_right_paren) catch {
             self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect ')' after condition");
             return Error.UnexpectedToken;
         };
 
         var then_capture: ?NodeId = null;
-        if (try self.match(.pipe)) {
+        if (try self.match(.t_pipe)) {
             then_capture = try self.capture();
         }
 
@@ -271,8 +271,8 @@ pub const Parser = struct {
 
         var else_capture: ?NodeId = null;
         var else_branch: ?NodeId = null;
-        if (try self.match(.else_)) {
-            if (try self.match(.pipe)) {
+        if (try self.match(.t_else)) {
+            if (try self.match(.t_pipe)) {
                 else_capture = try self.capture();
             }
             else_branch = try self.statement();
@@ -320,7 +320,7 @@ pub const Parser = struct {
             .resolved_type_id = TypePool.UNRESOLVED,
             .data = .{ .extra_id = extra_id },
         });
-        _ = self.consume(.pipe) catch {
+        _ = self.consume(.t_pipe) catch {
             self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect '|' after capture");
             return Error.UnexpectedToken;
         };
@@ -330,7 +330,7 @@ pub const Parser = struct {
     fn assignment(self: *Parser) Error!NodeId {
         const assignment_target_id = try self.or_();
 
-        if (try self.match(.equal)) {
+        if (try self.match(.t_equal)) {
             const token_equal = self.scanner.previous();
 
             // TODO: allow or deny chaning assignments?
@@ -355,7 +355,7 @@ pub const Parser = struct {
     fn or_(self: *Parser) Error!NodeId {
         var lhs = try self.and_();
 
-        while (try self.match(.logical_or)) {
+        while (try self.match(.t_logical_or)) {
             const token_or = self.scanner.previous();
             const extra_id = try self.ast.addExtra(BinaryOpExtra{
                 .lhs = lhs,
@@ -375,7 +375,7 @@ pub const Parser = struct {
     fn and_(self: *Parser) Error!NodeId {
         var lhs = try self.equality();
 
-        while (try self.match(.logical_and)) {
+        while (try self.match(.t_logical_and)) {
             const token_and = self.scanner.previous();
             const extra_id = try self.ast.addExtra(BinaryOpExtra{
                 .lhs = lhs,
@@ -397,8 +397,8 @@ pub const Parser = struct {
         search_equality: while (true) {
             const token = self.scanner.current();
             const tag: NodeType = switch (token.tag) {
-                .equal_equal => .binary_equal,
-                .bang_equal => .binary_not_equal,
+                .t_equal_equal => .binary_equal,
+                .t_bang_equal => .binary_not_equal,
                 else => break :search_equality,
             };
             _ = try self.advance();
@@ -425,10 +425,10 @@ pub const Parser = struct {
         search_comparsion: while (true) {
             const token = self.scanner.current();
             const tag: NodeType = switch (token.tag) {
-                .greater => .binary_greater,
-                .greater_equal => .binary_greater_equal,
-                .less => .binary_less,
-                .less_equal => .binary_less_equal,
+                .t_greater => .binary_greater,
+                .t_greater_equal => .binary_greater_equal,
+                .t_less => .binary_less,
+                .t_less_equal => .binary_less_equal,
                 else => break :search_comparsion,
             };
             _ = try self.advance();
@@ -455,8 +455,8 @@ pub const Parser = struct {
         search_term: while (true) {
             const token = self.scanner.current();
             const tag: NodeType = switch (token.tag) {
-                .plus => .binary_add,
-                .minus => .binary_sub,
+                .t_plus => .binary_add,
+                .t_minus => .binary_sub,
                 else => break :search_term,
             };
             _ = try self.advance();
@@ -482,8 +482,8 @@ pub const Parser = struct {
         search_factor: while (true) {
             const token = self.scanner.current();
             const tag: NodeType = switch (token.tag) {
-                .star => .binary_mul,
-                .slash => .binary_div,
+                .t_star => .binary_mul,
+                .t_slash => .binary_div,
                 else => break :search_factor,
             };
             _ = try self.advance();
@@ -505,7 +505,7 @@ pub const Parser = struct {
     }
 
     fn unary(self: *Parser) Error!NodeId {
-        if (try self.match(.bang)) {
+        if (try self.match(.t_bang)) {
             const token = self.scanner.previous();
             return try self.ast.addNode(.{
                 .tag = .logical_not,
@@ -513,7 +513,7 @@ pub const Parser = struct {
                 .resolved_type_id = TypePool.UNRESOLVED,
                 .data = .{ .node_id = try self.unary() },
             });
-        } else if (try self.match(.minus)) {
+        } else if (try self.match(.t_minus)) {
             const token = self.scanner.previous();
             return try self.ast.addNode(.{
                 .tag = .negate,
@@ -530,10 +530,10 @@ pub const Parser = struct {
         var callee = try self.primary();
 
         while (true) {
-            if (try self.match(.left_paren)) {
+            if (try self.match(.t_left_paren)) {
                 const token = self.scanner.previous();
                 // finish Call
-                const list_result = try self.expressionList(.right_paren);
+                const list_result = try self.expressionList(.t_right_paren);
 
                 const extra_id = try self.ast.addExtra(CallExtra{
                     .callee = callee,
@@ -546,8 +546,8 @@ pub const Parser = struct {
                     .resolved_type_id = TypePool.UNRESOLVED,
                     .data = .{ .extra_id = extra_id },
                 });
-            } else if (try self.match(.dot)) {
-                _ = self.consume(.identifier) catch {
+            } else if (try self.match(.t_dot)) {
+                _ = self.consume(.t_identifier) catch {
                     self.reportError(Error.UnexpectedToken, self.scanner.current(), "Expect property name after '.'");
                     _ = try self.advance();
                     return Error.UnexpectedToken;
@@ -563,9 +563,9 @@ pub const Parser = struct {
     fn primary(self: *Parser) Error!NodeId {
         const token = self.scanner.current();
         return switch (token.tag) {
-            .error_ => case: {
+            .t_error => case: {
                 _ = try self.advance();
-                _ = self.consume(.dot) catch {
+                _ = self.consume(.t_dot) catch {
                     self.error_reporter.parserError(self, Error.UnexpectedToken, self.scanner.current(), "expect '.' after error expression");
                     return Error.UnexpectedToken;
                 };
@@ -585,11 +585,11 @@ pub const Parser = struct {
                     .data = .{ .error_value = error_id },
                 });
             },
-            .function => case: {
+            .t_function => case: {
                 _ = try self.advance();
                 break :case try self.function();
             },
-            .null => case: {
+            .t_null => case: {
                 _ = try self.advance();
 
                 break :case try self.ast.addNode(.{
@@ -599,7 +599,7 @@ pub const Parser = struct {
                     .data = undefined,
                 });
             },
-            .true => |_| case: {
+            .t_true => |_| case: {
                 _ = try self.advance();
 
                 break :case try self.ast.addNode(.{
@@ -609,7 +609,7 @@ pub const Parser = struct {
                     .data = .{ .bool_value = true },
                 });
             },
-            .false => |_| case: {
+            .t_false => |_| case: {
                 _ = try self.advance();
 
                 break :case try self.ast.addNode(.{
@@ -619,7 +619,7 @@ pub const Parser = struct {
                     .data = .{ .bool_value = false },
                 });
             },
-            .number => |_| case: {
+            .t_number => |_| case: {
                 _ = try self.advance();
 
                 const lexeme = self.scanner.getLexeme(token);
@@ -647,7 +647,7 @@ pub const Parser = struct {
                     });
                 }
             },
-            .string_double_quote => |_| case: {
+            .t_string_double_quote => |_| case: {
                 _ = try self.advance();
 
                 const lexeme = self.scanner.getLexeme(token);
@@ -661,7 +661,7 @@ pub const Parser = struct {
                     .data = .{ .string_id = string_id },
                 });
             },
-            .left_paren => |_| case: {
+            .t_left_paren => |_| case: {
                 const left_paren = try self.advance();
                 const group = try self.ast.addNode(.{
                     .tag = .expression_grouping,
@@ -670,19 +670,19 @@ pub const Parser = struct {
                     .data = .{ .node_id = try self.expression() },
                 });
 
-                _ = self.consume(.right_paren) catch {
+                _ = self.consume(.t_right_paren) catch {
                     self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect ')' after group");
                     return Error.UnexpectedToken;
                 };
 
                 break :case group;
             },
-            .identifier => |_| identifier_case: {
+            .t_identifier => |_| identifier_case: {
                 const string_id = self.parseIdentifier() catch unreachable; // switch ensures that the next token is an identifier
 
                 if (self.ast.type_pool.getType(string_id)) |set_id| {
                     if (self.ast.type_pool.isErrorSet(set_id)) {
-                        _ = self.consume(.dot) catch {
+                        _ = self.consume(.t_dot) catch {
                             self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect '.' in ErrorSet expression");
                             self.reportHintToTypeDeclaration(string_id, "ErrorSet is declared here:");
 
@@ -742,12 +742,12 @@ pub const Parser = struct {
         };
 
         // function name
-        if (self.scanner.current().tag == .identifier) {
+        if (self.scanner.current().tag == .t_identifier) {
             function_extra.name_id = self.parseIdentifier() catch unreachable; // if ensures that the current token is an identifier
         }
 
         // args start
-        _ = self.consume(.left_paren) catch {
+        _ = self.consume(.t_left_paren) catch {
             self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect '(' after function declaration");
             return Error.UnexpectedToken;
         };
@@ -755,14 +755,14 @@ pub const Parser = struct {
         function_extra.parameters = try self.parameterList();
         function_extra.return_type = try self.parseTypeErrorUnion();
 
-        const left_brace = self.consume(.left_brace) catch {
+        const left_brace = self.consume(.t_left_brace) catch {
             self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect '{' before function body");
             return Error.UnexpectedToken;
         };
 
         function_extra.body = try self.blockStatement();
 
-        _ = self.consume(.right_brace) catch {
+        _ = self.consume(.t_right_brace) catch {
             self.reportError(Error.UnexpectedToken, left_brace, "expect '}' after function block");
             return Error.UnexpectedToken;
         };
@@ -791,12 +791,12 @@ pub const Parser = struct {
     fn parseTypeErrorUnion(self: *Parser) Error!TypeId {
         var maybe_error_type: ?TypeId = null;
 
-        if (self.scanner.current().tag == .bang) {
+        if (self.scanner.current().tag == .t_bang) {
             maybe_error_type = TypePool.ANYERROR;
-            _ = self.consume(.bang) catch unreachable;
-        } else if (self.scanner.next().tag == .bang) {
+            _ = self.consume(.t_bang) catch unreachable;
+        } else if (self.scanner.next().tag == .t_bang) {
             maybe_error_type = try self.parseTypeErrorSet();
-            _ = self.consume(.bang) catch unreachable;
+            _ = self.consume(.t_bang) catch unreachable;
         }
 
         if (maybe_error_type) |error_type| {
@@ -835,13 +835,13 @@ pub const Parser = struct {
         defer members.deinit(self.allocator);
 
         var nullable_token: ?Token = null;
-        if (try self.match(.question_mark)) {
+        if (try self.match(.t_question_mark)) {
             nullable_token = self.scanner.previous();
         }
         try members.append(self.allocator, try self.parseTypePrimary());
 
-        while (try self.match(.pipe)) {
-            if (try self.match(.question_mark)) {
+        while (try self.match(.t_pipe)) {
+            if (try self.match(.t_question_mark)) {
                 nullable_token = self.scanner.previous();
             }
             try members.append(self.allocator, try self.parseTypePrimary());
@@ -882,49 +882,49 @@ pub const Parser = struct {
         const token = self.scanner.current();
 
         return switch (token.tag) {
-            .Void => case: {
+            .t_void => case: {
                 _ = try self.advance();
                 break :case TypePool.VOID;
             },
-            .Null => case: {
+            .t_null => case: {
                 _ = try self.advance();
                 break :case TypePool.NULL;
             },
-            .Bool => case: {
+            .t_bool => case: {
                 _ = try self.advance();
                 break :case TypePool.BOOL;
             },
-            .Int => case: {
+            .t_int => case: {
                 _ = try self.advance();
                 break :case TypePool.INT;
             },
-            .Float => case: {
+            .t_float => case: {
                 _ = try self.advance();
                 break :case TypePool.FLOAT;
             },
-            .String => case: {
+            .t_string => case: {
                 _ = try self.advance();
                 break :case TypePool.STRING;
             },
-            .Anyerror => case: {
+            .t_anyerror => case: {
                 _ = try self.advance();
                 break :case TypePool.ANYERROR;
             },
-            .identifier => case: {
+            .t_identifier => case: {
                 const name_id = try self.parseIdentifier();
                 break :case self.ast.type_pool.getType(name_id) orelse {
                     self.reportError(Error.UndefinedType, self.scanner.previous(), "Undefined type");
                     return Error.UndefinedType;
                 };
             },
-            .left_paren => {
-                _ = try self.match(.left_paren);
+            .t_left_paren => {
+                _ = try self.match(.t_left_paren);
                 var parameter_buffer: [32]TypeId = undefined;
                 var count: u8 = 0;
-                if (try self.match(.right_paren) == false) {
+                if (try self.match(.t_right_paren) == false) {
                     while (true) : (count = 1) {
-                        _ = try self.match(.identifier); // optional parameter name
-                        _ = self.consume(.colon) catch {
+                        _ = try self.match(.t_identifier); // optional parameter name
+                        _ = self.consume(.t_colon) catch {
                             self.reportError(Error.UnexpectedToken, self.scanner.current(), "Expect ':' before type");
                             return Error.UnexpectedToken;
                         };
@@ -932,13 +932,13 @@ pub const Parser = struct {
                         const type_id = try self.parseTypeErrorUnion();
                         parameter_buffer[count] = type_id;
 
-                        if (try self.match(.comma) == false) {
+                        if (try self.match(.t_comma) == false) {
                             break;
                         }
                     }
                 }
-                _ = try self.match(.right_paren);
-                _ = self.consume(.colon) catch {
+                _ = try self.match(.t_right_paren);
+                _ = self.consume(.t_colon) catch {
                     self.reportError(Error.UnexpectedToken, self.scanner.current(), "Expect ':' before return type");
                     return Error.UnexpectedToken;
                 };
@@ -956,7 +956,7 @@ pub const Parser = struct {
     /// parses a comma seperated list of parameters until ')' is found
     /// returns an array with node_ids of all parameters
     fn parameterList(self: *Parser) Error!?[]NodeId {
-        if (try self.match(.right_paren)) {
+        if (try self.match(.t_right_paren)) {
             return null;
         }
 
@@ -966,13 +966,13 @@ pub const Parser = struct {
             const name_id: StringId = self.parseIdentifier() catch {
                 self.reportError(Error.UnexpectedToken, self.scanner.current(), "Expect parameter name");
                 _ = try self.advance();
-                _ = try self.match(.colon);
-                _ = try self.match(.equal);
+                _ = try self.match(.t_colon);
+                _ = try self.match(.t_equal);
                 return error.ParserError;
             };
             const identifier_token = self.scanner.previous();
 
-            _ = self.consume(.colon) catch {
+            _ = self.consume(.t_colon) catch {
                 self.reportError(Error.UnexpectedToken, self.scanner.current(), "Expect type after parameter name");
                 return Error.UnexpectedToken;
             };
@@ -981,7 +981,7 @@ pub const Parser = struct {
 
             // for optional parameters (not implemented yet)
             // var assignment_node_id: ?NodeId = null;
-            // if (try self.match(.equal)) {
+            // if (try self.match(.t_equal)) {
             //     assignment_node_id = try self.expression();
             // }
 
@@ -996,12 +996,12 @@ pub const Parser = struct {
                 return error.ListOverflow;
             }
             count += 1;
-            if (!try self.match(.comma)) {
+            if (!try self.match(.t_comma)) {
                 break;
             }
         }
 
-        _ = try self.consume(.right_paren);
+        _ = try self.consume(.t_right_paren);
 
         const result = try self.allocator.alloc(NodeId, count);
         @memcpy(result, parameter_ids[0..count]);
@@ -1020,7 +1020,7 @@ pub const Parser = struct {
                 return error.ListOverflow;
             }
             count += 1;
-            if (!try self.match(.comma)) {
+            if (!try self.match(.t_comma)) {
                 break;
             }
         }
@@ -1048,7 +1048,7 @@ pub const Parser = struct {
 
     // string table
     pub fn parseIdentifier(self: *Parser) Error!StringId {
-        const token = try self.consume(.identifier);
+        const token = try self.consume(.t_identifier);
         const lexeme = self.scanner.getLexeme(token);
         return self.ast.string_table.add(lexeme);
     }
@@ -1097,19 +1097,19 @@ pub const Parser = struct {
     pub fn synchronize(self: *Parser) void {
         _ = self.advance() catch undefined;
 
-        while (self.scanner.current().tag != .eof) {
+        while (self.scanner.current().tag != .t_eof) {
             switch (self.scanner.current().tag) {
-                .left_bracket,
-                .const_,
-                .for_,
-                .function,
-                .if_,
-                .return_,
-                .type,
-                .var_,
-                .while_,
+                .t_left_bracket,
+                .t_const,
+                .t_for,
+                .t_function,
+                .t_if,
+                .t_return,
+                .t_type,
+                .t_var,
+                .t_while,
                 => return,
-                .semicolon => {
+                .t_semicolon => {
                     _ = self.advance() catch undefined;
                     return;
                 },

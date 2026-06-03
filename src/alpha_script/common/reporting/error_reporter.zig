@@ -162,7 +162,7 @@ pub const ErrorReporter = struct {
                 .file_path = null,
                 // TODO get a reference to the token
                 .token = Token{
-                    .tag = .synthetic,
+                    .tag = .t_synthetic,
                     .location = .{ .start = 0, .end = 0 },
                 },
                 .node = null,

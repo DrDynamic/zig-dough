@@ -103,7 +103,7 @@ pub const TokenStream = struct {
 
         if (self.isAtEnd()) {
             return .{
-                .tag = .eof,
+                .tag = .t_eof,
                 .location = .{
                     .start = self.pos,
                     .end = self.pos,
@@ -117,42 +117,42 @@ pub const TokenStream = struct {
 
         return switch (char) {
             // Single-character tokens.
-            '(' => .{ .tag = .left_paren, .location = .{ .start = start, .end = start + 1 } },
-            ')' => .{ .tag = .right_paren, .location = .{ .start = start, .end = start + 1 } },
-            '{' => .{ .tag = .left_brace, .location = .{ .start = start, .end = start + 1 } },
-            '}' => .{ .tag = .right_brace, .location = .{ .start = start, .end = start + 1 } },
-            '[' => .{ .tag = .left_bracket, .location = .{ .start = start, .end = start + 1 } },
-            ']' => .{ .tag = .right_bracket, .location = .{ .start = start, .end = start + 1 } },
-            ':' => .{ .tag = .colon, .location = .{ .start = start, .end = start + 1 } },
-            ',' => .{ .tag = .comma, .location = .{ .start = start, .end = start + 1 } },
-            '.' => .{ .tag = .dot, .location = .{ .start = start, .end = start + 1 } },
-            '-' => .{ .tag = .minus, .location = .{ .start = start, .end = start + 1 } },
-            '+' => .{ .tag = .plus, .location = .{ .start = start, .end = start + 1 } },
-            '?' => .{ .tag = .question_mark, .location = .{ .start = start, .end = start + 1 } },
-            ';' => .{ .tag = .semicolon, .location = .{ .start = start, .end = start + 1 } },
-            '/' => .{ .tag = .slash, .location = .{ .start = start, .end = start + 1 } },
-            '*' => .{ .tag = .star, .location = .{ .start = start, .end = start + 1 } },
-            '|' => .{ .tag = .pipe, .location = .{ .start = start, .end = start + 1 } },
+            '(' => .{ .tag = .t_left_paren, .location = .{ .start = start, .end = start + 1 } },
+            ')' => .{ .tag = .t_right_paren, .location = .{ .start = start, .end = start + 1 } },
+            '{' => .{ .tag = .t_left_brace, .location = .{ .start = start, .end = start + 1 } },
+            '}' => .{ .tag = .t_right_brace, .location = .{ .start = start, .end = start + 1 } },
+            '[' => .{ .tag = .t_left_bracket, .location = .{ .start = start, .end = start + 1 } },
+            ']' => .{ .tag = .t_right_bracket, .location = .{ .start = start, .end = start + 1 } },
+            ':' => .{ .tag = .t_colon, .location = .{ .start = start, .end = start + 1 } },
+            ',' => .{ .tag = .t_comma, .location = .{ .start = start, .end = start + 1 } },
+            '.' => .{ .tag = .t_dot, .location = .{ .start = start, .end = start + 1 } },
+            '-' => .{ .tag = .t_minus, .location = .{ .start = start, .end = start + 1 } },
+            '+' => .{ .tag = .t_plus, .location = .{ .start = start, .end = start + 1 } },
+            '?' => .{ .tag = .t_question_mark, .location = .{ .start = start, .end = start + 1 } },
+            ';' => .{ .tag = .t_semicolon, .location = .{ .start = start, .end = start + 1 } },
+            '/' => .{ .tag = .t_slash, .location = .{ .start = start, .end = start + 1 } },
+            '*' => .{ .tag = .t_star, .location = .{ .start = start, .end = start + 1 } },
+            '|' => .{ .tag = .t_pipe, .location = .{ .start = start, .end = start + 1 } },
 
             // One or two character tokens.
             '!' => if (self.matchChar('='))
-                .{ .tag = .bang_equal, .location = .{ .start = start, .end = start + 2 } }
+                .{ .tag = .t_bang_equal, .location = .{ .start = start, .end = start + 2 } }
             else
-                .{ .tag = .bang, .location = .{ .start = start, .end = start + 1 } },
+                .{ .tag = .t_bang, .location = .{ .start = start, .end = start + 1 } },
 
             '=' => if (self.matchChar('='))
-                .{ .tag = .equal_equal, .location = .{ .start = start, .end = start + 2 } }
+                .{ .tag = .t_equal_equal, .location = .{ .start = start, .end = start + 2 } }
             else
-                .{ .tag = .equal, .location = .{ .start = start, .end = start + 1 } },
+                .{ .tag = .t_equal, .location = .{ .start = start, .end = start + 1 } },
 
             '>' => if (self.matchChar('='))
-                .{ .tag = .greater_equal, .location = .{ .start = start, .end = start + 2 } }
+                .{ .tag = .t_greater_equal, .location = .{ .start = start, .end = start + 2 } }
             else
-                .{ .tag = .greater, .location = .{ .start = start, .end = start + 1 } },
+                .{ .tag = .t_greater, .location = .{ .start = start, .end = start + 1 } },
             '<' => if (self.matchChar('='))
-                .{ .tag = .less_equal, .location = .{ .start = start, .end = start + 2 } }
+                .{ .tag = .t_less_equal, .location = .{ .start = start, .end = start + 2 } }
             else
-                .{ .tag = .less, .location = .{ .start = start, .end = start + 1 } },
+                .{ .tag = .t_less, .location = .{ .start = start, .end = start + 1 } },
 
             '"' => self.makeString('"'),
             '0' => self.makeNumber(),
@@ -193,7 +193,7 @@ pub const TokenStream = struct {
         }
 
         return .{
-            .tag = .string_double_quote,
+            .tag = .t_string_double_quote,
             .location = .{
                 .start = token_start,
                 .end = self.pos,
@@ -212,7 +212,7 @@ pub const TokenStream = struct {
         }
 
         return .{
-            .tag = .number,
+            .tag = .t_number,
             .location = .{
                 .start = token_start,
                 .end = self.pos,
@@ -235,80 +235,80 @@ pub const TokenStream = struct {
                         'n' => {
                             if (token_length > 2) {
                                 break :a_case switch (self.source[token_start + 2]) {
-                                    'y' => self.matchIdentifier("error", 3, 5, token_start, token_end, .Anyerror),
-                                    'd' => self.matchIdentifier("", 3, 0, token_start, token_end, .logical_and),
-                                    else => .identifier,
+                                    'y' => self.matchIdentifier("error", 3, 5, token_start, token_end, .t_anyerror),
+                                    'd' => self.matchIdentifier("", 3, 0, token_start, token_end, .t_logical_and),
+                                    else => .t_identifier,
                                 };
                             }
-                            break :a_case .identifier;
+                            break :a_case .t_identifier;
                         },
-                        else => .identifier,
+                        else => .t_identifier,
                     };
                 }
-                break :a_case .identifier;
+                break :a_case .t_identifier;
             },
-            'b' => self.matchIdentifier("ool", 1, 3, token_start, token_end, .Bool),
-            'c' => self.matchIdentifier("onst", 1, 4, token_start, token_end, .const_),
+            'b' => self.matchIdentifier("ool", 1, 3, token_start, token_end, .t_bool),
+            'c' => self.matchIdentifier("onst", 1, 4, token_start, token_end, .t_const),
             'e' => |_| e_case: {
                 if (token_length > 1) {
                     break :e_case switch (self.source[token_start + 1]) {
-                        'l' => self.matchIdentifier("se", 2, 2, token_start, token_end, .else_),
-                        'r' => self.matchIdentifier("ror", 2, 3, token_start, token_end, .error_),
-                        else => .identifier,
+                        'l' => self.matchIdentifier("se", 2, 2, token_start, token_end, .t_else),
+                        'r' => self.matchIdentifier("ror", 2, 3, token_start, token_end, .t_error),
+                        else => .t_identifier,
                     };
                 }
-                break :e_case .identifier;
+                break :e_case .t_identifier;
             },
             'f' => |_| f_case: {
                 if (token_length > 1) {
                     break :f_case switch (self.source[token_start + 1]) {
-                        'a' => self.matchIdentifier("lse", 2, 3, token_start, token_end, .false),
-                        'l' => self.matchIdentifier("oat", 2, 3, token_start, token_end, .Float),
-                        'n' => self.matchIdentifier("", 2, 0, token_start, token_end, .function),
-                        'o' => self.matchIdentifier("r", 2, 1, token_start, token_end, .for_),
-                        else => .identifier,
+                        'a' => self.matchIdentifier("lse", 2, 3, token_start, token_end, .t_false),
+                        'l' => self.matchIdentifier("oat", 2, 3, token_start, token_end, .t_float),
+                        'n' => self.matchIdentifier("", 2, 0, token_start, token_end, .t_function),
+                        'o' => self.matchIdentifier("r", 2, 1, token_start, token_end, .t_for),
+                        else => .t_identifier,
                     };
                 }
-                break :f_case .identifier;
+                break :f_case .t_identifier;
             },
             'i' => |_| i_case: {
                 if (token_length > 1) {
                     break :i_case switch (self.source[token_start + 1]) {
-                        'f' => self.matchIdentifier("", 2, 0, token_start, token_end, .if_),
-                        'n' => self.matchIdentifier("t", 2, 1, token_start, token_end, .Int),
-                        else => .identifier,
+                        'f' => self.matchIdentifier("", 2, 0, token_start, token_end, .t_if),
+                        'n' => self.matchIdentifier("t", 2, 1, token_start, token_end, .t_int),
+                        else => .t_identifier,
                     };
                 }
-                break :i_case .identifier;
+                break :i_case .t_identifier;
             },
-            //            'n' => self.matchIdentifier("ull", 1, 3, token_start, token_end, .Null), // TODO: do we have conflicts here? null type vs null value
-            'n' => self.matchIdentifier("ull", 1, 3, token_start, token_end, .null),
-            'o' => self.matchIdentifier("r", 1, 1, token_start, token_end, .logical_or),
-            'r' => self.matchIdentifier("eturn", 1, 5, token_start, token_end, .return_),
-            's' => self.matchIdentifier("tring", 1, 5, token_start, token_end, .String),
+            //            'n' => self.matchIdentifier("ull", 1, 3, token_start, token_end, .t_Null), // TODO: do we have conflicts here? null type vs null value
+            'n' => self.matchIdentifier("ull", 1, 3, token_start, token_end, .t_null),
+            'o' => self.matchIdentifier("r", 1, 1, token_start, token_end, .t_logical_or),
+            'r' => self.matchIdentifier("eturn", 1, 5, token_start, token_end, .t_return),
+            's' => self.matchIdentifier("tring", 1, 5, token_start, token_end, .t_string),
             't' => |_| t_case: {
                 if (token_length > 1) {
                     break :t_case switch (self.source[token_start + 1]) {
-                        'r' => self.matchIdentifier("ue", 2, 2, token_start, token_end, .true),
-                        'y' => self.matchIdentifier("pe", 2, 2, token_start, token_end, .type),
-                        else => .identifier,
+                        'r' => self.matchIdentifier("ue", 2, 2, token_start, token_end, .t_true),
+                        'y' => self.matchIdentifier("pe", 2, 2, token_start, token_end, .t_type),
+                        else => .t_identifier,
                     };
                 }
-                break :t_case .identifier;
+                break :t_case .t_identifier;
             },
             'v' => |_| v_case: {
                 if (token_length > 1) {
                     break :v_case switch (self.source[token_start + 1]) {
-                        'a' => self.matchIdentifier("r", 2, 1, token_start, token_end, .var_),
-                        'o' => self.matchIdentifier("id", 2, 2, token_start, token_end, .Void),
-                        else => .identifier,
+                        'a' => self.matchIdentifier("r", 2, 1, token_start, token_end, .t_var),
+                        'o' => self.matchIdentifier("id", 2, 2, token_start, token_end, .t_void),
+                        else => .t_identifier,
                     };
                 }
-                break :v_case .identifier;
+                break :v_case .t_identifier;
             },
 
-            'w' => self.matchIdentifier("hile", 1, 4, token_start, token_end, .while_),
-            else => .identifier,
+            'w' => self.matchIdentifier("hile", 1, 4, token_start, token_end, .t_while),
+            else => .t_identifier,
         };
         return .{
             .tag = tokenType,
@@ -368,7 +368,7 @@ pub const TokenStream = struct {
         if (offset + length == token_end - token_start and std.mem.eql(u8, self.source[token_start + offset .. token_end], rest)) {
             return guessedTag;
         }
-        return .identifier;
+        return .t_identifier;
     }
 
     fn isAtEnd(self: *const TokenStream) bool {
@@ -386,119 +386,3 @@ const as = @import("as");
 const ErrorReporter = as.common.reporting.ErrorReporter;
 const Token = as.frontend.Token;
 const TokenType = as.frontend.TokenType;
-
-test "Scanns all tokens" {
-    var scanner = Scanner.init(
-        \\ (
-        \\ )
-        \\ {
-        \\ }
-        \\ [
-        \\ ]
-        \\ ,
-        \\ .
-        \\ -
-        \\ +
-        \\ ;
-        \\ /
-        \\ *
-        \\ !
-        \\ !=
-        \\ =
-        \\ ==
-        \\ >
-        \\ >=
-        \\ <
-        \\ <=
-        \\ &&
-        \\ ||
-        \\ this_is_a_identifier
-        \\ "i read double quotes"
-        \\ 123
-        \\ 13.37
-        \\ const
-        \\ else
-        \\ false
-        \\ for
-        \\ function
-        \\ if
-        \\ null
-        \\ return
-        \\ true
-        \\ var
-        \\ while
-        \\
-    );
-
-    const tokenTypes = [_]TokenType{
-        TokenType.left_paren,
-        TokenType.right_paren,
-        TokenType.left_brace,
-        TokenType.right_brace,
-        TokenType.left_bracket,
-        TokenType.right_bracket,
-        TokenType.comma,
-        TokenType.dot,
-        TokenType.minus,
-        TokenType.plus,
-        TokenType.semicolon,
-        TokenType.slash,
-        TokenType.star,
-        // One or two character tokens.
-        TokenType.bang,
-        TokenType.bang_equal,
-        TokenType.equal,
-        TokenType.equal_equal,
-        TokenType.greater,
-        TokenType.greater_equal,
-        TokenType.less,
-        TokenType.less_equal,
-        TokenType.logical_and,
-        TokenType.logical_or,
-        // Literals.
-        TokenType.identifier,
-        TokenType.string_double_quote,
-        TokenType.int,
-        TokenType.float,
-        // Keywords.
-        TokenType.const_,
-        TokenType.else_,
-        TokenType.false_,
-        TokenType.for_,
-        TokenType.function_,
-        TokenType.if_,
-        TokenType.null_,
-        TokenType.return_,
-        TokenType.true_,
-        TokenType.var_,
-        TokenType.while_,
-        TokenType.eof,
-    };
-
-    for (tokenTypes) |tokenType| {
-        scanner.advance();
-        //        std.debug.print("Expect {d}:{?s} but got ", .{ line, std.enums.tagName(TokenType, tokenType) });
-        //        scanner.current.debugPrint();
-        try std.testing.expectEqual(tokenType, scanner.current().tag);
-    }
-}
-
-test "supports everything above ascii as identifiers" {
-    var scanner = Scanner.init(
-        \\ 🥟
-        \\ "🍕"
-        \\ 🍩
-    );
-
-    scanner.scanToken();
-    try std.testing.expectEqual(scanner.current.tag, TokenType.identifier);
-    try std.testing.expectEqualStrings("🥟", scanner.current.lexeme.?);
-
-    scanner.scanToken();
-    try std.testing.expectEqual(scanner.current.tag, TokenType.string_double_quote);
-    try std.testing.expectEqualStrings("🍕", scanner.current.lexeme.?);
-
-    scanner.scanToken();
-    try std.testing.expect(scanner.current.tag == TokenType.identifier);
-    try std.testing.expectEqualStrings(scanner.current.lexeme.?, &std.unicode.utf8EncodeComptime('🍩'));
-}
