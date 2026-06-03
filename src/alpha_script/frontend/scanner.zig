@@ -14,9 +14,9 @@ pub const Scanner = struct {
             .error_reporter = error_reporter,
             .token_stream = token_stream,
             .window = .{
-                .{ .tag = .comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
-                .{ .tag = .comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
-                .{ .tag = .comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
+                .{ .tag = .t_comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
+                .{ .tag = .t_comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
+                .{ .tag = .t_comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
             },
             .window_index = 0,
         };
@@ -31,9 +31,9 @@ pub const Scanner = struct {
     pub fn reset(self: *Scanner) Error!void {
         self.token_stream.pos = 0;
         self.window = .{
-            .{ .tag = .comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
-            .{ .tag = .comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
-            .{ .tag = .comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
+            .{ .tag = .t_comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
+            .{ .tag = .t_comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
+            .{ .tag = .t_comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
         };
         self.window_index = 0;
 
@@ -226,20 +226,31 @@ pub const TokenStream = struct {
             self.pos += 1;
         }
         const token_end = self.pos;
+        const token_length = token_end - token_start;
 
         const tokenType = switch (self.source[token_start]) {
-            'a' => self.matchIdentifier("nyerror", 1, 7, token_start, token_end, .Anyerror),
+            'a' => |_| a_case: {
+                if (token_length > 1) {
+                    break :a_case switch (self.source[token_start + 1]) {
+                        'n' => {
+                            if (token_length > 2) {
+                                break :a_case switch (self.source[token_start + 2]) {
+                                    'y' => self.matchIdentifier("error", 3, 5, token_start, token_end, .Anyerror),
+                                    'd' => self.matchIdentifier("", 3, 0, token_start, token_end, .logical_and),
+                                    else => .identifier,
+                                };
+                            }
+                            break :a_case .identifier;
+                        },
+                        else => .identifier,
+                    };
+                }
+                break :a_case .identifier;
+            },
             'b' => self.matchIdentifier("ool", 1, 3, token_start, token_end, .Bool),
-            'f' => self.matchIdentifier("loat", 1, 4, token_start, token_end, .Float),
-            'i' => self.matchIdentifier("nt", 1, 2, token_start, token_end, .Int),
-            'n' => self.matchIdentifier("ull", 1, 3, token_start, token_end, .Null),
-            's' => self.matchIdentifier("tring", 1, 5, token_start, token_end, .String),
-            'v' => self.matchIdentifier("oid", 1, 3, token_start, token_end, .Void),
-
-            'a' => self.matchIdentifier("nd", 1, 2, token_start, token_end, .logical_and),
             'c' => self.matchIdentifier("onst", 1, 4, token_start, token_end, .const_),
             'e' => |_| e_case: {
-                if (token_end - token_start > 1) {
+                if (token_length > 1) {
                     break :e_case switch (self.source[token_start + 1]) {
                         'l' => self.matchIdentifier("se", 2, 2, token_start, token_end, .else_),
                         'r' => self.matchIdentifier("ror", 2, 3, token_start, token_end, .error_),
@@ -249,22 +260,34 @@ pub const TokenStream = struct {
                 break :e_case .identifier;
             },
             'f' => |_| f_case: {
-                if (token_end - token_start > 1) {
+                if (token_length > 1) {
                     break :f_case switch (self.source[token_start + 1]) {
                         'a' => self.matchIdentifier("lse", 2, 3, token_start, token_end, .false),
-                        'o' => self.matchIdentifier("r", 2, 1, token_start, token_end, .for_),
+                        'l' => self.matchIdentifier("oat", 2, 3, token_start, token_end, .Float),
                         'n' => self.matchIdentifier("", 2, 0, token_start, token_end, .function),
+                        'o' => self.matchIdentifier("r", 2, 1, token_start, token_end, .for_),
                         else => .identifier,
                     };
                 }
                 break :f_case .identifier;
             },
-            'i' => self.matchIdentifier("f", 1, 1, token_start, token_end, .if_),
+            'i' => |_| i_case: {
+                if (token_length > 1) {
+                    break :i_case switch (self.source[token_start + 1]) {
+                        'f' => self.matchIdentifier("", 2, 0, token_start, token_end, .if_),
+                        'n' => self.matchIdentifier("t", 2, 1, token_start, token_end, .Int),
+                        else => .identifier,
+                    };
+                }
+                break :i_case .identifier;
+            },
+            //            'n' => self.matchIdentifier("ull", 1, 3, token_start, token_end, .Null), // TODO: do we have conflicts here? null type vs null value
             'n' => self.matchIdentifier("ull", 1, 3, token_start, token_end, .null),
             'o' => self.matchIdentifier("r", 1, 1, token_start, token_end, .logical_or),
             'r' => self.matchIdentifier("eturn", 1, 5, token_start, token_end, .return_),
+            's' => self.matchIdentifier("tring", 1, 5, token_start, token_end, .String),
             't' => |_| t_case: {
-                if (token_end - token_start > 1) {
+                if (token_length > 1) {
                     break :t_case switch (self.source[token_start + 1]) {
                         'r' => self.matchIdentifier("ue", 2, 2, token_start, token_end, .true),
                         'y' => self.matchIdentifier("pe", 2, 2, token_start, token_end, .type),
@@ -273,8 +296,17 @@ pub const TokenStream = struct {
                 }
                 break :t_case .identifier;
             },
+            'v' => |_| v_case: {
+                if (token_length > 1) {
+                    break :v_case switch (self.source[token_start + 1]) {
+                        'a' => self.matchIdentifier("r", 2, 1, token_start, token_end, .var_),
+                        'o' => self.matchIdentifier("id", 2, 2, token_start, token_end, .Void),
+                        else => .identifier,
+                    };
+                }
+                break :v_case .identifier;
+            },
 
-            'v' => self.matchIdentifier("ar", 1, 2, token_start, token_end, .var_),
             'w' => self.matchIdentifier("hile", 1, 4, token_start, token_end, .while_),
             else => .identifier,
         };

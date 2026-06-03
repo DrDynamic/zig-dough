@@ -1,7 +1,7 @@
 // functions are hoisted
 sayHello("World")
 
-fn sayHello(name:String) Void {
+fn sayHello(name:string) void {
     print("Hello " + name)
 }
 //////////////////////////////////////////////////////
