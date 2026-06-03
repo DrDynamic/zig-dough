@@ -221,11 +221,11 @@ const dynamic = numbers.filter(fn(n) {
 * **Explicit Reference Passing (&var):** If a function needs to directly manipulate or overwrite the caller's original source (Pass-by-Reference), the parameter must be explicitly declared as `&var`.
 
 ```rust
-fn increment(&var counter: u32) {
+fn increment(&var counter: u32):void {
     counter += 1 // Directly manipulates the caller's variable
 }
 
-pub fn main() {
+pub fn main():void {
     var my_counter = 10
     increment(&var my_counter) // Requires explicit marking at the call site
     // my_counter is now 11

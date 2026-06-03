@@ -160,14 +160,14 @@ pub const TypePool = struct {
         var type_name: std.ArrayList(u8) = .{};
 
         switch (t) {
-            .unresolved => try type_name.appendSlice(allocator, "Unresolved"),
-            .void => try type_name.appendSlice(allocator, "Void"),
-            .null => try type_name.appendSlice(allocator, "Null"),
-            .bool => try type_name.appendSlice(allocator, "Bool"),
-            .int => try type_name.appendSlice(allocator, "Int"),
-            .float => try type_name.appendSlice(allocator, "Float"),
-            .string => try type_name.appendSlice(allocator, "String"),
-            .module => try type_name.appendSlice(allocator, "Module"),
+            .unresolved => try type_name.appendSlice(allocator, "unresolved"),
+            .void => try type_name.appendSlice(allocator, "void"),
+            .null => try type_name.appendSlice(allocator, "null"),
+            .bool => try type_name.appendSlice(allocator, "bool"),
+            .int => try type_name.appendSlice(allocator, "int"),
+            .float => try type_name.appendSlice(allocator, "float"),
+            .string => try type_name.appendSlice(allocator, "string"),
+            .module => try type_name.appendSlice(allocator, "module"),
             .function => {
                 try type_name.appendSlice(allocator, "fn (");
                 const signature = self.getFunctionSignature(t);

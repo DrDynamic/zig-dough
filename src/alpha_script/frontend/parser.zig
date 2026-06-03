@@ -753,6 +753,12 @@ pub const Parser = struct {
         };
 
         function_extra.parameters = try self.parameterList();
+
+        _ = self.consume(.t_colon) catch {
+            self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect ':' before type");
+            return Error.UnexpectedToken;
+        };
+
         function_extra.return_type = try self.parseTypeErrorUnion();
 
         const left_brace = self.consume(.t_left_brace) catch {

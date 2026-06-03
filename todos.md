@@ -1,8 +1,12 @@
 # next
+- close upvalues 
+  - either by UpValueIndex. (by register_id could fail, if the register is already reused)
+  - or before register is reused
+  - or each upvalue gets a dedicated register
+
 - closures
   - named parameters
   - default parameters
-- close upvalues by UpValueIndex. (by register_id could fail, if the register is already reused)
 - refactor OpCode.call 
   - replace ARGS_COUNT with REG_ARGS_START so the function doesn't need to be copied every time
   - needs definitions for natives (to infer the number of needed args)
@@ -68,3 +72,6 @@
 - shard symbol table between semantic analyser and compiler
 - don't put all statements in a ExtraList (e.g. Parameter lists)
 - comptime evaluation. (compute everything, that is known at compiletime)
+- load upvalues only once per closure
+- optimize var registers
+  - to be used freely before initialization (dont load constants in other registers and move them afterwards to initialize the var)

@@ -1,9 +1,33 @@
-// functions are hoisted
-sayHello("World")
+var a = "before";
+print(a); // expect: before
 
-fn sayHello(name:string) void {
-    print("Hello " + name)
-}
+a = "after";
+print(a); // expect: after
+
+print(a = "arg"); // expect: arg
+print(a); // expect: arg
+
+
+//fn create(): ():int {
+//    var a = 0;
+//    return fn():int {
+//        a = a + 1;
+//        return a;
+//    }
+//}
+//
+//var incrementer = create()
+//print(incrementer())
+//print(incrementer())
+//print(incrementer())
+//print(incrementer())
+
+// functions are hoisted
+//sayHello("World");
+//
+//fn sayHello(name: string): void {
+//    print("Hello " + name);
+//}
 //////////////////////////////////////////////////////
 
 // non void functions must return a value

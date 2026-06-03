@@ -127,7 +127,7 @@ pub const SemanticAnalyser = struct {
         for (roots) |node_id| {
             _ = self.analyse(node_id) catch {
                 ast.invalidate();
-                continue;
+                break;
             };
         }
     }

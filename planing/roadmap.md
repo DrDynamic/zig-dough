@@ -8,7 +8,8 @@ A feature is done, when:
 
 # Alpha.1
 - consistant keywords and syntax (some language features are not match the vision e.G. `function` keyword or concatination via `+`)
-- datatypes consistant wir vision
+- datatypes consistant with vision
+- any type
 - variables
 - constants
 - functions (with closures, hoising and calls)
@@ -38,4 +39,5 @@ A feature is done, when:
 - traits
 - shapes
 - std lib
-
+- compound assignment operators (+= -= *= /=) 
+- bitwise operators (& | ^  ~)

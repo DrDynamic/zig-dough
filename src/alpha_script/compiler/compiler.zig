@@ -12,14 +12,14 @@ pub const CompilerContext = struct {
     allocator: std.mem.Allocator,
     parent_context: ?*CompilerContext = null,
 
-    max_registers: *u8 = undefined,
+    register_allocator: RegisterAllocator = .{},
     chunk: *Chunk = undefined,
     locals: std.ArrayList(Local),
     upvalues: std.ArrayList(ObjFunction.UpValueLocation),
     scope_depth: i32,
     next_free_reg: RegisterId,
 
-    pub fn init(parent: ?*CompilerContext, max_registers: *u8, chunk: *Chunk, allocator: std.mem.Allocator) CompilerContext {
+    pub fn init(parent: ?*CompilerContext, chunk: *Chunk, allocator: std.mem.Allocator) CompilerContext {
         return .{
             .allocator = allocator,
             .parent_context = parent,
@@ -29,14 +29,57 @@ pub const CompilerContext = struct {
             .scope_depth = 0,
             .next_free_reg = 0,
 
-            .max_registers = max_registers,
             .chunk = chunk,
         };
     }
 
     pub fn deinit(self: *CompilerContext) void {
+        self.register_allocator.deinit(self.allocator);
         self.locals.deinit(self.allocator);
         //self.upvalues.deinit(); ownership moves into compiled function
+    }
+
+    pub fn getMaxRegisters(self: *const CompilerContext) RegisterId {
+        return self.register_allocator.max;
+    }
+
+    pub fn getRegister(self: *CompilerContext) RegisterId {
+        return self.register_allocator.allocate();
+    }
+
+    pub fn getTmpRegister(self: *CompilerContext) RegisterId {
+        const reg = self.register_allocator.allocate();
+        self.register_allocator.release(self.allocator, reg);
+        return reg;
+    }
+
+    pub fn releaseRegister(self: *CompilerContext, reg: RegisterId) void {
+        self.register_allocator.release(self.allocator, reg);
+    }
+};
+
+const RegisterAllocator = struct {
+    max: RegisterId = 0,
+    next_free: RegisterId = 0,
+    free_pool: std.ArrayList(RegisterId) = .{},
+
+    pub fn deinit(self: *RegisterAllocator, gpa: std.mem.Allocator) void {
+        self.free_pool.deinit(gpa);
+    }
+
+    pub fn allocate(self: *RegisterAllocator) RegisterId {
+        if (self.free_pool.items.len > 0) {
+            return self.free_pool.pop();
+        }
+        const reg = self.next_free;
+        self.next_free += 1;
+        // max is the number of used registers (since registers are allocated from 0 to n, max is n + 1)
+        self.max = @max(self.context.next_free_reg, self.context.max_registers.*);
+        return reg;
+    }
+
+    pub fn release(self: *RegisterAllocator, gpa: std.mem.Allocator, reg: RegisterId) void {
+        self.free_pool.append(gpa, reg) catch unreachable;
     }
 };
 
@@ -79,7 +122,6 @@ pub const Compiler = struct {
 
         self.context = CompilerContext.init(
             null,
-            &function.max_registers,
             &function.chunk,
             self.allocator,
         );
@@ -96,8 +138,7 @@ pub const Compiler = struct {
             }) catch {
                 @panic("failed to register natives");
             };
-
-            _ = self.allocateRegister();
+            _ = self.context.getRegister();
         }
         defer {
             for (buildin_functions) |_| {
@@ -118,6 +159,8 @@ pub const Compiler = struct {
 
         try self.emitInstruction(Instruction.fromABC(.call_return, 0, 0, 0));
 
+        function.max_registers = self.context.getMaxRegisters();
+
         const module = ObjModule.init(function, self.garbage_collector);
         _ = self.garbage_collector.temp_objects.pop(); // pop compiled function
         return module;
@@ -130,13 +173,14 @@ pub const Compiler = struct {
             switch (node.tag) {
                 .declaration_var, .declaration_const => {
                     const extra = self.ast.getExtra(node.data.extra_id, ast.DeclarationExtra);
-                    _ = try self.addLocal(extra.name_id, self.context.next_free_reg, false, true);
+                    const reg_var = self.context.getRegister();
+                    _ = try self.addLocal(extra.name_id, reg_var, false, true);
                 },
                 .expression_function => {
                     const fn_extra = self.ast.getExtra(node.data.extra_id, FunctionExtra);
 
                     if (fn_extra.name_id) |name_id| {
-                        const result_reg: RegisterId = self.allocateRegister();
+                        const result_reg: RegisterId = self.context.getRegister();
                         _ = try self.addLocal(name_id, result_reg, true, true);
 
                         const fn_obj = try self.compileFunction(node_id);
@@ -165,7 +209,6 @@ pub const Compiler = struct {
         var parent_context = self.context;
         var fn_context = CompilerContext.init(
             &parent_context,
-            &function.max_registers,
             &function.chunk,
             self.allocator,
         );
@@ -177,7 +220,7 @@ pub const Compiler = struct {
         if (fn_extra.parameters) |parameters| {
             for (parameters) |parameter_node_id| {
                 const parameter_node = self.ast.nodes.items[parameter_node_id];
-                const parameter_reg = self.allocateRegister();
+                const parameter_reg = self.context.getRegister();
                 _ = try self.addLocal(parameter_node.data.string_id, parameter_reg, true, true);
             }
         }
@@ -188,6 +231,7 @@ pub const Compiler = struct {
 
         try self.exitScope();
 
+        function.max_registers = self.context.getMaxRegisters();
         function.upvalue_locations = self.context.upvalues.items;
 
         self.context = parent_context;
@@ -245,8 +289,7 @@ pub const Compiler = struct {
 
             // literals
             .literal_null => {
-                const register = self.allocateRegister();
-                self.freeRegister();
+                const register = self.context.getTmpRegister();
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -256,8 +299,7 @@ pub const Compiler = struct {
                 return register;
             },
             .literal_bool => {
-                const register = self.allocateRegister();
-                self.freeRegister();
+                const register = self.context.getTmpRegister();
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -267,8 +309,7 @@ pub const Compiler = struct {
                 return register;
             },
             .literal_int => {
-                const register = self.allocateRegister();
-                self.freeRegister();
+                const register = self.context.getTmpRegister();
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -278,8 +319,7 @@ pub const Compiler = struct {
                 return register;
             },
             .literal_float => {
-                const register = self.allocateRegister();
-                self.freeRegister();
+                const register = self.context.getTmpRegister();
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -289,8 +329,7 @@ pub const Compiler = struct {
                 return register;
             },
             .literal_error => {
-                const register = self.allocateRegister();
-                self.freeRegister();
+                const register = self.context.getTmpRegister();
 
                 try self.emitLoadConstant(
                     .load_const,
@@ -302,8 +341,7 @@ pub const Compiler = struct {
 
             // objects
             .object_string => {
-                const register = self.allocateRegister();
-                self.freeRegister();
+                const register = self.context.getTmpRegister();
 
                 const string_data = self.ast.string_table.get(node.data.string_id);
                 const string_object = ObjString.copydata(string_data, self.garbage_collector).asObject();
@@ -328,8 +366,7 @@ pub const Compiler = struct {
                     try self.compileExpressionEnsureRegister(extra.source, reg_target);
                     return reg_target;
                 } else |_| {
-                    const reg_target = self.allocateRegister();
-                    self.freeRegister();
+                    const reg_target = self.context.getTmpRegister();
 
                     const upvalue_index = self.resolveUpValue(target_node.data.string_id) catch unreachable; // identifier has to be somewhere (checked by semantic analyser)
                     try self.compileExpressionEnsureRegister(extra.source, reg_target);
@@ -343,8 +380,7 @@ pub const Compiler = struct {
                 const fn_extra = self.ast.getExtra(node.data.extra_id, FunctionExtra);
 
                 if (fn_extra.name_id == null) {
-                    const result_reg: RegisterId = self.allocateRegister();
-                    self.freeRegister();
+                    const result_reg: RegisterId = self.context.getTmpRegister();
 
                     const fn_obj = try self.compileFunction(node_id);
                     try self.emitFunctionOrClosure(result_reg, fn_obj);
@@ -434,8 +470,7 @@ pub const Compiler = struct {
                 if (self.resolveLocal(node.data.string_id)) |reg_identifier| {
                     return reg_identifier;
                 } else |_| {
-                    const reg_identifier = self.allocateRegister();
-                    self.freeRegister();
+                    const reg_identifier = self.context.getTmpRegister();
 
                     const upvalue_index = self.resolveUpValue(node.data.string_id) catch unreachable; // identifier has to be somewhere (checked by semantic analyser)
                     try self.emitInstruction(Instruction.fromABC(.load_upvalue, reg_identifier, upvalue_index, 0));
@@ -448,7 +483,7 @@ pub const Compiler = struct {
 
                 const snapshot = self.context.next_free_reg;
 
-                const reg_callee = self.allocateRegister();
+                const reg_callee = self.context.getRegister();
 
                 try self.compileExpressionEnsureRegister(extra.callee, reg_callee);
 
@@ -459,7 +494,7 @@ pub const Compiler = struct {
 
                     while (iterator.next()) |arg_node_id| {
                         _ = try self.compileExpressionEnsureRegister(arg_node_id, reg_start + arg_count);
-                        _ = self.allocateRegister();
+                        _ = self.context.getRegister();
                         arg_count += 1;
                     }
                 }
@@ -497,8 +532,7 @@ pub const Compiler = struct {
 
             .logical_and => {
                 const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
-                const reg_result = self.allocateRegister();
-                self.freeRegister();
+                const reg_result = self.context.getTmpRegister();
 
                 try self.compileExpressionEnsureRegister(extra.lhs, reg_result);
                 const pos_end_jump = try self.emitJump(.jump_if_false, reg_result);
@@ -509,8 +543,7 @@ pub const Compiler = struct {
             },
             .logical_or => {
                 const extra = self.ast.getExtra(node.data.extra_id, BinaryOpExtra);
-                const reg_result = self.allocateRegister();
-                self.freeRegister();
+                const reg_result = self.context.getTmpRegister();
 
                 try self.compileExpressionEnsureRegister(extra.lhs, reg_result);
                 const pos_end_jump = try self.emitJump(.jump_if_true, reg_result);
@@ -566,7 +599,7 @@ pub const Compiler = struct {
         const snapshot = self.context.next_free_reg;
 
         const reg_lhs = try self.compileExpression(extra.lhs);
-        _ = self.allocateRegister();
+        _ = self.context.getRegister();
         const reg_rhs = try self.compileExpression(extra.rhs);
 
         const reg_dest = if (reg_lhs < snapshot) snapshot else reg_lhs;

@@ -45,7 +45,9 @@ void main(List<String> arguments) async {
       return;
     }
 
-    var interpreter = InterpreterOptions('./zig-out/bin/as', ['--errors=test']);
+    var interpreter = InterpreterOptions('./zig-out/bin/paz', [
+      '--errors=test',
+    ]);
 
     if (results.rest.isEmpty) {
       await TestRunner(interpreter).runDir(Directory('./tests'));
