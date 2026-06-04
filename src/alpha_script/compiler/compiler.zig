@@ -39,6 +39,14 @@ pub const CompilerContext = struct {
         //self.upvalues.deinit(); ownership moves into compiled function
     }
 
+    pub fn getRegisterSnapshot(self: *CompilerContext) RegisterAllocator {
+        return self.register_allocator.clone(self.allocator);
+    }
+
+    pub fn setRegisterSnapshot(self: *CompilerContext, snapshot: RegisterAllocator) void {
+        self.register_allocator = snapshot;
+    }
+
     pub fn getMaxRegisters(self: *const CompilerContext) RegisterId {
         return self.register_allocator.max;
     }
@@ -80,6 +88,14 @@ const RegisterAllocator = struct {
 
     pub fn release(self: *RegisterAllocator, gpa: std.mem.Allocator, reg: RegisterId) void {
         self.free_pool.append(gpa, reg) catch unreachable;
+    }
+
+    pub fn clone(self: *RegisterAllocator, gpa: std.mem.Allocator) RegisterAllocator {
+        return .{
+            .max = self.max,
+            .next_free = self.next_free,
+            .free_pool = self.free_pool.clone(gpa),
+        };
     }
 };
 
