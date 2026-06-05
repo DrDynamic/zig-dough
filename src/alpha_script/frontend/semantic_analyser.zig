@@ -427,8 +427,13 @@ pub const SemanticAnalyser = struct {
                 // match arg count
                 const signature = self.ast.type_pool.getCallableSignature(type_callee) catch unreachable; // assured by isCalable() above
 
-                if (signature.param_types.len != extra.arg_count) {
-                    const message = try std.fmt.allocPrint(self.allocator, "expects {d} arguments but got {d}", .{ signature.param_types.len, extra.arg_count });
+                var args_count: usize = 0;
+                if (extra.args) |args| {
+                    args_count = args.len;
+                }
+
+                if (signature.param_types.len != args_count) {
+                    const message = try std.fmt.allocPrint(self.allocator, "expects {d} arguments but got {d}", .{ signature.param_types.len, args_count });
                     defer self.allocator.free(message);
 
                     self.error_reporter.semanticAnalyserError(self, Error.ArgumentMissmatch, node.*, message);
@@ -438,11 +443,9 @@ pub const SemanticAnalyser = struct {
                 }
 
                 var had_type_missmatch = false;
-                if (extra.args_start) |args_start| {
-                    var arg_iterator = NodeListIterator.init(self.ast, args_start);
-
-                    for (signature.param_types) |type_param| {
-                        const arg_node_id = arg_iterator.next().?;
+                if (extra.args) |args| {
+                    for (signature.param_types, 0..) |type_param, index| {
+                        const arg_node_id = args[index];
                         const type_arg = try self.analyse(arg_node_id);
 
                         if (!self.ast.type_pool.isAssignable(type_param, type_arg)) {

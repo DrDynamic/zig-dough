@@ -537,8 +537,7 @@ pub const Parser = struct {
 
                 const extra_id = try self.ast.addExtra(CallExtra{
                     .callee = callee,
-                    .args_start = list_result.extra_id,
-                    .arg_count = list_result.count,
+                    .args = list_result,
                 });
                 callee = try self.ast.addNode(.{
                     .tag = .call,
@@ -1016,7 +1015,11 @@ pub const Parser = struct {
 
     /// parses a comma seperated list of expressions until end_token is found
     /// returns the start of a node_list with all expressions
-    fn expressionList(self: *Parser, end_token: TokenType) Error!struct { extra_id: ?NodeExtraId, count: u8 } {
+    fn expressionList(self: *Parser, end_token: TokenType) Error!?[]NodeId {
+        if (try self.match(end_token)) {
+            return null;
+        }
+
         var expression_ids: [255]NodeId = undefined;
         var count: u8 = 0;
         while (!self.check(end_token)) {
@@ -1032,7 +1035,9 @@ pub const Parser = struct {
         }
         _ = try self.consume(end_token);
 
-        return .{ .extra_id = try self.nodeListFromArray(expression_ids[0..count]), .count = count };
+        const result = try self.allocator.alloc(NodeId, count);
+        @memcpy(result, expression_ids[0..count]);
+        return result;
     }
 
     // node list

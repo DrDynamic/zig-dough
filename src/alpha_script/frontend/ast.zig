@@ -72,8 +72,7 @@ pub const BlockExtra = struct {
 
 pub const CallExtra = struct {
     callee: NodeId,
-    args_start: ?NodeExtraId, // NodeListExtra
-    arg_count: u8,
+    args: ?[]NodeId, // NodeListExtra
 };
 
 pub const DeclarationExtra = struct {

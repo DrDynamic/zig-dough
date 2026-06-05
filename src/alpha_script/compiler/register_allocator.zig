@@ -2,6 +2,7 @@ pub const RegisterAllocator = struct {
     pub const Error = error{
         OutOfRegisters,
         RegisterAlreadyAllocated,
+        InvalidArgument,
     };
 
     allocated_bits: std.StaticBitSet(256),
@@ -62,6 +63,41 @@ pub const RegisterAllocator = struct {
         if (!self.allocated_bits.isSet(reg)) {
             self.allocateSpecific(reg);
         }
+    }
+
+    /// allocates a contiguous range of registers, returns the start register or an error if no suitable range is available
+    pub fn allocateRange(self: *RegisterAllocator, count: u8) Error!u8 {
+        if (count == 0) return Error.InvalidArgument;
+        if (count == 1) return try self.allocate();
+
+        var start_reg: u16 = 0;
+        while (start_reg <= 256 - count) {
+            var contiguous_found = true;
+
+            // test if the range can start here
+            var i: u8 = 0;
+            while (i < count) : (i += 1) {
+                if (self.allocated_bits.isSet(@intCast(start_reg + i))) {
+                    start_reg = start_reg + i + 1;
+                    contiguous_found = false;
+                    break;
+                }
+            }
+
+            // allocate the range
+            if (contiguous_found) {
+                const final_start = @as(u8, @intCast(start_reg));
+
+                var reg_idx = final_start;
+                while (reg_idx < final_start + count) : (reg_idx += 1) {
+                    self.allocateSpecific(reg_idx);
+                }
+
+                return final_start;
+            }
+        }
+
+        return Error.OutOfRegisters;
     }
 
     /// free a previously allocated register

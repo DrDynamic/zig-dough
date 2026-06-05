@@ -492,9 +492,8 @@ pub const Compiler = struct {
                 try self.compileExpressionEnsureRegister(extra.callee, reg_callee);
 
                 var arg_count: u8 = 0;
-                if (extra.args_start) |args_start| {
-                    var iterator = NodeListIterator.init(self.ast, args_start);
-                    while (iterator.next()) |arg_node_id| {
+                if (extra.args) |args| {
+                    for (args) |arg_node_id| {
                         const reg_arg = self.context.getTmpRegister();
                         _ = try self.compileExpressionEnsureRegister(arg_node_id, reg_arg);
                         self.context.ensureAllocated(reg_arg);
