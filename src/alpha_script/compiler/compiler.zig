@@ -17,7 +17,6 @@ pub const CompilerContext = struct {
     locals: std.ArrayList(Local),
     upvalues: std.ArrayList(ObjFunction.UpValueLocation),
     scope_depth: i32,
-    next_free_reg: RegisterId,
 
     pub fn init(parent: ?*CompilerContext, chunk: *Chunk, allocator: std.mem.Allocator) CompilerContext {
         return .{
@@ -27,7 +26,6 @@ pub const CompilerContext = struct {
             .locals = .{},
             .upvalues = .{},
             .scope_depth = 0,
-            .next_free_reg = 0,
 
             .chunk = chunk,
         };
@@ -39,28 +37,43 @@ pub const CompilerContext = struct {
         //self.upvalues.deinit(); ownership moves into compiled function
     }
 
-    pub fn getRegisterSnapshot(self: *CompilerContext) RegisterAllocator {
-        return self.register_allocator.clone(self.allocator);
+    /// creates a snapshot of the register allocator
+    pub fn snapshotRegisters(self: *CompilerContext) std.mem.Allocator.Error!RegisterAllocator {
+        return try self.register_allocator.clone(self.allocator);
     }
 
-    pub fn setRegisterSnapshot(self: *CompilerContext, snapshot: RegisterAllocator) void {
+    /// restores a snapshot of the register allocator
+    pub fn restoreRegisters(self: *CompilerContext, snapshot: RegisterAllocator) void {
+        const old_max = self.register_allocator.max;
+
+        self.register_allocator.deinit(self.allocator);
         self.register_allocator = snapshot;
+        self.register_allocator.max = old_max;
     }
 
+    /// a getter for the count of used registers
     pub fn getMaxRegisters(self: *const CompilerContext) RegisterId {
         return self.register_allocator.max;
     }
 
+    /// allocates a new register or returns a already released register
     pub fn getRegister(self: *CompilerContext) RegisterId {
+        return self.register_allocator.getOrAllocate();
+    }
+
+    /// allocates a new register
+    pub fn allocateRegister(self: *CompilerContext) RegisterId {
         return self.register_allocator.allocate();
     }
 
+    /// returns a freshly released register. So that it can be reused immediately
     pub fn getTmpRegister(self: *CompilerContext) RegisterId {
-        const reg = self.register_allocator.allocate();
+        const reg = self.register_allocator.getOrAllocate();
         self.register_allocator.release(self.allocator, reg);
         return reg;
     }
 
+    /// releases a register for later use
     pub fn releaseRegister(self: *CompilerContext, reg: RegisterId) void {
         self.register_allocator.release(self.allocator, reg);
     }
@@ -75,26 +88,34 @@ const RegisterAllocator = struct {
         self.free_pool.deinit(gpa);
     }
 
-    pub fn allocate(self: *RegisterAllocator) RegisterId {
-        if (self.free_pool.items.len > 0) {
-            return self.free_pool.pop();
+    /// allocates a new register or returns a already released register
+    pub inline fn getOrAllocate(self: *RegisterAllocator) RegisterId {
+        if (self.free_pool.pop()) |free_reg| {
+            return free_reg;
         }
+        return self.allocate();
+    }
+
+    /// allocates a new register
+    pub inline fn allocate(self: *RegisterAllocator) RegisterId {
         const reg = self.next_free;
         self.next_free += 1;
         // max is the number of used registers (since registers are allocated from 0 to n, max is n + 1)
-        self.max = @max(self.context.next_free_reg, self.context.max_registers.*);
+        self.max = @max(self.next_free, self.max);
         return reg;
     }
 
-    pub fn release(self: *RegisterAllocator, gpa: std.mem.Allocator, reg: RegisterId) void {
+    /// releases a register for later use
+    pub inline fn release(self: *RegisterAllocator, gpa: std.mem.Allocator, reg: RegisterId) void {
         self.free_pool.append(gpa, reg) catch unreachable;
     }
 
-    pub fn clone(self: *RegisterAllocator, gpa: std.mem.Allocator) RegisterAllocator {
+    /// Creates a copy of this RegisterAllocator
+    pub inline fn clone(self: *RegisterAllocator, gpa: std.mem.Allocator) std.mem.Allocator.Error!RegisterAllocator {
         return .{
             .max = self.max,
             .next_free = self.next_free,
-            .free_pool = self.free_pool.clone(gpa),
+            .free_pool = try self.free_pool.clone(gpa),
         };
     }
 };
@@ -159,7 +180,7 @@ pub const Compiler = struct {
         defer {
             for (buildin_functions) |_| {
                 _ = self.context.locals.pop();
-                self.freeRegister();
+                //                self.context.releaseRegister(reg: u8);
             }
         }
 
@@ -279,11 +300,9 @@ pub const Compiler = struct {
                 try self.emitInstruction(Instruction.fromABC(.call_return, 0, reg, 1));
             },
             else => { // expression statements
-                const snapshot = self.context.next_free_reg;
-
+                const snapshot = try self.context.snapshotRegisters();
                 _ = try self.compileExpression(node_id);
-
-                self.context.next_free_reg = snapshot;
+                self.context.restoreRegisters(snapshot);
             },
         }
     }
@@ -445,7 +464,7 @@ pub const Compiler = struct {
                     }
                 }
 
-                const reg_result = self.context.next_free_reg;
+                const reg_result = self.context.getTmpRegister();
                 try self.compileExpressionEnsureRegister(extra.then_branch, reg_result);
 
                 try self.exitScope();
@@ -497,7 +516,7 @@ pub const Compiler = struct {
             .call => {
                 const extra = self.ast.getExtra(node.data.extra_id, CallExtra);
 
-                const snapshot = self.context.next_free_reg;
+                const snapshot = try self.context.snapshotRegisters();
 
                 const reg_callee = self.context.getRegister();
 
@@ -506,17 +525,16 @@ pub const Compiler = struct {
                 var arg_count: u8 = 0;
                 if (extra.args_start) |args_start| {
                     var iterator = NodeListIterator.init(self.ast, args_start);
-                    const reg_start = self.context.next_free_reg;
-
                     while (iterator.next()) |arg_node_id| {
-                        _ = try self.compileExpressionEnsureRegister(arg_node_id, reg_start + arg_count);
+                        const reg_arg = self.context.allocateRegister();
+                        _ = try self.compileExpressionEnsureRegister(arg_node_id, reg_arg);
                         _ = self.context.getRegister();
                         arg_count += 1;
                     }
                 }
 
                 try self.emitInstruction(Instruction.fromABC(.call, reg_callee, reg_callee, arg_count));
-                self.context.next_free_reg = snapshot;
+                self.context.restoreRegisters(snapshot);
                 return reg_callee;
             },
 
@@ -572,24 +590,11 @@ pub const Compiler = struct {
     }
 
     inline fn compileExpressionEnsureRegister(self: *Compiler, node_id: ast.NodeId, register: RegisterId) !void {
+        // TODO: ensure the register by telling the register_allocator which register to "allocate" next
         const result = try self.compileExpression(node_id);
         if (result != register) {
             try self.emitInstruction(Instruction.fromABC(.move, register, result, 0));
-            // if (register <= self.context.next_free_reg) {
-            //     self.context.next_free_reg = register + 1;
-            // }
         }
-    }
-
-    inline fn allocateRegister(self: *Compiler) RegisterId {
-        const next_free = self.context.next_free_reg;
-        self.context.next_free_reg += 1;
-        self.context.max_registers.* = @max(self.context.next_free_reg, self.context.max_registers.*);
-        return next_free;
-    }
-
-    inline fn freeRegister(self: *Compiler) void {
-        self.context.next_free_reg -= 1;
     }
 
     inline fn emitInstruction(self: *Compiler, instruction: Instruction) !void {
@@ -597,33 +602,37 @@ pub const Compiler = struct {
     }
 
     fn emitUnaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {
-        const snapshot = self.context.next_free_reg;
+        const snapshot = try self.context.snapshotRegisters();
 
         const reg_rhs = try self.compileExpression(node.data.node_id);
-        const reg_dest = if (reg_rhs < snapshot) snapshot else reg_rhs;
+        const reg_dest = self.context.getTmpRegister();
+        // TODO: evaluate this line
+        //const reg_dest = if (reg_rhs < snapshot) snapshot else reg_rhs;
 
         try self.emitInstruction(Instruction.fromABC(opcode, reg_dest, reg_rhs, 0));
 
         // free all regs
-        self.context.next_free_reg = snapshot;
+        self.context.restoreRegisters(snapshot);
         return reg_dest;
     }
 
     fn emitBinaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {
         const extra = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
 
-        const snapshot = self.context.next_free_reg;
+        const snapshot = try self.context.snapshotRegisters();
 
         const reg_lhs = try self.compileExpression(extra.lhs);
         _ = self.context.getRegister();
         const reg_rhs = try self.compileExpression(extra.rhs);
 
-        const reg_dest = if (reg_lhs < snapshot) snapshot else reg_lhs;
+        const reg_dest = reg_lhs;
+        // TODO: evaluate this line
+        //const reg_dest = if (reg_lhs < snapshot) snapshot else reg_lhs;
 
         try self.emitInstruction(Instruction.fromABC(opcode, reg_dest, reg_lhs, reg_rhs));
 
         // free all regs
-        self.context.next_free_reg = snapshot;
+        self.context.restoreRegisters(snapshot);
         return reg_dest;
     }
 
@@ -775,11 +784,12 @@ pub const Compiler = struct {
                 if (local.?.is_captured) {
                     any_captured = true;
                 }
-                self.context.next_free_reg = local.?.reg_slot;
+                self.context.releaseRegister(local.?.reg_slot);
             }
         }
 
-        try self.emitInstruction(Instruction.fromABC(.close_upvalue, 0, self.context.next_free_reg, 0));
+        // TODO: closing upvalues is broken
+        // try self.emitInstruction(Instruction.fromABC(.close_upvalue, 0, self.context.next_free_reg, 0));
     }
 };
 

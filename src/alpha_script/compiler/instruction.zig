@@ -17,7 +17,7 @@ pub const OpCode = enum(u8) {
     less_equal, // REG_DEST REG_A REG_B // compare REG_A and REG_B and save the result in REG_DEST (true when REG_A <= REG_B, false otherwise)
     logical_not, // REG_DEST REG_A // negate the bool value in REG_A and save the result to REG_DEST
     // strings
-    string_concat,
+    string_concat, // REG_DEST REG_A REG_B // Adds the string at REG_B to the end of the string at REG_A and saves the result in REG_DEST
 
     // upvalues
     load_upvalue, // REG_DEST INDEX_UPVALUE // load the Value from the UpValue at INDEX_UPVALUE in REG_DEST

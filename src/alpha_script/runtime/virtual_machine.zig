@@ -312,7 +312,7 @@ pub const VirtualMachine = struct {
                 },
                 // string
                 .string_concat => {
-                    const reg_a = base + instruction.abc.b;
+                    const reg_a = base + instruction.abc.a;
                     const str_b = stack[base + instruction.abc.b].toObject().as(ObjString);
                     const str_c = stack[base + instruction.abc.c].toObject().as(ObjString);
 
