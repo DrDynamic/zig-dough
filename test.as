@@ -1,11 +1,11 @@
-//var a = "before";
-//print(a); // expect: before
-//
-//a = "after";
-//print(a); // expect: after
-//
-//print(a = "arg"); // expect: arg
-//print(a); // expect: arg
+var a = "before";
+print(a); // expect: before
+
+a = "after";
+print(a); // expect: after
+
+print(a = "arg"); // expect: arg
+print(a); // expect: arg
 
 
 //fn create(): ():int {
@@ -23,17 +23,7 @@
 //print(incrementer())
 
 // regression
-{
-    "a" + "b"
-
-    var i = 2
-}
-say("A" + "B" + "C");
-
-fn say(s:string) :void {
-    print("computer says: " + s)
-}
-
+// var a = "A" + "B" + "C"
 //////////////////////////////////////////////////////
 
 

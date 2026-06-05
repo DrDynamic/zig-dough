@@ -56,9 +56,17 @@ pub const CompilerContext = struct {
         return self.register_allocator.max;
     }
 
+    pub fn ensureAllocated(self: *CompilerContext, register: RegisterId) void {
+        self.register_allocator.ensureAllocated(register);
+    }
+
     /// allocates a new register or returns a already released register
     pub fn getRegister(self: *CompilerContext) RegisterId {
         return self.register_allocator.getOrAllocate();
+    }
+
+    pub fn setNextRegister(self: *CompilerContext, register: RegisterId) void {
+        self.register_allocator.enforce_register = register;
     }
 
     /// allocates a new register
@@ -81,6 +89,7 @@ pub const CompilerContext = struct {
 
 const RegisterAllocator = struct {
     max: RegisterId = 0,
+    enforce_register: ?RegisterId = null,
     next_free: RegisterId = 0,
     free_pool: std.ArrayList(RegisterId) = .{},
 
@@ -90,6 +99,10 @@ const RegisterAllocator = struct {
 
     /// allocates a new register or returns a already released register
     pub inline fn getOrAllocate(self: *RegisterAllocator) RegisterId {
+        if (self.enforce_register) |reg| {
+            self.enforce_register = null;
+            return reg;
+        }
         if (self.free_pool.pop()) |free_reg| {
             return free_reg;
         }
@@ -103,6 +116,21 @@ const RegisterAllocator = struct {
         // max is the number of used registers (since registers are allocated from 0 to n, max is n + 1)
         self.max = @max(self.next_free, self.max);
         return reg;
+    }
+
+    pub inline fn ensureAllocated(self: *RegisterAllocator, register: RegisterId) void {
+        for (self.free_pool.items, 0..) |free_reg, index| {
+            if (self.next_free < register) {
+                // register could be allocated -> we set the next register to allocate right after the given register
+                self.next_free = register + 1;
+            } else {
+                // the register was allocated before, so we need to check if it is in the free_pool
+                if (free_reg == register) {
+                    _ = self.free_pool.swapRemove(index);
+                    break;
+                }
+            }
+        }
     }
 
     /// releases a register for later use
@@ -291,6 +319,7 @@ pub const Compiler = struct {
 
                 if (extra.init_value) |init_value_id| {
                     try self.compileExpressionEnsureRegister(init_value_id, register);
+                    self.context.ensureAllocated(register);
                     self.initializeLocal(extra.name_id) catch unreachable; // should not fail, since its added while hoisting
                 }
             },
@@ -590,8 +619,10 @@ pub const Compiler = struct {
     }
 
     inline fn compileExpressionEnsureRegister(self: *Compiler, node_id: ast.NodeId, register: RegisterId) !void {
-        // TODO: ensure the register by telling the register_allocator which register to "allocate" next
+        self.context.setNextRegister(register);
         const result = try self.compileExpression(node_id);
+
+        // make sure the given register is used. (could happen when the compiled expressen uses context.allocateRegister() instead of getRegister())
         if (result != register) {
             try self.emitInstruction(Instruction.fromABC(.move, register, result, 0));
         }
