@@ -12,7 +12,7 @@ pub const CompilerContext = struct {
     allocator: std.mem.Allocator,
     parent_context: ?*CompilerContext = null,
 
-    register_allocator: RegisterAllocator = .{},
+    register_allocator: RegisterAllocator,
     chunk: *Chunk = undefined,
     locals: std.ArrayList(Local),
     upvalues: std.ArrayList(ObjFunction.UpValueLocation),
@@ -27,168 +27,60 @@ pub const CompilerContext = struct {
             .upvalues = .{},
             .scope_depth = 0,
 
+            .register_allocator = RegisterAllocator.init(),
             .chunk = chunk,
         };
     }
 
     pub fn deinit(self: *CompilerContext) void {
-        self.register_allocator.deinit(self.allocator);
         self.locals.deinit(self.allocator);
         //self.upvalues.deinit(); ownership moves into compiled function
     }
 
     /// creates a snapshot of the register allocator
-    pub fn snapshotRegisters(self: *CompilerContext) std.mem.Allocator.Error!RegisterAllocator {
-        return try self.register_allocator.clone(self.allocator);
+    pub fn snapshotRegisters(self: *CompilerContext) RegisterAllocator {
+        return self.register_allocator.saveSnapshot();
     }
 
     /// restores a snapshot of the register allocator
     pub fn restoreRegisters(self: *CompilerContext, snapshot: RegisterAllocator) void {
-        const old_max = self.register_allocator.max;
+        const old_max = self.register_allocator.max_allocated;
 
-        self.register_allocator.deinit(self.allocator);
-        self.register_allocator = snapshot;
-        self.register_allocator.max = old_max;
+        self.register_allocator.restoreSnapshot(snapshot);
+        self.register_allocator.max_allocated = old_max;
     }
 
     /// a getter for the count of used registers
     pub fn getMaxRegisters(self: *const CompilerContext) RegisterId {
-        return self.register_allocator.max;
+        return @intCast(self.register_allocator.getMaxAllocated());
     }
 
     pub fn ensureAllocated(self: *CompilerContext, register: RegisterId) void {
-        self.register_allocator.ensureAllocated(self.allocator, register);
+        self.register_allocator.ensureAllocated(register);
     }
 
     /// allocates a new register or returns a already released register
     pub fn getRegister(self: *CompilerContext) RegisterId {
-        return self.register_allocator.getOrAllocate();
+        return self.register_allocator.allocate() catch unreachable; // when this fails, we don't have registers left and can not compile...
     }
 
     pub fn setNextRegister(self: *CompilerContext, register: RegisterId) void {
-        self.register_allocator.enforceRegister(self.allocator, register);
+        self.register_allocator.forceNext(register) catch unreachable; // when this fails, the requested register is already allocated, which should not happen if the compiler is works correctly
     }
 
     /// allocates a new register
     pub fn allocateRegister(self: *CompilerContext) RegisterId {
-        return self.register_allocator.allocate();
+        return self.register_allocator.allocate() catch unreachable; // when this fails, we don't have registers left and can not compile...
     }
 
     /// returns a freshly released register. So that it can be reused immediately
     pub fn getTmpRegister(self: *CompilerContext) RegisterId {
-        return self.register_allocator.getOrAllocateTmp();
+        return self.register_allocator.allocateTemporary() catch unreachable; // when this fails, we don't have registers left and can not compile...
     }
 
     /// releases a register for later use
     pub fn releaseRegister(self: *CompilerContext, reg: RegisterId) void {
-        self.register_allocator.release(self.allocator, reg);
-    }
-};
-
-const RegisterAllocator = struct {
-    max: RegisterId = 0,
-    enforce_register: ?RegisterId = null,
-    next_free: RegisterId = 0,
-    free_pool: std.ArrayList(RegisterId) = .{},
-
-    pub fn deinit(self: *RegisterAllocator, gpa: std.mem.Allocator) void {
-        self.free_pool.deinit(gpa);
-    }
-
-    /// enforces the next assigned register
-    pub inline fn enforceRegister(self: *RegisterAllocator, gpa: std.mem.Allocator, register: RegisterId) void {
-        self.enforce_register = register;
-
-        while (self.next_free <= register) {
-            const free_reg = self.allocate();
-            if (self.next_free != register) {
-                self.free_pool.append(gpa, free_reg) catch unreachable;
-            }
-        }
-    }
-
-    /// allocates a new register or returns a already released register
-    pub inline fn getOrAllocate(self: *RegisterAllocator) RegisterId {
-        if (self.enforce_register) |reg| {
-            self.enforce_register = null;
-            return reg;
-        }
-        if (self.free_pool.pop()) |free_reg| {
-            return free_reg;
-        }
-        return self.allocate();
-    }
-
-    pub inline fn getOrAllocateTmp(self: *RegisterAllocator) RegisterId {
-        if (self.enforce_register) |reg| {
-            self.enforce_register = null;
-            return reg;
-        }
-        if (self.free_pool.items.len > 0) {
-            return self.free_pool.items[0];
-        }
-        const reg = self.allocate();
-        self.next_free -= 1;
-        return reg;
-    }
-
-    /// allocates a new register
-    pub inline fn allocate(self: *RegisterAllocator) RegisterId {
-        const reg = self.next_free;
-        self.next_free += 1;
-        // max is the number of used registers (since registers are allocated from 0 to n, max is n + 1)
-        self.max = @max(self.next_free, self.max);
-        return reg;
-    }
-
-    /// checks if a regisater is already allocated
-    pub fn isAllocated(self: *const RegisterAllocator, register: RegisterId) bool {
-        if (self.next_free <= register) {
-            return false;
-        } else {
-            for (self.free_pool.items) |free_reg| {
-                if (free_reg == register) {
-                    return false;
-                }
-            }
-            return true;
-        }
-    }
-
-    /// ensures that a register is allocated
-    pub inline fn ensureAllocated(self: *RegisterAllocator, gpa: std.mem.Allocator, register: RegisterId) void {
-        while (self.next_free <= register) {
-            const free_reg = self.allocate();
-            if (self.next_free != register) {
-                self.free_pool.append(gpa, free_reg) catch unreachable;
-            }
-        }
-
-        for (self.free_pool.items, 0..) |free_reg, index| {
-            // the register was allocated before, so we need to check if it is in the free_pool
-            if (free_reg == register) {
-                _ = self.free_pool.swapRemove(index);
-                break;
-            }
-        }
-    }
-
-    /// releases a register for later use
-    pub inline fn release(self: *RegisterAllocator, gpa: std.mem.Allocator, reg: RegisterId) void {
-        if (self.next_free - 1 == reg) {
-            self.next_free -= 1;
-        } else {
-            self.free_pool.append(gpa, reg) catch unreachable;
-        }
-    }
-
-    /// Creates a copy of this RegisterAllocator
-    pub inline fn clone(self: *RegisterAllocator, gpa: std.mem.Allocator) std.mem.Allocator.Error!RegisterAllocator {
-        return .{
-            .max = self.max,
-            .next_free = self.next_free,
-            .free_pool = try self.free_pool.clone(gpa),
-        };
+        self.register_allocator.free(reg);
     }
 };
 
@@ -374,7 +266,7 @@ pub const Compiler = struct {
                 try self.emitInstruction(Instruction.fromABC(.call_return, 0, reg, 1));
             },
             else => { // expression statements
-                const snapshot = try self.context.snapshotRegisters();
+                const snapshot = self.context.snapshotRegisters();
                 _ = try self.compileExpression(node_id);
                 self.context.restoreRegisters(snapshot);
             },
@@ -593,7 +485,7 @@ pub const Compiler = struct {
             .call => {
                 const extra = self.ast.getExtra(node.data.extra_id, CallExtra);
 
-                const snapshot = try self.context.snapshotRegisters();
+                const snapshot = self.context.snapshotRegisters();
 
                 const reg_callee = self.context.getRegister();
 
@@ -681,7 +573,7 @@ pub const Compiler = struct {
     }
 
     fn emitUnaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {
-        const snapshot = try self.context.snapshotRegisters();
+        const snapshot = self.context.snapshotRegisters();
 
         const reg_rhs = try self.compileExpression(node.data.node_id);
         const reg_dest = self.context.getTmpRegister();
@@ -695,7 +587,7 @@ pub const Compiler = struct {
 
     fn emitBinaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {
         const extra = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
-        const snapshot = try self.context.snapshotRegisters();
+        const snapshot = self.context.snapshotRegisters();
 
         const reg_lhs = try self.compileExpression(extra.lhs);
         self.context.ensureAllocated(reg_lhs);
@@ -894,6 +786,9 @@ pub const Chunk = instructions.Chunk;
 
 pub const ConstantId = instructions.ConstantId;
 pub const OpCode = instructions.OpCode;
+
+const register_allocator = @import("register_allocator.zig");
+pub const RegisterAllocator = register_allocator.RegisterAllocator;
 //---------------
 const std = @import("std");
 
