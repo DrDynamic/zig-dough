@@ -4,6 +4,8 @@ pub const TypeTag = enum(u8) {
     /// the type is not resolved yet. (should only occur in before execution of the SemanticAnalyzer)
     unresolved,
 
+    // any type but not error or null
+    any,
     // primitives
     void,
     null,
@@ -28,6 +30,7 @@ pub const TypeTag = enum(u8) {
 pub const Type = union(TypeTag) {
     unresolved,
 
+    any,
     void,
     null,
     bool,
@@ -107,13 +110,14 @@ pub const TypePool = struct {
 
     pub const UNRESOLVED = 0;
     pub const ANYERROR = 1;
-    pub const VOID = 2;
-    pub const NULL = 3;
-    pub const BOOL = 4;
-    pub const INT = 5;
-    pub const FLOAT = 6;
-    pub const STRING = 7;
-    pub const MODULE = 8;
+    pub const ANY = 2;
+    pub const VOID = 3;
+    pub const NULL = 4;
+    pub const BOOL = 5;
+    pub const INT = 6;
+    pub const FLOAT = 7;
+    pub const STRING = 8;
+    pub const MODULE = 9;
 
     pub fn init(error_pool: *ErrorPool, allocator: Allocator) !TypePool {
         var pool = TypePool{
@@ -130,6 +134,7 @@ pub const TypePool = struct {
 
         try pool.types.append(allocator, .{ .unresolved = undefined });
         try pool.types.append(allocator, .{ .anyerror = undefined });
+        try pool.types.append(allocator, .{ .any = undefined });
         try pool.types.append(allocator, .{ .void = undefined });
         try pool.types.append(allocator, .{ .null = undefined });
         try pool.types.append(allocator, .{ .bool = undefined });
@@ -161,6 +166,7 @@ pub const TypePool = struct {
 
         switch (t) {
             .unresolved => try type_name.appendSlice(allocator, "unresolved"),
+            .any => try type_name.appendSlice(allocator, "any"),
             .void => try type_name.appendSlice(allocator, "void"),
             .null => try type_name.appendSlice(allocator, "null"),
             .bool => try type_name.appendSlice(allocator, "bool"),
@@ -303,6 +309,20 @@ pub const TypePool = struct {
         const target = self.types.items[target_id];
         switch (target) {
             .unresolved => unreachable,
+            .any => {
+                if (self.isNullable(source_id)) {
+                    return false;
+                }
+                if (self.isErrorUnion(source_id)) {
+                    return false;
+                }
+                const source = self.types.items[source_id];
+                if (source == .anyerror or source == .error_type) {
+                    return false;
+                }
+
+                return true;
+            },
             .void => return false,
             .null => return false, // null is only assignable to null. Since target_id != source_id , the source can not be of type null
             .bool => return false, // same with bool

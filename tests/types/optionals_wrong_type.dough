@@ -1,1 +1,1 @@
-var a:?String = 4; // expect compile error: Error at '4': can not assign Int to Null|String
+var a:?string = 4; // expect compile error: Error at '4': can not assign int to null|string

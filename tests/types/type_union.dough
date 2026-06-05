@@ -1,4 +1,4 @@
-var a:Int | String | Null = null;
+var a:int | string | null = null;
 print(a); // expect: null
 
 a = "Lorem";

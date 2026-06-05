@@ -145,7 +145,7 @@ pub const ASTPrinter = struct {
             },
 
             // access
-            .identifier_expr,
+            .expression_identifier,
             => {
                 const str = self.ast.string_table.get(node.data.string_id);
                 self.terminal.print(": \"{s}\"\n", .{str});
@@ -179,7 +179,7 @@ pub const ASTPrinter = struct {
             .literal_float,
             .literal_bool,
             .literal_error,
-            .identifier_expr,
+            .expression_identifier,
             => {}, // leaves don't have children
             .object_string => {},
 

@@ -1,2 +1,2 @@
-var a:Int | String | Null = null;
-a = true; // expect compile error: Error at 'true': can not assign Bool to Null|Int|String
+var a:int | string | null = null;
+a = true; // expect compile error: Error at 'true': can not assign bool to null|int|string

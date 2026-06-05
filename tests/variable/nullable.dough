@@ -1,4 +1,4 @@
-var test:?String = null;
+var test:?string = null;
 
 print(test); // expect: null
 

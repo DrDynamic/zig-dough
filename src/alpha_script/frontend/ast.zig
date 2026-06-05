@@ -31,7 +31,7 @@ pub const NodeType = enum(u8) {
 
     // access
     expression_assignment, // node_id (the expression that is assigned)
-    identifier_expr, // string_id
+    expression_identifier, // string_id
     call, // CallExtra
     node_list, // NodeListExtra
 

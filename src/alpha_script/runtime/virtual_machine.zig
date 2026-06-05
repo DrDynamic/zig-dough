@@ -62,7 +62,7 @@ pub const VirtualMachine = struct {
         };
     }
 
-    pub fn execute(self: *VirtualMachine, module: *ObjModule, buildin_functions: []BuildinFunction) !void {
+    pub fn execute(self: *VirtualMachine, module: *ObjModule, buildin_functions: []BuildinFunction, comptime print_stack: bool) !void {
         self.current_module = module;
         for (buildin_functions) |buildin| {
             const native_obj = as.runtime.values.ObjNative.init(buildin.name_id, buildin.function, self.garbage_collector);
@@ -83,7 +83,7 @@ pub const VirtualMachine = struct {
         }
 
         _ = try self.callFunction(module.function, 0, 0);
-        try self.run();
+        try self.run(print_stack);
     }
 
     fn printCallframe(self: *const VirtualMachine, terminal: *as.common.Terminal, register: usize, used_frame_count: usize, color: ?as.common.Terminal.Color) void {
@@ -191,8 +191,8 @@ pub const VirtualMachine = struct {
         disassambler.terminal.print("\n", .{});
     }
 
-    fn run(self: *VirtualMachine) !void {
-        const debug: bool = true;
+    fn run(self: *VirtualMachine, comptime debug: bool) !void {
+        //        const debug: bool = true;
 
         var current_frame = &self.frames[self.frame_count - 1];
 
@@ -278,6 +278,7 @@ pub const VirtualMachine = struct {
                 },
                 .greater => {
                     const reg_a = base + instruction.abc.a;
+
                     const float_b = try stack[base + instruction.abc.b].castToF64();
                     const float_c = try stack[base + instruction.abc.c].castToF64();
 

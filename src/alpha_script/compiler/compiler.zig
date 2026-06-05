@@ -57,7 +57,7 @@ pub const CompilerContext = struct {
     }
 
     pub fn ensureAllocated(self: *CompilerContext, register: RegisterId) void {
-        self.register_allocator.ensureAllocated(register);
+        self.register_allocator.ensureAllocated(self.allocator, register);
     }
 
     /// allocates a new register or returns a already released register
@@ -66,7 +66,7 @@ pub const CompilerContext = struct {
     }
 
     pub fn setNextRegister(self: *CompilerContext, register: RegisterId) void {
-        self.register_allocator.enforce_register = register;
+        self.register_allocator.enforceRegister(self.allocator, register);
     }
 
     /// allocates a new register
@@ -76,9 +76,7 @@ pub const CompilerContext = struct {
 
     /// returns a freshly released register. So that it can be reused immediately
     pub fn getTmpRegister(self: *CompilerContext) RegisterId {
-        const reg = self.register_allocator.getOrAllocate();
-        self.register_allocator.release(self.allocator, reg);
-        return reg;
+        return self.register_allocator.getOrAllocateTmp();
     }
 
     /// releases a register for later use
@@ -97,6 +95,18 @@ const RegisterAllocator = struct {
         self.free_pool.deinit(gpa);
     }
 
+    /// enforces the next assigned register
+    pub inline fn enforceRegister(self: *RegisterAllocator, gpa: std.mem.Allocator, register: RegisterId) void {
+        self.enforce_register = register;
+
+        while (self.next_free <= register) {
+            const free_reg = self.allocate();
+            if (self.next_free != register) {
+                self.free_pool.append(gpa, free_reg) catch unreachable;
+            }
+        }
+    }
+
     /// allocates a new register or returns a already released register
     pub inline fn getOrAllocate(self: *RegisterAllocator) RegisterId {
         if (self.enforce_register) |reg| {
@@ -109,6 +119,19 @@ const RegisterAllocator = struct {
         return self.allocate();
     }
 
+    pub inline fn getOrAllocateTmp(self: *RegisterAllocator) RegisterId {
+        if (self.enforce_register) |reg| {
+            self.enforce_register = null;
+            return reg;
+        }
+        if (self.free_pool.items.len > 0) {
+            return self.free_pool.items[0];
+        }
+        const reg = self.allocate();
+        self.next_free -= 1;
+        return reg;
+    }
+
     /// allocates a new register
     pub inline fn allocate(self: *RegisterAllocator) RegisterId {
         const reg = self.next_free;
@@ -118,24 +141,45 @@ const RegisterAllocator = struct {
         return reg;
     }
 
-    pub inline fn ensureAllocated(self: *RegisterAllocator, register: RegisterId) void {
-        for (self.free_pool.items, 0..) |free_reg, index| {
-            if (self.next_free < register) {
-                // register could be allocated -> we set the next register to allocate right after the given register
-                self.next_free = register + 1;
-            } else {
-                // the register was allocated before, so we need to check if it is in the free_pool
+    /// checks if a regisater is already allocated
+    pub fn isAllocated(self: *const RegisterAllocator, register: RegisterId) bool {
+        if (self.next_free <= register) {
+            return false;
+        } else {
+            for (self.free_pool.items) |free_reg| {
                 if (free_reg == register) {
-                    _ = self.free_pool.swapRemove(index);
-                    break;
+                    return false;
                 }
+            }
+            return true;
+        }
+    }
+
+    /// ensures that a register is allocated
+    pub inline fn ensureAllocated(self: *RegisterAllocator, gpa: std.mem.Allocator, register: RegisterId) void {
+        while (self.next_free <= register) {
+            const free_reg = self.allocate();
+            if (self.next_free != register) {
+                self.free_pool.append(gpa, free_reg) catch unreachable;
+            }
+        }
+
+        for (self.free_pool.items, 0..) |free_reg, index| {
+            // the register was allocated before, so we need to check if it is in the free_pool
+            if (free_reg == register) {
+                _ = self.free_pool.swapRemove(index);
+                break;
             }
         }
     }
 
     /// releases a register for later use
     pub inline fn release(self: *RegisterAllocator, gpa: std.mem.Allocator, reg: RegisterId) void {
-        self.free_pool.append(gpa, reg) catch unreachable;
+        if (self.next_free - 1 == reg) {
+            self.next_free -= 1;
+        } else {
+            self.free_pool.append(gpa, reg) catch unreachable;
+        }
     }
 
     /// Creates a copy of this RegisterAllocator
@@ -151,6 +195,7 @@ const RegisterAllocator = struct {
 pub const Compiler = struct {
     pub const Error = error{
         UndefinedIdentifier,
+        UninitializedIdentifier,
 
         ConstantOverflow,
         UpValueOverflow,
@@ -315,7 +360,7 @@ pub const Compiler = struct {
             .declaration_var,
             => {
                 const extra = self.ast.getExtra(node.data.extra_id, ast.DeclarationExtra);
-                const register = self.resolveLocal(extra.name_id) catch unreachable; // should not fail, since its added while hoisting
+                const register = self.resolveLocal(extra.name_id, false) catch unreachable; // should not fail, since its added while hoisting
 
                 if (extra.init_value) |init_value_id| {
                     try self.compileExpressionEnsureRegister(init_value_id, register);
@@ -424,10 +469,12 @@ pub const Compiler = struct {
             // expressions
             .expression_assignment => {
                 const extra = self.ast.getExtra(node.data.extra_id, AssignmentExtra);
-                const target_node = self.ast.nodes.items[extra.target]; // semantic analyser assures that this is an identifier_expr
+                const target_node = self.ast.nodes.items[extra.target]; // semantic analyser assures that this is an expression_identifier
 
-                if (self.resolveLocal(target_node.data.string_id)) |reg_target| {
+                if (self.resolveLocal(target_node.data.string_id, false)) |reg_target| {
                     try self.compileExpressionEnsureRegister(extra.source, reg_target);
+                    self.initializeLocal(target_node.data.string_id) catch unreachable; // identifier has to be somewhere (checked by semantic analyser)
+
                     return reg_target;
                 } else |_| {
                     const reg_target = self.context.getTmpRegister();
@@ -435,6 +482,7 @@ pub const Compiler = struct {
                     const upvalue_index = self.resolveUpValue(target_node.data.string_id) catch unreachable; // identifier has to be somewhere (checked by semantic analyser)
                     try self.compileExpressionEnsureRegister(extra.source, reg_target);
                     try self.emitInstruction(Instruction.fromABC(.store_upvalue, upvalue_index, reg_target, 0));
+                    self.initializeLocal(target_node.data.string_id) catch unreachable; // identifier has to be somewhere (checked by semantic analyser)
 
                     return reg_target;
                 }
@@ -530,8 +578,8 @@ pub const Compiler = struct {
 
             // access
 
-            .identifier_expr => {
-                if (self.resolveLocal(node.data.string_id)) |reg_identifier| {
+            .expression_identifier => {
+                if (self.resolveLocal(node.data.string_id, true)) |reg_identifier| {
                     return reg_identifier;
                 } else |_| {
                     const reg_identifier = self.context.getTmpRegister();
@@ -555,9 +603,9 @@ pub const Compiler = struct {
                 if (extra.args_start) |args_start| {
                     var iterator = NodeListIterator.init(self.ast, args_start);
                     while (iterator.next()) |arg_node_id| {
-                        const reg_arg = self.context.allocateRegister();
+                        const reg_arg = self.context.getTmpRegister();
                         _ = try self.compileExpressionEnsureRegister(arg_node_id, reg_arg);
-                        _ = self.context.getRegister();
+                        self.context.ensureAllocated(reg_arg);
                         arg_count += 1;
                     }
                 }
@@ -637,8 +685,6 @@ pub const Compiler = struct {
 
         const reg_rhs = try self.compileExpression(node.data.node_id);
         const reg_dest = self.context.getTmpRegister();
-        // TODO: evaluate this line
-        //const reg_dest = if (reg_rhs < snapshot) snapshot else reg_rhs;
 
         try self.emitInstruction(Instruction.fromABC(opcode, reg_dest, reg_rhs, 0));
 
@@ -649,16 +695,18 @@ pub const Compiler = struct {
 
     fn emitBinaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {
         const extra = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
-
         const snapshot = try self.context.snapshotRegisters();
 
         const reg_lhs = try self.compileExpression(extra.lhs);
-        _ = self.context.getRegister();
+        self.context.ensureAllocated(reg_lhs);
         const reg_rhs = try self.compileExpression(extra.rhs);
 
-        const reg_dest = reg_lhs;
-        // TODO: evaluate this line
-        //const reg_dest = if (reg_lhs < snapshot) snapshot else reg_lhs;
+        // when lhs is a variable, the register must not be reused!
+        if (!snapshot.isAllocated(reg_lhs)) {
+            self.context.releaseRegister(reg_lhs);
+        }
+
+        const reg_dest = self.context.getTmpRegister();
 
         try self.emitInstruction(Instruction.fromABC(opcode, reg_dest, reg_lhs, reg_rhs));
 
@@ -720,26 +768,42 @@ pub const Compiler = struct {
     }
 
     fn initializeLocal(self: *Compiler, name_id: StringId) Error!void {
-        for (self.context.locals.items) |*local| {
+        const locals = self.context.locals.items;
+        var i: usize = locals.len;
+        while (i > 0) {
+            i -= 1;
+            var local = &locals[i];
             if (local.name_id == name_id) {
-                local.*.is_initialized = true;
+                local.is_initialized = true;
                 return;
             }
         }
+
         return Error.UndefinedIdentifier;
     }
 
     /// searches for the register of a variable in the current context
-    inline fn resolveLocal(self: *const Compiler, name_id: StringId) Error!RegisterId {
-        return try self.resolveLocalInContext(&self.context, name_id);
+    inline fn resolveLocal(self: *const Compiler, name_id: StringId, comptime assert_initialized: bool) Error!RegisterId {
+        return try self.resolveLocalInContext(&self.context, name_id, assert_initialized);
     }
 
     /// searches for the register of a variable in the given context
-    inline fn resolveLocalInContext(_: *const Compiler, context: *const CompilerContext, name_id: StringId) Error!RegisterId {
+    inline fn resolveLocalInContext(_: *const Compiler, context: *const CompilerContext, name_id: StringId, comptime assert_initialized: bool) Error!RegisterId {
         var local_index: isize = @as(isize, @intCast(context.locals.items.len)) - 1;
         while (local_index >= 0) : (local_index -= 1) {
             const local = context.locals.items[@intCast(local_index)];
-            if (local.name_id == name_id) return local.reg_slot;
+
+            if (local.name_id == name_id) {
+                if (assert_initialized and local.is_initialized == false) {
+                    // if we are looking for an initialized local, it might be shadowed
+                    continue;
+                }
+                if (!assert_initialized or local.is_initialized) {
+                    return local.reg_slot;
+                } else {
+                    return Error.UninitializedIdentifier;
+                }
+            }
         }
 
         return Error.UndefinedIdentifier;
@@ -753,7 +817,7 @@ pub const Compiler = struct {
     inline fn resolveUpValueInContext(self: *Compiler, context: *CompilerContext, name_id: StringId) Error!u8 {
         if (context.parent_context) |parent_context| {
             // check if variable is local
-            if (self.resolveLocalInContext(parent_context, name_id)) |reg_local| {
+            if (self.resolveLocalInContext(parent_context, name_id, false)) |reg_local| {
                 parent_context.locals.items[reg_local].is_captured = true;
                 return self.addUpValue(context, reg_local, true);
             } else |err| {

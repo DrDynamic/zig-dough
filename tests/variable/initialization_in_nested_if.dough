@@ -1,5 +1,5 @@
 
-var a:?String;
+var a:?string;
 if(true) {
     if(false) {
         a = "Some Value";

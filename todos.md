@@ -1,4 +1,7 @@
 # next
+- mandatory catching return types
+- mandatory catching errors
+- enforce tdz (dont read uninitialized vars!)
 - close upvalues 
   - either by UpValueIndex. (by register_id could fail, if the register is already reused)
   - or before register is reused

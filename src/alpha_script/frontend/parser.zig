@@ -717,7 +717,7 @@ pub const Parser = struct {
                 }
 
                 break :identifier_case try self.ast.addNode(.{
-                    .tag = .identifier_expr,
+                    .tag = .expression_identifier,
                     .token_position = token.location.start,
                     .resolved_type_id = TypePool.UNRESOLVED,
                     .data = .{ .string_id = string_id },

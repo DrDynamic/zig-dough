@@ -91,7 +91,7 @@ pub fn main() !void {
         try interpreter.registerBuildinFunction(.{
             .name_id = try interpreter.string_table.add("print"),
             .parameter_type_ids = &[_]as.frontend.TypeId{
-                as.frontend.TypePool.STRING,
+                as.frontend.TypePool.ANY,
             },
             .return_type_id = as.frontend.TypePool.VOID,
             .function = as.runtime.values.natives.nativePrint,
@@ -123,9 +123,17 @@ pub fn main() !void {
             return;
         }
 
-        interpreter.runModule(module) catch {
-            std.process.exit(EXIT_CODE_RUNTIME_ERROR);
-        };
+        if (start_options.debug_vm) {
+            interpreter.runModule(module, true) catch |err| {
+                std.debug.panic("{t}", .{err});
+                std.process.exit(EXIT_CODE_RUNTIME_ERROR);
+            };
+        } else {
+            interpreter.runModule(module, false) catch |err| {
+                std.debug.panic("{t}", .{err});
+                std.process.exit(EXIT_CODE_RUNTIME_ERROR);
+            };
+        }
     } else {
         stderr_terminal.print("no file specified!\n", .{});
     }

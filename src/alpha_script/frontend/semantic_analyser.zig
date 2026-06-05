@@ -99,7 +99,10 @@ pub const SemanticAnalyser = struct {
         self.ast = ast;
 
         for (buildin_functions) |buildin| {
-            const type_id = self.ast.type_pool.getOrCreateFunctionType(buildin.parameter_type_ids.?, buildin.return_type_id) catch unreachable;
+            // TODO: resolve temporary fix:
+            const parameter_type_id = self.ast.type_pool.getOrCreateUnionType(&.{ TypePool.ANYERROR, TypePool.NULL, TypePool.ANY }) catch unreachable;
+
+            const type_id = self.ast.type_pool.getOrCreateFunctionType(&.{parameter_type_id}, buildin.return_type_id) catch unreachable;
 
             self.symbol_table.declare(
                 buildin.name_id,
@@ -204,7 +207,7 @@ pub const SemanticAnalyser = struct {
                 const extra = self.ast.getExtra(node.data.extra_id, AssignmentExtra);
                 const target_node = self.ast.nodes.items[extra.target];
 
-                if (target_node.tag != .identifier_expr) {
+                if (target_node.tag != .expression_identifier) {
                     self.error_reporter.semanticAnalyserError(self, Error.InvalidAssignmentTarget, node.*, "invalid assignment target");
                     return Error.InvalidAssignmentTarget;
                 }
@@ -358,14 +361,14 @@ pub const SemanticAnalyser = struct {
             },
 
             // access
-            .identifier_expr => |_| case: {
+            .expression_identifier => |_| case: {
                 if (self.symbol_table.lookup(node.data.string_id)) |symbol| {
                     if (symbol.state != .Initialized) {
-                        self.error_reporter.semanticAnalyserError(self, Error.IllegalMutation, node.*, "can not read uninitialized variable");
+                        self.error_reporter.semanticAnalyserError(self, Error.UndefinedIdentifier, node.*, "can not read uninitialized variable");
 
                         const symbol_node = self.ast.nodes.items[symbol.node_id];
                         self.error_reporter.semanticAnalyserHint(self, symbol_node, "variable is declared here:");
-                        return Error.IllegalMutation;
+                        return Error.UndefinedIdentifier;
                     }
                     break :case symbol.type_id;
                 }

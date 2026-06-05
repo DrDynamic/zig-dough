@@ -99,8 +99,8 @@ pub const Interpreter = struct {
         return self.compiler.compile(&ast, self.buildinFunctions.items);
     }
 
-    pub fn runModule(self: *Interpreter, module: *ObjModule) !void {
-        try self.virtual_machine.execute(module, self.buildinFunctions.items);
+    pub fn runModule(self: *Interpreter, module: *ObjModule, comptime debug: bool) !void {
+        try self.virtual_machine.execute(module, self.buildinFunctions.items, debug);
     }
 
     pub fn readFile(self: *Interpreter, filename: []const u8) !TokenStream {

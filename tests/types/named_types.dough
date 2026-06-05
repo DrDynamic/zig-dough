@@ -1,4 +1,4 @@
-type OptionalString = String | Null;
+type OptionalString = string | null;
 
 var a:OptionalString = null;
 print(a); // expect: null

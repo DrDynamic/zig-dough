@@ -1,5 +1,5 @@
-
-var a:?String;
+// skip nit implemented yet
+var a:?string;
 while(false) {
     a = "Some Value"
 }
