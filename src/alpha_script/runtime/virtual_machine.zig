@@ -21,6 +21,7 @@ pub const VirtualMachine = struct {
         ArgumentCount,
         StackOverflow,
         InvalidInstruction,
+        InvalidCallee,
     };
 
     allocator: std.mem.Allocator,
@@ -164,8 +165,8 @@ pub const VirtualMachine = struct {
             const read_b = description.parameter_type_b == .register_id and instruction.abc.b == local_address;
             const read_c = description.parameter_type_c == .register_id and instruction.abc.c == local_address;
 
-            const call_callee = instruction.ab.opcode == as.compiler.OpCode.call and instruction.abc.b == local_address;
-            const call_args = instruction.ab.opcode == as.compiler.OpCode.call and local_address > instruction.abc.b and local_address <= instruction.abc.b + instruction.abc.c;
+            const call_callee = instruction.ab.opcode == as.compiler.OpCode.op_call and instruction.abc.b == local_address;
+            const call_args = instruction.ab.opcode == as.compiler.OpCode.op_call and local_address > instruction.abc.b and local_address <= instruction.abc.b + instruction.abc.c;
 
             const call_return = instruction.ab.opcode == as.compiler.OpCode.call_return and register > current_frame.base_pointer and used_frame.reg_return == register - current_frame.base_pointer;
 
@@ -339,57 +340,85 @@ pub const VirtualMachine = struct {
                     const reg_source = base + instruction.abc.b;
                     upvalue.location.* = stack[reg_source];
                 },
-                .op_call_setup => {
-                    const arg_count = instruction.ab.a;
-                    const arg_index = instruction.ab.b;
+                .op_call => {
+                    const callee = stack[base + instruction.abc.b];
+                    var function: *ObjFunction = undefined;
+                    var closure: ?*ObjClosure = null;
+                    if (callee.isObject()) {
+                        switch (callee.object.tag) {
+                            .closure => {
+                                closure = callee.toObject().as(values.ObjClosure);
+                                function = closure.?.function;
+                            },
+                            .function => {
+                                function = callee.toObject().as(values.ObjFunction);
+                            },
+                            .native_function => {
+                                const native = callee.object.as(values.ObjNative);
 
-                    const exec_instruction = code[current_frame.ip];
-                    current_frame.ip += 1;
-                    if (exec_instruction.abc.opcode != as.compiler.OpCode.op_call_exec) {
-                        self.error_reporter.virtualMachineError(self, Error.InvalidInstruction, "Expected op_call_exec after op_call_setup");
-                        return Error.InvalidInstruction;
-                    }
+                                const reg_args_start = base + instruction.abc.b + 1;
+                                const args = stack[reg_args_start .. reg_args_start + instruction.abc.c];
 
-                    const arg_regs = chunk.arguments.items[arg_index .. arg_index + arg_count];
-                    const reg_callee = base + exec_instruction.abc.b;
-                    const reg_return = base + exec_instruction.abc.a;
+                                const result = native.function(&self.execution_context, args);
+                                // TODO: check return type (don't mutate stack if void)
+                                stack[base + instruction.abc.a] = result;
+                                break;
+                            },
 
-                    const callee = stack[reg_callee];
+                            else => return Error.InvalidCallee,
+                        }
+                    } else return Error.InvalidCallee;
+
+                    const reg_return: RegisterId = @intCast(base + instruction.abc.a);
 
                     const new_base = current_frame.base_pointer + current_frame.function.max_registers;
-                    const new_top = new_base + callee.max_registers;
+                    const new_top = new_base + function.max_registers;
 
-                    // init registers for call frame
                     if (new_top > STACK_MAX) {
+                        // we are out of registers
                         self.error_reporter.virtualMachineError(self, Error.StackOverflow, "Stack overflow");
                         return Error.StackOverflow;
                     }
 
-                    var index = new_base;
-                    while (index < new_top) : (index += 1) {
-                        if (index < new_base + arg_count) {
-                            stack[index] = stack[base + arg_regs[index - new_base]];
-                        } else {
-                            stack[index] = Value.makeUninitialized();
+                    var arg_count: usize = 0;
+                    // init args if there is an op_call_args instruction
+                    const next_instruction = code[current_frame.ip];
+                    if (next_instruction.ab.opcode == as.compiler.OpCode.op_call_args) {
+                        current_frame.ip += 1;
+
+                        arg_count = next_instruction.ab.a;
+                        const arg_index = next_instruction.ab.b;
+
+                        const arg_regs = chunk.arguments.items[arg_index .. arg_index + arg_count];
+                        for (arg_regs, 0..) |arg_reg, index| {
+                            stack[new_base + index] = stack[base + arg_reg];
                         }
+                    }
+
+                    // init registers for call frame
+                    var index = new_base + arg_count;
+                    while (index < new_top) : (index += 1) {
+                        stack[index] = Value.makeUninitialized();
                     }
 
                     self.stack_top = new_top;
 
                     // setup call frame
                     if (self.frame_count >= FRAMES_MAX) {
+                        // we are out of call frames
                         self.error_reporter.virtualMachineError(self, Error.StackOverflow, "Stack overflow");
                         return Error.StackOverflow;
                     }
 
                     var frame: *CallFrame = &self.frames[self.frame_count];
-                    self.frame_count += 1;
 
-                    frame.closure = null;
-                    frame.function = callee;
+                    frame.closure = closure;
+                    frame.function = function;
                     frame.ip = 0;
                     frame.base_pointer = new_base;
                     frame.reg_return = reg_return;
+
+                    self.frame_count += 1;
 
                     // update run loop
                     current_frame = &self.frames[self.frame_count - 1];
@@ -397,43 +426,7 @@ pub const VirtualMachine = struct {
                     code = chunk.code.items;
                     base = current_frame.base_pointer;
                 },
-                .call => {
-                    const reg_dest = base + instruction.abc.a;
-                    const reg_callee = base + instruction.abc.b;
-                    const arg_count = instruction.abc.c;
-
-                    const callee = stack[reg_callee];
-
-                    if (callee.isObject()) {
-                        switch (callee.object.tag) {
-                            .closure => {
-                                const callee_fn = callee.toObject().as(values.ObjClosure);
-                                _ = try self.callClosure(callee_fn, reg_callee + 1, instruction.abc.a);
-                            },
-                            .function => {
-                                const callee_fn = callee.toObject().as(values.ObjFunction);
-                                _ = try self.callFunction(callee_fn, reg_callee + 1, instruction.abc.a);
-                            },
-                            .native_function => {
-                                const native = callee.object.as(values.ObjNative);
-
-                                const reg_args_start = reg_callee + 1;
-                                const args = stack[reg_args_start .. reg_args_start + arg_count];
-
-                                const result = native.function(&self.execution_context, args);
-                                stack[reg_dest] = result;
-                            },
-
-                            else => unreachable,
-                        }
-                    } else unreachable;
-
-                    current_frame = &self.frames[self.frame_count - 1];
-                    chunk = current_frame.function.chunk;
-                    code = chunk.code.items;
-                    base = current_frame.base_pointer;
-                },
-
+                .op_call_args => unreachable, // read in op_call
                 .call_return => {
                     if (self.frame_count == 1) {
                         // return from main module

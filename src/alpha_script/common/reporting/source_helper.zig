@@ -42,13 +42,10 @@ pub inline fn calcNodeLocation(source: []const u8, node: Node, ast: *const AST) 
             const token_start = try token_stream.scanPosition(node.token_position);
             var token_end = token_start;
 
-            if (extra.args_start) |args_start| {
-                var iterator = NodeListIterator.init(ast, args_start);
-                while (iterator.next()) |arg_node_id| {
-                    if (!iterator.hasNext()) {
-                        const arg_node = ast.nodes.items[arg_node_id];
-                        token_end = try token_stream.scanPosition(arg_node.token_position);
-                    }
+            if (extra.args) |args| {
+                for (args) |arg_node_id| {
+                    const arg_node = ast.nodes.items[arg_node_id];
+                    token_end = try token_stream.scanPosition(arg_node.token_position);
                 }
             }
 

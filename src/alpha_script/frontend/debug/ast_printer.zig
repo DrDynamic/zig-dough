@@ -271,10 +271,9 @@ pub const ASTPrinter = struct {
                 const extra = self.ast.getExtra(node.data.extra_id, ast.CallExtra);
                 try self.printNode(extra.callee, prefix, false);
 
-                if (extra.args_start) |args_start| {
-                    var iterator = ast.NodeListIterator.init(self.ast, args_start);
-                    while (iterator.next()) |arg_id| {
-                        try self.printNode(arg_id, prefix, iterator.hasNext() == false);
+                if (extra.args) |args| {
+                    for (args) |arg_id| {
+                        try self.printNode(arg_id, prefix, false);
                     }
                 }
             },

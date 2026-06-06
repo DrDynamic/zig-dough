@@ -25,8 +25,8 @@ pub const OpCode = enum(u8) {
 
     // interaction
     // TODO: refactor call arguments. Should get REG_DEST REG_CALLEE REG_ARGS_START so the function doesn't need to be copied every time
-    op_call_setup, // ARG_COUNT ARG_INDEX // must be followed by op_call_exec -  read ARG_COUNT registers starting from ARG_INDEX and and copy the cresponding values into a new callframe
-    op_call_exec, // REG_DEST REG_CALLEE 0 // must be preceded by op_call_setup - call the function in REG_CALLEE with the arguments set up by the preceding op_call_setup and save the return value in REG_DEST
+    op_call, // REG_DEST REG_CALLEE 0 // call the function in REG_CALLEE with the arguments set up by the preceding op_call_setup and save the return value in REG_DEST
+    op_call_args, // ARG_COUNT ARG_INDEX // must be preceded by op_call -  read ARG_COUNT registers starting from ARG_INDEX and and copy the cresponding values into a new callframe
     call_return, // 0 REG_FIRST_VALUE VALUE_COUNT  // return from a call and put all return values (start_value + count) into the REG_DEST of the call instruction
     create_closure, // REG_DEST CONST_ADDR // create a closure from a function at CONST_ADDR and save it in REG_DEST
     close_upvalue, // 0 REG_TO_THIS_VALUE // close the UpValue of a given register and all above
@@ -83,6 +83,7 @@ pub const Chunk = struct {
             .allocator = allocator,
             .code = .{},
             .constants = .{},
+            .arguments = .{},
         };
     }
 

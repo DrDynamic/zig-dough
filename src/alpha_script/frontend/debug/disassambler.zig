@@ -11,6 +11,7 @@ pub const ParameterType = enum {
     mutate_register_id,
     register_id,
     constant_id,
+    argument_id,
     upvalue_id,
     code_offset,
     number,
@@ -150,7 +151,24 @@ pub const Disassambler = struct {
                     .parameter_type_c = .unused,
                 };
             },
-            .call => return self.printCall(instruction),
+            .op_call => return self.printCall(instruction),
+            .op_call_args => {
+                self.terminal.print("{s:<16} R{d:<2}, A{d:<3}    ; ", .{
+                    @tagName(op),
+                    instruction.ab.a,
+                    instruction.ab.b,
+                });
+
+                self.terminal.printWithOptions("ARGS_COUNT ARGS_START", .{}, value_options);
+                self.terminal.print("\n", .{});
+
+                return .{
+                    .instruction_type = .ab,
+                    .parameter_type_a = .number,
+                    .parameter_type_b = .argument_id,
+                    .parameter_type_c = .unused,
+                };
+            },
             .call_return => {
                 self.terminal.print("{s:<16}    , R{d:<2}\n", .{
                     @tagName(instruction.abc.opcode),

@@ -485,33 +485,24 @@ pub const Compiler = struct {
             .call => {
                 const extra = self.ast.getExtra(node.data.extra_id, CallExtra);
 
+                const reg_return = self.context.getRegister();
+                const reg_callee = try self.compileExpression(extra.callee);
+
+                try self.emitInstruction(Instruction.fromABC(.op_call, reg_return, reg_callee, 0));
+
                 if (extra.args) |args| {
+                    var args_start: ?usize = null;
                     for (args) |arg_node_id| {
                         const reg_arg = try self.compileExpression(arg_node_id);
-                        self.context.chunk.addArgument(reg_arg) catch unreachable;
+                        const arg_index = self.context.chunk.addArgument(reg_arg) catch unreachable;
+                        if (args_start == null) {
+                            args_start = arg_index;
+                        }
                     }
+                    try self.emitInstruction(Instruction.fromAB(.op_call_args, @intCast(args.len), @intCast(args_start.?)));
                 }
 
-                // TODO: snapshot still needed (new call instructions)
-                const snapshot = self.context.snapshotRegisters();
-
-                const reg_callee = self.context.getRegister();
-
-                try self.compileExpressionEnsureRegister(extra.callee, reg_callee);
-
-                var arg_count: u8 = 0;
-                if (extra.args) |args| {
-                    for (args) |arg_node_id| {
-                        const reg_arg = self.context.getTmpRegister();
-                        _ = try self.compileExpressionEnsureRegister(arg_node_id, reg_arg);
-                        self.context.ensureAllocated(reg_arg);
-                        arg_count += 1;
-                    }
-                }
-
-                try self.emitInstruction(Instruction.fromABC(.call, reg_callee, reg_callee, arg_count));
-                self.context.restoreRegisters(snapshot);
-                return reg_callee;
+                return reg_return;
             },
 
             //unary operations
