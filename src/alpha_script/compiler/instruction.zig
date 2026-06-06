@@ -25,7 +25,8 @@ pub const OpCode = enum(u8) {
 
     // interaction
     // TODO: refactor call arguments. Should get REG_DEST REG_CALLEE REG_ARGS_START so the function doesn't need to be copied every time
-    call, // REG_DEST REG_CALLEE ARGS_COUNT // call REG_CALLEE and store the return Value in REG_DEST (ARG_COUNT registers after REG_CALLEE are reserved for call arguments)
+    op_call_setup, // ARG_COUNT ARG_INDEX // must be followed by op_call_exec -  read ARG_COUNT registers starting from ARG_INDEX and and copy the cresponding values into a new callframe
+    op_call_exec, // REG_DEST REG_CALLEE 0 // must be preceded by op_call_setup - call the function in REG_CALLEE with the arguments set up by the preceding op_call_setup and save the return value in REG_DEST
     call_return, // 0 REG_FIRST_VALUE VALUE_COUNT  // return from a call and put all return values (start_value + count) into the REG_DEST of the call instruction
     create_closure, // REG_DEST CONST_ADDR // create a closure from a function at CONST_ADDR and save it in REG_DEST
     close_upvalue, // 0 REG_TO_THIS_VALUE // close the UpValue of a given register and all above
@@ -75,6 +76,7 @@ pub const Chunk = struct {
     allocator: std.mem.Allocator,
     code: std.ArrayList(Instruction),
     constants: std.ArrayList(Value),
+    arguments: std.ArrayList(RegisterId), // maps argument register indices to their names for better error messages
 
     pub fn init(allocator: std.mem.Allocator) Chunk {
         return .{
@@ -103,8 +105,14 @@ pub const Chunk = struct {
 
         return @intCast(self.constants.items.len - 1);
     }
+
+    pub fn addArgument(self: *Chunk, reg: RegisterId) !usize {
+        try self.arguments.append(self.allocator, reg);
+        return self.arguments.items.len - 1;
+    }
 };
 
 const std = @import("std");
 const as = @import("as");
 const Value = as.runtime.values.Value;
+const RegisterId = as.runtime.RegisterId;

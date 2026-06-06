@@ -485,6 +485,14 @@ pub const Compiler = struct {
             .call => {
                 const extra = self.ast.getExtra(node.data.extra_id, CallExtra);
 
+                if (extra.args) |args| {
+                    for (args) |arg_node_id| {
+                        const reg_arg = try self.compileExpression(arg_node_id);
+                        self.context.chunk.addArgument(reg_arg) catch unreachable;
+                    }
+                }
+
+                // TODO: snapshot still needed (new call instructions)
                 const snapshot = self.context.snapshotRegisters();
 
                 const reg_callee = self.context.getRegister();

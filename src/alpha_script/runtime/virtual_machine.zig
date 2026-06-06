@@ -20,6 +20,7 @@ pub const VirtualMachine = struct {
     pub const Error = error{
         ArgumentCount,
         StackOverflow,
+        InvalidInstruction,
     };
 
     allocator: std.mem.Allocator,
@@ -337,6 +338,64 @@ pub const VirtualMachine = struct {
                     const upvalue = current_frame.closure.?.upvalues[instruction.abc.a].?;
                     const reg_source = base + instruction.abc.b;
                     upvalue.location.* = stack[reg_source];
+                },
+                .op_call_setup => {
+                    const arg_count = instruction.ab.a;
+                    const arg_index = instruction.ab.b;
+
+                    const exec_instruction = code[current_frame.ip];
+                    current_frame.ip += 1;
+                    if (exec_instruction.abc.opcode != as.compiler.OpCode.op_call_exec) {
+                        self.error_reporter.virtualMachineError(self, Error.InvalidInstruction, "Expected op_call_exec after op_call_setup");
+                        return Error.InvalidInstruction;
+                    }
+
+                    const arg_regs = chunk.arguments.items[arg_index .. arg_index + arg_count];
+                    const reg_callee = base + exec_instruction.abc.b;
+                    const reg_return = base + exec_instruction.abc.a;
+
+                    const callee = stack[reg_callee];
+
+                    const new_base = current_frame.base_pointer + current_frame.function.max_registers;
+                    const new_top = new_base + callee.max_registers;
+
+                    // init registers for call frame
+                    if (new_top > STACK_MAX) {
+                        self.error_reporter.virtualMachineError(self, Error.StackOverflow, "Stack overflow");
+                        return Error.StackOverflow;
+                    }
+
+                    var index = new_base;
+                    while (index < new_top) : (index += 1) {
+                        if (index < new_base + arg_count) {
+                            stack[index] = stack[base + arg_regs[index - new_base]];
+                        } else {
+                            stack[index] = Value.makeUninitialized();
+                        }
+                    }
+
+                    self.stack_top = new_top;
+
+                    // setup call frame
+                    if (self.frame_count >= FRAMES_MAX) {
+                        self.error_reporter.virtualMachineError(self, Error.StackOverflow, "Stack overflow");
+                        return Error.StackOverflow;
+                    }
+
+                    var frame: *CallFrame = &self.frames[self.frame_count];
+                    self.frame_count += 1;
+
+                    frame.closure = null;
+                    frame.function = callee;
+                    frame.ip = 0;
+                    frame.base_pointer = new_base;
+                    frame.reg_return = reg_return;
+
+                    // update run loop
+                    current_frame = &self.frames[self.frame_count - 1];
+                    chunk = current_frame.function.chunk;
+                    code = chunk.code.items;
+                    base = current_frame.base_pointer;
                 },
                 .call => {
                     const reg_dest = base + instruction.abc.a;

@@ -85,7 +85,7 @@ pub const ObjFunction = struct {
     header: ObjectHeader,
     arity: u8,
     upvalue_locations: []UpValueLocation,
-    max_registers: u8,
+    max_registers: u8, // TODO: move to Chunk
     chunk: Chunk,
     name: ?*ObjString,
 
