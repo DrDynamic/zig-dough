@@ -1,19 +1,13 @@
-print("A" + "B" + "C");   // expect: ()
+var nan = 0/0;
 
+print(nan == 0); // expect: false
+print(nan != 1); // expect: true
+print(nan > 5); // expect: false
+print(nan < 5); // expect: false
 
-//fn create(): ():int {
-//    var a = 0;
-//    return fn():int {
-//        a = a + 1;
-//        return a;
-//    }
-//}
-//
-//var incrementer = create()
-//print(incrementer())
-//print(incrementer())
-//print(incrementer())
-//print(incrementer())
+// NaN is not equal to self.
+print(nan == nan); // expect: false
+print(nan != nan); // expect: true
 
 // regression
 // var a = "A" + "B" + "C"

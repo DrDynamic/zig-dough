@@ -1,5 +1,5 @@
 
-var a:Bool = false
+var a:bool = false
 
 if(a) |b| { // expect compile error: Error at 'b': then capture is pointless (capture is always true)
     print(b);

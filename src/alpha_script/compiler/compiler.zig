@@ -44,10 +44,11 @@ pub const CompilerContext = struct {
 
     /// restores a snapshot of the register allocator
     pub fn restoreRegisters(self: *CompilerContext, snapshot: RegisterAllocator) void {
-        const old_max = self.register_allocator.max_allocated;
+        const current: RegisterAllocator = self.register_allocator.saveSnapshot();
 
         self.register_allocator.restoreSnapshot(snapshot);
-        self.register_allocator.max_allocated = old_max;
+        self.register_allocator.max_allocated = current.max_allocated;
+        self.register_allocator.forced_next_reg = current.forced_next_reg;
     }
 
     /// a getter for the count of used registers
@@ -587,7 +588,10 @@ pub const Compiler = struct {
     }
 
     fn emitBinaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {
+        // TODO: optimizze, when evaluated into var - lhs is wrtten in var but result is written in tmp and moved to var
         const extra = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
+
+        // TODO: snapshots still needed?
         const snapshot = self.context.snapshotRegisters();
 
         const reg_lhs = try self.compileExpression(extra.lhs);

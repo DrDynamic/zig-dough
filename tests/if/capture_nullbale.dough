@@ -1,5 +1,5 @@
 
-var maybe_a:?String = null
+var maybe_a:?string = null
 
 if(maybe_a) |a| {
     print(a);

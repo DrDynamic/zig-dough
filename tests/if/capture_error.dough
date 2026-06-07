@@ -1,5 +1,5 @@
 
-var maybe_a:!String = "lorem"
+var maybe_a:!string = "lorem"
 
 if(maybe_a) |a| {
     print(a) // expect: lorem
