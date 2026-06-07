@@ -120,10 +120,6 @@ pub const RegisterAllocator = struct {
 
     /// ensures that the next allocate() call will return the specified register
     pub fn forceNext(self: *RegisterAllocator, reg: u8) Error!void {
-        if (self.allocated_bits.isSet(reg)) {
-            return Error.RegisterAlreadyAllocated;
-        }
-        // Wir merken uns das Register für den nächsten allocate-Aufruf
         self.forced_next_reg = reg;
     }
 
