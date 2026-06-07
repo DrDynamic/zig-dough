@@ -485,10 +485,8 @@ pub const Compiler = struct {
             .call => {
                 const extra = self.ast.getExtra(node.data.extra_id, CallExtra);
 
-                const reg_return = self.context.getRegister();
+                var reg_return: RegisterId = undefined;
                 const reg_callee = try self.compileExpression(extra.callee);
-
-                try self.emitInstruction(Instruction.fromABC(.op_call, reg_return, reg_callee, 0));
 
                 if (extra.args) |args| {
                     var args_start: ?usize = null;
@@ -499,7 +497,12 @@ pub const Compiler = struct {
                             args_start = arg_index;
                         }
                     }
+                    reg_return = self.context.getTmpRegister();
+                    try self.emitInstruction(Instruction.fromABC(.op_call, reg_return, reg_callee, 0));
                     try self.emitInstruction(Instruction.fromAB(.op_call_args, @intCast(args.len), @intCast(args_start.?)));
+                } else {
+                    reg_return = self.context.getTmpRegister();
+                    try self.emitInstruction(Instruction.fromABC(.op_call, reg_return, reg_callee, 0));
                 }
 
                 return reg_return;

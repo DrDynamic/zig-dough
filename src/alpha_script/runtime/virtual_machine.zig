@@ -340,10 +340,30 @@ pub const VirtualMachine = struct {
                     const reg_source = base + instruction.abc.b;
                     upvalue.location.* = stack[reg_source];
                 },
-                .op_call => {
+                .op_call => case: {
                     const callee = stack[base + instruction.abc.b];
                     var function: *ObjFunction = undefined;
                     var closure: ?*ObjClosure = null;
+
+                    // TODO: create constant for max_args
+                    var arg_buffer: [32]Value = undefined;
+                    var args: []Value = &.{};
+                    // init args if there is an op_call_args instruction
+                    const next_instruction = code[current_frame.ip];
+                    if (next_instruction.ab.opcode == as.compiler.OpCode.op_call_args) {
+                        current_frame.ip += 1;
+
+                        const arg_count = next_instruction.ab.a;
+                        const arg_index = next_instruction.ab.b;
+
+                        const arg_regs = chunk.arguments.items[arg_index .. arg_index + arg_count];
+
+                        for (arg_regs, 0..) |arg_reg, index| {
+                            arg_buffer[index] = stack[base + arg_reg];
+                        }
+                        args = arg_buffer[0..arg_count];
+                    }
+
                     if (callee.isObject()) {
                         switch (callee.object.tag) {
                             .closure => {
@@ -355,14 +375,10 @@ pub const VirtualMachine = struct {
                             },
                             .native_function => {
                                 const native = callee.object.as(values.ObjNative);
-
-                                const reg_args_start = base + instruction.abc.b + 1;
-                                const args = stack[reg_args_start .. reg_args_start + instruction.abc.c];
-
                                 const result = native.function(&self.execution_context, args);
                                 // TODO: check return type (don't mutate stack if void)
                                 stack[base + instruction.abc.a] = result;
-                                break;
+                                break :case;
                             },
 
                             else => return Error.InvalidCallee,
@@ -380,25 +396,14 @@ pub const VirtualMachine = struct {
                         return Error.StackOverflow;
                     }
 
-                    var arg_count: usize = 0;
-                    // init args if there is an op_call_args instruction
-                    const next_instruction = code[current_frame.ip];
-                    if (next_instruction.ab.opcode == as.compiler.OpCode.op_call_args) {
-                        current_frame.ip += 1;
-
-                        arg_count = next_instruction.ab.a;
-                        const arg_index = next_instruction.ab.b;
-
-                        const arg_regs = chunk.arguments.items[arg_index .. arg_index + arg_count];
-                        for (arg_regs, 0..) |arg_reg, index| {
-                            stack[new_base + index] = stack[base + arg_reg];
-                        }
-                    }
-
                     // init registers for call frame
-                    var index = new_base + arg_count;
+                    var index = new_base;
                     while (index < new_top) : (index += 1) {
-                        stack[index] = Value.makeUninitialized();
+                        if (index <= new_base + args.len - 1) {
+                            stack[index] = args[new_base - index];
+                        } else {
+                            stack[index] = Value.makeUninitialized();
+                        }
                     }
 
                     self.stack_top = new_top;
