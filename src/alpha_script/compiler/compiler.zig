@@ -79,6 +79,10 @@ pub const CompilerContext = struct {
         return self.register_allocator.allocateTemporary() catch unreachable; // when this fails, we don't have registers left and can not compile...
     }
 
+    pub inline fn allocateTempRegisters(self: *CompilerContext, comptime count: u8) Compiler.Error![count]RegisterId {
+        return self.register_allocator.allocateTemporaries(count) catch return Compiler.Error.OutOfRegisters;
+    }
+
     /// releases a register for later use
     pub fn releaseRegister(self: *CompilerContext, reg: RegisterId) void {
         self.register_allocator.free(reg);
@@ -93,6 +97,7 @@ pub const Compiler = struct {
         ConstantOverflow,
         UpValueOverflow,
         OutOfMemory,
+        OutOfRegisters,
     };
 
     allocator: std.mem.Allocator,
@@ -591,24 +596,20 @@ pub const Compiler = struct {
         // TODO: optimizze, when evaluated into var - lhs is wrtten in var but result is written in tmp and moved to var
         const extra = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
 
-        // TODO: snapshots still needed?
-        const snapshot = self.context.snapshotRegisters();
+        const registers = try self.context.allocateTempRegisters(2);
 
+        self.context.setNextRegister(registers[0]);
         const reg_lhs = try self.compileExpression(extra.lhs);
-        self.context.ensureAllocated(reg_lhs);
+
+        self.context.setNextRegister(registers[1]);
         const reg_rhs = try self.compileExpression(extra.rhs);
 
-        // when lhs is a variable, the register must not be reused!
-        if (!snapshot.isAllocated(reg_lhs)) {
-            self.context.releaseRegister(reg_lhs);
-        }
-
-        const reg_dest = self.context.getTmpRegister();
+        const reg_dest = registers[0];
 
         try self.emitInstruction(Instruction.fromABC(opcode, reg_dest, reg_lhs, reg_rhs));
 
         // free all regs
-        self.context.restoreRegisters(snapshot);
+        //        self.context.restoreRegisters(snapshot);
         return reg_dest;
     }
 

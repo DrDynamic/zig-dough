@@ -153,7 +153,7 @@ pub const Disassambler = struct {
             },
             .op_call => return self.printCall(instruction),
             .op_call_args => {
-                self.terminal.print("{s:<16} R{d:<2}, A{d:<3}    ; ", .{
+                self.terminal.print("{s:<16}  {d:<2}, A{d:<3}    ; ", .{
                     @tagName(op),
                     instruction.ab.a,
                     instruction.ab.b,

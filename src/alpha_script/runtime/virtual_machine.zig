@@ -149,7 +149,14 @@ pub const VirtualMachine = struct {
         const instruction = chunk.code.items[used_frame.ip - 1];
         const current_frame = self.frames[self.frame_count - 1];
 
-        const description = disassambler.disassambleInstruction(&chunk, instruction, used_frame.ip - 1);
+        var maybe_prequel: ?as.frontend.debug.InstructionDescription = null;
+        if (instruction.ab.opcode == .op_call_args) {
+            maybe_prequel = disassambler.disassambleInstruction(&chunk, chunk.code.items[used_frame.ip - 2], used_frame.ip - 2);
+        }
+        var description = disassambler.disassambleInstruction(&chunk, instruction, used_frame.ip - 1);
+        if (maybe_prequel) |prequel| {
+            description = prequel;
+        }
 
         for (stack[0..used_tack_top], 0..) |value, register| {
             const local_address = if (register >= used_frame.base_pointer)
@@ -210,7 +217,10 @@ pub const VirtualMachine = struct {
         const terminal = try as.common.Terminal.init(std.fs.File.stdout(), self.allocator);
         defer terminal.deinit();
 
-        var disassambler = as.frontend.debug.Disassambler.init(terminal);
+        var stack_printer: ?StackPrinter = null;
+        if (debug) {
+            stack_printer = StackPrinter.init(terminal, stack, &self.frames, &self.frame_count);
+        }
 
         while (true) {
             if (current_frame.ip >= code.len) return;
@@ -506,7 +516,7 @@ pub const VirtualMachine = struct {
             }
 
             if (debug) {
-                self.printStack(&disassambler, used_stack_top, used_frame_count, used_frame);
+                stack_printer.?.printStack(used_stack_top, used_frame_count, used_frame);
             }
         }
     }
@@ -636,6 +646,7 @@ const ObjFunction = as.runtime.values.ObjFunction;
 const ObjModule = as.runtime.values.ObjModule;
 const ObjString = as.runtime.values.ObjString;
 const ObjUpValue = as.runtime.values.ObjUpValue;
+const StackPrinter = as.frontend.debug.StackPrinter;
 const StringTable = as.common.StringTable;
 const TypePool = as.frontend.TypePool;
 const Value = as.runtime.values.Value;

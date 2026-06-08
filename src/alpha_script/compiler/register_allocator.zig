@@ -35,8 +35,6 @@ pub const RegisterAllocator = struct {
         // check if there's a forced register to allocate
         if (self.forced_next_reg) |forced_reg| {
             self.forced_next_reg = null;
-
-            self.allocateSpecific(forced_reg);
             return forced_reg;
         }
 
@@ -58,46 +56,34 @@ pub const RegisterAllocator = struct {
         return reg;
     }
 
+    pub fn allocateTemporaries(self: *RegisterAllocator, comptime count: u8) Error![count]RegisterId {
+        var result: [count]RegisterId = undefined;
+
+        const used_force_next = (self.forced_next_reg != null);
+
+        comptime var index: u8 = 0;
+        inline while (index < count) : (index += 1) {
+            result[index] = try self.allocate();
+        }
+
+        index = 0;
+        inline while (index < count) : (index += 1) {
+            if (index == 0 and used_force_next) {
+                // first register comes from force next - should not be freed
+                // continue; // can not continue urolled loop
+            } else {
+                self.free(result[index]);
+            }
+        }
+
+        return result;
+    }
+
     /// allocates the given register if it isn't already
     pub fn ensureAllocated(self: *RegisterAllocator, reg: RegisterId) void {
         if (!self.allocated_bits.isSet(reg)) {
             self.allocateSpecific(reg);
         }
-    }
-
-    /// allocates a contiguous range of registers, returns the start register or an error if no suitable range is available
-    pub fn allocateRange(self: *RegisterAllocator, count: u8) Error!u8 {
-        if (count == 0) return Error.InvalidArgument;
-        if (count == 1) return try self.allocate();
-
-        var start_reg: u16 = 0;
-        while (start_reg <= 256 - count) {
-            var contiguous_found = true;
-
-            // test if the range can start here
-            var i: u8 = 0;
-            while (i < count) : (i += 1) {
-                if (self.allocated_bits.isSet(@intCast(start_reg + i))) {
-                    start_reg = start_reg + i + 1;
-                    contiguous_found = false;
-                    break;
-                }
-            }
-
-            // allocate the range
-            if (contiguous_found) {
-                const final_start = @as(u8, @intCast(start_reg));
-
-                var reg_idx = final_start;
-                while (reg_idx < final_start + count) : (reg_idx += 1) {
-                    self.allocateSpecific(reg_idx);
-                }
-
-                return final_start;
-            }
-        }
-
-        return Error.OutOfRegisters;
     }
 
     /// free a previously allocated register
