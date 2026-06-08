@@ -1,12 +1,11 @@
-var a = "a";
-var b = "b";
-var c = "c";
 
-// Assignment is right-associative.
-a = b = c;
-print(a); // expect: c
-print(b); // expect: c
-print(c); // expect: c
+var maybe_a:?String = null
+
+if(maybe_a) |a| {
+    print(a);
+} else |a| { // expect compile error: Error at 'a': capture is pointless for Nullable condition (it is always null)
+    print("a is null");
+}
 
 // regression
 // var a = "A" + "B" + "C"

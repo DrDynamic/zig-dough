@@ -279,6 +279,10 @@ pub const SemanticAnalyser = struct {
                     self.assertNodeIdIsNull(extra.else_capture, Error.PointlessCapture, "else capture is pointless (capture is always false)") catch |err| {
                         maybe_err = err;
                     };
+
+                    if (maybe_err) |err| {
+                        return err;
+                    }
                 } else if (self.ast.type_pool.isErrorUnion(type_condition)) {
                     self.registerIfCaptureOrFail(
                         extra.then_branch,
@@ -309,13 +313,11 @@ pub const SemanticAnalyser = struct {
                         maybe_err = err;
                     };
 
-                    self.assertNodeIdIsNull(
+                    try self.assertNodeIdIsNull(
                         extra.else_capture,
                         Error.PointlessCapture,
                         "capture is pointless for Nullable condition (it is always null)",
-                    ) catch |err| {
-                        maybe_err = err;
-                    };
+                    );
                 } else {
                     const condition = self.ast.nodes.items[extra.condition];
                     self.error_reporter.semanticAnalyserError(self, Error.IncompatibleTypes, condition, "condition needs to evaluate to Bool, Nullable type or ErrorUnion");

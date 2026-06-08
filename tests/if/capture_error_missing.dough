@@ -2,7 +2,7 @@
 var maybe_a:!string = "lorem"
 
 if(maybe_a) { // expect compile error: Error at '{': missing then capture for ErrorUnion condition
-    print(a) 
+    print("success") 
 } else { // expect compile error: Error at '{': missing else capture for ErrorUnion condition
-    print(err)
+    print("error")
 }
