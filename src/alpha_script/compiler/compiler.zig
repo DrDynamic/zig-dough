@@ -478,6 +478,7 @@ pub const Compiler = struct {
 
             .expression_identifier => {
                 if (self.resolveLocal(node.data.string_id, true)) |reg_identifier| {
+                    self.context.register_allocator.forced_next_reg = null;
                     return reg_identifier;
                 } else |_| {
                     const reg_identifier = self.context.getTmpRegister();
@@ -593,23 +594,22 @@ pub const Compiler = struct {
     }
 
     fn emitBinaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {
-        // TODO: optimizze, when evaluated into var - lhs is wrtten in var but result is written in tmp and moved to var
         const extra = self.ast.getExtra(node.data.extra_id, ast.BinaryOpExtra);
 
-        const registers = try self.context.allocateTempRegisters(2);
+        const snapshot = self.context.snapshotRegisters();
 
-        self.context.setNextRegister(registers[0]);
+        const reg_dest = self.context.getRegister();
+
+        self.context.setNextRegister(reg_dest);
         const reg_lhs = try self.compileExpression(extra.lhs);
 
-        self.context.setNextRegister(registers[1]);
+        self.context.setNextRegister(self.context.getRegister());
         const reg_rhs = try self.compileExpression(extra.rhs);
-
-        const reg_dest = registers[0];
 
         try self.emitInstruction(Instruction.fromABC(opcode, reg_dest, reg_lhs, reg_rhs));
 
-        // free all regs
-        //        self.context.restoreRegisters(snapshot);
+        self.context.restoreRegisters(snapshot);
+
         return reg_dest;
     }
 

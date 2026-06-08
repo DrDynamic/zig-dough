@@ -50,7 +50,11 @@ pub const RegisterAllocator = struct {
 
     /// returns a temporary register that is not allocated (can be requested immediately again)
     pub fn allocateTemporary(self: *RegisterAllocator) Error!RegisterId {
-        // allocated and freed to track the register in statistics and ensure forceNext behavior
+        if (self.forced_next_reg) |forced_reg| {
+            self.forced_next_reg = null;
+            return forced_reg;
+        }
+
         const reg = try self.allocate();
         self.free(reg);
         return reg;

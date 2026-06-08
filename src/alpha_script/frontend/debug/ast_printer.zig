@@ -26,9 +26,10 @@ pub const ASTPrinter = struct {
         const node_type = self.type_pool.types.items[node.resolved_type_id];
 
         // 1. draw the branch
-        self.terminal.print("{s}{s}", .{
+        self.terminal.print("{s}{s}#{d}", .{
             prefix,
             if (is_last) "└──" else "├──",
+            node_idx,
         });
 
         self.terminal.printWithOptions("[{s}] ", .{
