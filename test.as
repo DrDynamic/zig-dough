@@ -12,6 +12,7 @@ error OtherError {
 
 test = OtherError.Unknown; // expect compile error: Error at 'OtherError': can not assign Unknown to string|error{NotSet}
 print(test);
+
 // regression - arguments don't evaluate to the same register
 //fn printThree(a:any, b:any, c:any): void {
 //    print(a);

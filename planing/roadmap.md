@@ -12,7 +12,15 @@ A feature is done, when:
 - any type
 - variables
 - constants
-- functions (with closures, hoising and calls)
+- functions
+  - closures
+  - hoisting
+  - calls
+  - call by reference
+  - default values
+  - named arguments
+  - elipsis
+
 - typesystem
 - simple garbage collection
 - simple math (+-*/)
@@ -34,6 +42,12 @@ A feature is done, when:
 - attributes
 - decorators
 - Native support
+- more datatypes
+    - byte (alias for u8?)
+    - i16 / u16
+    - int (alias for i32 or i64?)
+    - uint (alias for u32 or u64?)
+
 
 # later
 - traits

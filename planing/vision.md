@@ -120,9 +120,9 @@ const data = open_file("config.json") catch |err| {
 Variables can hold values that span multiple types. Type checking and safe, compiler-verified unwrapping (Type Narrowing) are performed using the infix operator `is`. Within the scope of the conditional block, the compiler guarantees the narrowed type.
 
 ```typescript
-type Id = u64 | string
+type Id = int | string
 
-fn process_id(id: Id) {
+fn process_id(id: Id) void {
     if (id is string) {
         // 'id' is guaranteed to be of type string here
         print("String-UUID: {id.to_upper()}")
@@ -139,7 +139,7 @@ fn process_id(id: Id) {
 Merges existing structural types (Shapes) into a new, combined type:
 
 ```typescript
-type Timestamps = { created_at: u64 }
+type Timestamps = { created_at: int }
 type UserData = { name: string }
 type UserRow = UserData & Timestamps
 
@@ -162,7 +162,7 @@ The syntax strictly distinguishes between a missing key and a key whose value is
 
 ```typescript
 type UserPayload = {
-    id: u64,
+    id: int,
     bio: ?string,
     ?age: !u8,
     ?website: !?string,
@@ -182,9 +182,9 @@ Shapes can contain function signatures. Any class or object literal that structu
 
 ```typescript
 type Transactionable = {
-    begin: fn(): void,
-    commit: fn(): void,
-    rollback: fn(): void,
+    begin: fn() void,
+    commit: fn() void,
+    rollback: fn() void,
 }
 
 ```
@@ -205,10 +205,10 @@ Anonymous functions and closures strictly use the `fn` keyword as an unambiguous
 const doubled = numbers.map(fn(n) => n * 2)
 
 // With generics and typing
-const identity = fn<T>(val: T): T => val
+const identity = fn<T>(val: T) T => val
 
 // Multiliner with explicit block and return
-const dynamic = numbers.filter(fn(n) {
+const dynamic = numbers.filter(fn(n) bool {
     if (n < 0) return false
     return check_validity(n)
 })
@@ -221,11 +221,11 @@ const dynamic = numbers.filter(fn(n) {
 * **Explicit Reference Passing (&var):** If a function needs to directly manipulate or overwrite the caller's original source (Pass-by-Reference), the parameter must be explicitly declared as `&var`.
 
 ```rust
-fn increment(&var counter: u32):void {
+fn increment(&var counter: int) void {
     counter += 1 // Directly manipulates the caller's variable
 }
 
-pub fn main():void {
+pub fn main() void {
     var my_counter = 10
     increment(&var my_counter) // Requires explicit marking at the call site
     // my_counter is now 11
@@ -251,7 +251,7 @@ The constructor is defined via the magic method `__construct`. If arguments in t
 class User {
     // Automatically generates fields 'id', 'email', and 'password_hash'
     pub fn __construct(
-        pub id: u64,
+        pub id: int,
         pub email: string,
         priv password_hash: string
     ) {}
@@ -277,13 +277,13 @@ Cases inside an enum must be separated by commas. Enums can contain their own me
 Every enum has a `.value` property (returns the raw value) and a static `.from(raw)` method. Since parsing a raw value can fail, `.from()` returns an **Error Union (!T)**.
 
 ```rust
-pub enum HttpCode: u16 {
+pub enum HttpCode: int {
     ok = 200,
     created = 201,
     bad_request = 400,
 }
 
-fn handle(raw: u16) {
+fn handle(raw: int) {
     // Catches parsing failures and falls back to a default
     const code = HttpCode.from(raw) catch HttpCode.bad_request
     print("Code is: {code.value}")
@@ -336,7 +336,7 @@ In PAZ, `switch` and `match` are unified into a single powerful construct. A `sw
 2. **Compiler-Enforced Specificity (Dead Code Detection):** To prevent logical bugs, the compiler forbids pattern shadowing. A general pattern (e.g., `is u64`) **cannot** be placed before a specific pattern (e.g., the value `404`). If a branch is unreachable, compilation fails.
 
 ```rust
-type Id = u64 | string
+type Id = int | string
 const id: Id = 404
 
 const display_name = switch (id) {
@@ -386,7 +386,7 @@ Inherit from the abstract base class `std/meta.Decorator`. They actively interce
 
 ```rust
 class Logged extends Decorator {
-    pub fn wrap(target: fn, ...args: any): any {
+    pub fn wrap(target: fn, ...args: any) any {
         print("Before function call")
         defer print("After function call")
         return target(...args)
@@ -394,7 +394,7 @@ class Logged extends Decorator {
 }
 
 #[Logged]
-fn execute_heavy_logic():void { ... }
+fn execute_heavy_logic() void { ... }
 
 ```
 
@@ -404,7 +404,7 @@ A built-in compiler attribute. Marks functions that have no body but are instead
 
 ```rust
 [Native("sys_socket_read")]
-pub fn read_socket(handle: u64): ![]u8
+pub fn read_socket(handle: int) ![]int
 
 ```
 
@@ -435,13 +435,13 @@ If `.cancel()` is called or a `.timeout()` expires, the runtime does not brutall
 ```rust
 // Excerpt from std/async/future.paz
 pub class Future<T> {
-    priv fiber_handle: u64
-    priv timeout_ms: ?u64
+    priv fiber_handle: uint
+    priv timeout_ms: ?uint
 
     [Native("sys_future_init")]
-    priv fn __construct(priv fiber_handle: u64) {}
+    priv fn __construct(priv fiber_handle: uint) {}
 
-    pub fn timeout(ms: u64): Future<T> {
+    pub fn timeout(ms: uint): Future<T> {
         this.timeout_ms = ms
         this.register_native_timeout(ms)
         return this
@@ -450,17 +450,17 @@ pub class Future<T> {
     [Native("sys_future_cancel")]
     pub fn cancel(): void
 
-    pub fn then<R>(callback: fn(value: T): R): Future<R> {
+    pub fn then<R>(callback: fn(value: T) R): Future<R> {
         const next_handle = this.native_register_then(callback)
         return new Future<R>(next_handle)
     }
 
-    pub fn catch(callback: fn(err: any): void): Future<T> {
+    pub fn catch(callback: fn(err: any) void) Future<T> {
         this.native_register_catch(callback)
         return this
     }
 
-    pub fn finally(callback: fn(): void): Future<T> {
+    pub fn finally(callback: fn() void) Future<T> {
         this.native_register_finally(callback)
         return this
     }
@@ -501,16 +501,20 @@ pub class Context {
     priv key: string
     priv value: any
 
-    priv fn __construct(priv parent: ?Context, priv key: string, priv value: any) {}
+    priv fn __construct(
+        priv parent: ?Context,
+        priv key: string, 
+        priv value: any,
+    ) {}
 
     [Native("sys_ctx_current")]
-    pub static fn current(): Context
+    pub static fn current() Context
 
-    pub fn with(key: string, value: any): Context {
+    pub fn with(key: string, value: any) Context {
         return new Context(this, key, value)
     }
 
-    pub fn get<T>(key: string): !?T {
+    pub fn get<T>(key: string) !?T {
         if (this.key == key) {
             if (this.value is T) {
                 return this.value as T
