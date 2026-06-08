@@ -87,6 +87,10 @@ pub const Interpreter = struct {
             return error.InvalidAST;
         }
 
+        if (compiler_options.print_ast) {
+            try as.frontend.debug.ASTPrinter.printAST(&ast, compiler_options.terminal);
+        }
+
         self.semantic_analyser.analyseAst(&ast, self.buildinFunctions.items);
         if (!ast.is_valid) {
             return error.InvalidAST;

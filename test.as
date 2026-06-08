@@ -1,11 +1,18 @@
 
-var maybe_a:?String = null
 
-if(maybe_a) |a| {
-    print(a);
-} else |a| { // expect compile error: Error at 'a': capture is pointless for Nullable condition (it is always null)
-    print("a is null");
-}
+
+// regression
+//fn noop(): void {}
+//noop();
+//(true)
+//////////////////////////////////////////////////////
+
+// regression
+noop();
+fn noop(): void {}
+(true)
+//////////////////////////////////////////////////////
+
 
 // regression
 // var a = "A" + "B" + "C"
