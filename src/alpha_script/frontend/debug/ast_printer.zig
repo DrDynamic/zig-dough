@@ -128,7 +128,7 @@ pub const ASTPrinter = struct {
                     _ = prototype.pop(); // remove last ','
                 }
 
-                try prototype.append(self.ast.allocator, ')');
+                try prototype.appendSlice(self.ast.allocator, "): ");
 
                 const return_type_name = try self.ast.type_pool.getTypeNameAlloc(
                     self.ast.allocator,
@@ -137,6 +137,7 @@ pub const ASTPrinter = struct {
                 );
                 defer self.ast.allocator.free(return_type_name);
                 try prototype.appendSlice(self.ast.allocator, return_type_name);
+                self.terminal.print(": {s}\n", .{prototype.items});
             },
             .expression_block,
             .expression_grouping,

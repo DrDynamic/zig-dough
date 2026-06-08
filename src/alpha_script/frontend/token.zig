@@ -72,4 +72,16 @@ pub const Token = struct {
         start: usize,
         end: usize,
     },
+    leading_newlines: u8,
+
+    pub fn init(tag: TokenType, start: usize, end: usize, leading_newlines: u8) Token {
+        return .{
+            .tag = tag,
+            .location = .{
+                .start = start,
+                .end = end,
+            },
+            .leading_newlines = leading_newlines,
+        };
+    }
 };

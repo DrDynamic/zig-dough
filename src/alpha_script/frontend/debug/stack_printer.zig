@@ -38,7 +38,7 @@ pub const StackPrinter = struct {
         var style: as.common.Terminal.PrintOptions = undefined;
         for (0.., self.frames[0..used_frame_count]) |index, frame| {
             const reg_frame_start = frame.base_pointer;
-            const reg_frame_end = frame.base_pointer + (frame.function.max_registers - 1);
+            const reg_frame_end = frame.base_pointer + (frame.function.max_registers -| 1);
 
             style = if (index == used_frame_count - 1)
                 active_frame_style
@@ -116,8 +116,8 @@ pub const StackPrinter = struct {
             if (instruction.abc.opcode == .op_call) {
                 call_callee = instruction.abc.b == local_address;
 
-                const arg_index = instruction_extra.?.ab.b;
-                const arg_count = instruction_extra.?.ab.a;
+                const arg_index = if (instruction_extra) |extra| extra.ab.b else 0;
+                const arg_count = if (instruction_extra) |extra| extra.ab.a else 0;
 
                 call_arg = is_arg: for (chunk.arguments.items[arg_index .. arg_index + arg_count]) |reg_arg| {
                     if (local_address == reg_arg) {
@@ -125,7 +125,7 @@ pub const StackPrinter = struct {
                     }
                 } else false;
 
-                if (register - current_frame.base_pointer == instruction.abc.a) {
+                if (register > current_frame.base_pointer and register - current_frame.base_pointer == instruction.abc.a) {
                     call_return = true;
                 }
             }

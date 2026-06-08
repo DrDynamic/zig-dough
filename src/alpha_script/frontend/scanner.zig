@@ -14,9 +14,9 @@ pub const Scanner = struct {
             .error_reporter = error_reporter,
             .token_stream = token_stream,
             .window = .{
-                .{ .tag = .t_comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
-                .{ .tag = .t_comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
-                .{ .tag = .t_comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
+                Token.init(.t_comptime_uninitialized, 0, 0, 0),
+                Token.init(.t_comptime_uninitialized, 0, 0, 0),
+                Token.init(.t_comptime_uninitialized, 0, 0, 0),
             },
             .window_index = 0,
         };
@@ -31,9 +31,9 @@ pub const Scanner = struct {
     pub fn reset(self: *Scanner) Error!void {
         self.token_stream.pos = 0;
         self.window = .{
-            .{ .tag = .t_comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
-            .{ .tag = .t_comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
-            .{ .tag = .t_comptime_uninitialized, .location = .{ .start = 0, .end = 0 } },
+            Token.init(.t_comptime_uninitialized, 0, 0, 0),
+            Token.init(.t_comptime_uninitialized, 0, 0, 0),
+            Token.init(.t_comptime_uninitialized, 0, 0, 0),
         };
         self.window_index = 0;
 
@@ -99,16 +99,15 @@ pub const TokenStream = struct {
     }
 
     fn nextToken(self: *TokenStream) Scanner.Error!Token {
-        self.skipWhitespaceAndComments();
+        const leading_newlines = self.skipWhitespaceAndComments();
 
         if (self.isAtEnd()) {
-            return .{
-                .tag = .t_eof,
-                .location = .{
-                    .start = self.pos,
-                    .end = self.pos,
-                },
-            };
+            return Token.init(
+                .t_eof,
+                self.pos,
+                self.pos,
+                leading_newlines,
+            );
         }
 
         const start = self.pos;
@@ -117,49 +116,49 @@ pub const TokenStream = struct {
 
         return switch (char) {
             // Single-character tokens.
-            '(' => .{ .tag = .t_left_paren, .location = .{ .start = start, .end = start + 1 } },
-            ')' => .{ .tag = .t_right_paren, .location = .{ .start = start, .end = start + 1 } },
-            '{' => .{ .tag = .t_left_brace, .location = .{ .start = start, .end = start + 1 } },
-            '}' => .{ .tag = .t_right_brace, .location = .{ .start = start, .end = start + 1 } },
-            '[' => .{ .tag = .t_left_bracket, .location = .{ .start = start, .end = start + 1 } },
-            ']' => .{ .tag = .t_right_bracket, .location = .{ .start = start, .end = start + 1 } },
-            ':' => .{ .tag = .t_colon, .location = .{ .start = start, .end = start + 1 } },
-            ',' => .{ .tag = .t_comma, .location = .{ .start = start, .end = start + 1 } },
-            '.' => .{ .tag = .t_dot, .location = .{ .start = start, .end = start + 1 } },
-            '-' => .{ .tag = .t_minus, .location = .{ .start = start, .end = start + 1 } },
-            '+' => .{ .tag = .t_plus, .location = .{ .start = start, .end = start + 1 } },
-            '?' => .{ .tag = .t_question_mark, .location = .{ .start = start, .end = start + 1 } },
-            ';' => .{ .tag = .t_semicolon, .location = .{ .start = start, .end = start + 1 } },
-            '/' => .{ .tag = .t_slash, .location = .{ .start = start, .end = start + 1 } },
-            '*' => .{ .tag = .t_star, .location = .{ .start = start, .end = start + 1 } },
-            '|' => .{ .tag = .t_pipe, .location = .{ .start = start, .end = start + 1 } },
+            '(' => Token.init(.t_left_paren, start, start + 1, leading_newlines),
+            ')' => Token.init(.t_right_paren, start, start + 1, leading_newlines),
+            '{' => Token.init(.t_left_brace, start, start + 1, leading_newlines),
+            '}' => Token.init(.t_right_brace, start, start + 1, leading_newlines),
+            '[' => Token.init(.t_left_bracket, start, start + 1, leading_newlines),
+            ']' => Token.init(.t_right_bracket, start, start + 1, leading_newlines),
+            ':' => Token.init(.t_colon, start, start + 1, leading_newlines),
+            ',' => Token.init(.t_comma, start, start + 1, leading_newlines),
+            '.' => Token.init(.t_dot, start, start + 1, leading_newlines),
+            '-' => Token.init(.t_minus, start, start + 1, leading_newlines),
+            '+' => Token.init(.t_plus, start, start + 1, leading_newlines),
+            '?' => Token.init(.t_question_mark, start, start + 1, leading_newlines),
+            ';' => Token.init(.t_semicolon, start, start + 1, leading_newlines),
+            '/' => Token.init(.t_slash, start, start + 1, leading_newlines),
+            '*' => Token.init(.t_star, start, start + 1, leading_newlines),
+            '|' => Token.init(.t_pipe, start, start + 1, leading_newlines),
 
             // One or two character tokens.
             '!' => if (self.matchChar('='))
-                .{ .tag = .t_bang_equal, .location = .{ .start = start, .end = start + 2 } }
+                Token.init(.t_bang_equal, start, start + 2, leading_newlines)
             else
-                .{ .tag = .t_bang, .location = .{ .start = start, .end = start + 1 } },
+                Token.init(.t_bang, start, start + 1, leading_newlines),
 
             '=' => if (self.matchChar('='))
-                .{ .tag = .t_equal_equal, .location = .{ .start = start, .end = start + 2 } }
+                Token.init(.t_equal_equal, start, start + 2, leading_newlines)
             else
-                .{ .tag = .t_equal, .location = .{ .start = start, .end = start + 1 } },
+                Token.init(.t_equal, start, start + 1, leading_newlines),
 
             '>' => if (self.matchChar('='))
-                .{ .tag = .t_greater_equal, .location = .{ .start = start, .end = start + 2 } }
+                Token.init(.t_greater_equal, start, start + 2, leading_newlines)
             else
-                .{ .tag = .t_greater, .location = .{ .start = start, .end = start + 1 } },
+                Token.init(.t_greater, start, start + 1, leading_newlines),
             '<' => if (self.matchChar('='))
-                .{ .tag = .t_less_equal, .location = .{ .start = start, .end = start + 2 } }
+                Token.init(.t_less_equal, start, start + 2, leading_newlines)
             else
-                .{ .tag = .t_less, .location = .{ .start = start, .end = start + 1 } },
+                Token.init(.t_less, start, start + 1, leading_newlines),
 
-            '"' => self.makeString('"'),
-            '0' => self.makeNumber(),
-            '1'...'9' => self.makeNumber(),
+            '"' => self.makeString('"', leading_newlines),
+            '0' => self.makeNumber(leading_newlines),
+            '1'...'9' => self.makeNumber(leading_newlines),
             else => |c| else_case: {
                 if (self.isIdentifierChar(c)) {
-                    break :else_case self.makeIdentifier();
+                    break :else_case self.makeIdentifier(leading_newlines);
                 } else {
                     // collect all character to the next whitespace
                     while (!self.isAtEnd()) {
@@ -179,7 +178,7 @@ pub const TokenStream = struct {
         };
     }
 
-    fn makeString(self: *TokenStream, stringChar: u8) !Token {
+    fn makeString(self: *TokenStream, stringChar: u8, leading_newlines: u8) !Token {
         const token_start = self.pos - 1;
         while (!self.matchChar(stringChar) and !self.isAtEnd()) {
             self.pos += 1;
@@ -192,16 +191,15 @@ pub const TokenStream = struct {
             return Scanner.Error.UnterminatedString;
         }
 
-        return .{
-            .tag = .t_string_double_quote,
-            .location = .{
-                .start = token_start,
-                .end = self.pos,
-            },
-        };
+        return Token.init(
+            .t_string_double_quote,
+            token_start,
+            self.pos,
+            leading_newlines,
+        );
     }
 
-    fn makeNumber(self: *TokenStream) Token {
+    fn makeNumber(self: *TokenStream, leading_newlines: u8) Token {
         const token_start = self.pos - 1;
         while (!self.isAtEnd()) {
             if (std.ascii.isDigit(self.source[self.pos]) or (self.source[self.pos] == '.' and self.pos < self.source.len - 1 and std.ascii.isDigit(self.source[self.pos + 1]))) {
@@ -211,16 +209,15 @@ pub const TokenStream = struct {
             }
         }
 
-        return .{
-            .tag = .t_number,
-            .location = .{
-                .start = token_start,
-                .end = self.pos,
-            },
-        };
+        return Token.init(
+            .t_number,
+            token_start,
+            self.pos,
+            leading_newlines,
+        );
     }
 
-    fn makeIdentifier(self: *TokenStream) Token {
+    fn makeIdentifier(self: *TokenStream, leading_newlines: u8) Token {
         const token_start = self.pos - 1;
         while (self.isIdentifierChar(self.source[self.pos])) {
             self.pos += 1;
@@ -310,20 +307,24 @@ pub const TokenStream = struct {
             'w' => self.matchIdentifier("hile", 1, 4, token_start, token_end, .t_while),
             else => .t_identifier,
         };
-        return .{
-            .tag = tokenType,
-            .location = .{
-                .start = token_start,
-                .end = token_end,
-            },
-        };
+        return Token.init(
+            tokenType,
+            token_start,
+            token_end,
+            leading_newlines,
+        );
     }
 
-    fn skipWhitespaceAndComments(self: *TokenStream) void {
+    fn skipWhitespaceAndComments(self: *TokenStream) u8 {
+        var newline_count: u8 = 0;
         while (!self.isAtEnd()) {
             const char = self.source[self.pos];
             switch (char) {
-                ' ', '\t'...'\r' => {
+                '\n' => {
+                    newline_count +|= 1;
+                    self.pos += 1;
+                },
+                ' ', '\t', 0x0B...'\r' => {
                     self.pos += 1;
                 },
                 '/' => {
@@ -348,12 +349,13 @@ pub const TokenStream = struct {
                             self.pos += 1;
                         }
                     } else {
-                        return;
+                        return newline_count;
                     }
                 },
-                else => return,
+                else => return newline_count,
             }
         }
+        return newline_count;
     }
 
     fn matchChar(self: *TokenStream, char: u8) bool {

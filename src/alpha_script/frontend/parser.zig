@@ -522,7 +522,7 @@ pub const Parser = struct {
                 .data = .{ .node_id = try self.unary() },
             });
         }
-        // TODO implement unary
+
         return try self.call();
     }
 
@@ -530,7 +530,7 @@ pub const Parser = struct {
         var callee = try self.primary();
 
         while (true) {
-            if (try self.match(.t_left_paren)) {
+            if (self.scanner.current().leading_newlines == 0 and try self.match(.t_left_paren)) {
                 const token = self.scanner.previous();
                 // finish Call
                 const list_result = try self.expressionList(.t_right_paren);

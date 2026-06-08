@@ -7,7 +7,7 @@
 //(true)
 //////////////////////////////////////////////////////
 
-// regression
+// regression - group is parsed as call
 noop();
 fn noop(): void {}
 (true)

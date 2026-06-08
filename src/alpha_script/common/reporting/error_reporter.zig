@@ -54,13 +54,13 @@ pub const ErrorReporter = struct {
             .error_code = self.calcErrorCode(reporting_module, @intFromError(err)),
             .source_info = .{
                 .file_path = token_stream.getFilePath(),
-                .token = .{
-                    .tag = .t_comptime_corrupt,
-                    .location = .{
-                        .start = token_start,
-                        .end = token_end,
-                    },
-                },
+                .token = Token.init(
+                    .t_comptime_corrupt,
+
+                    token_start,
+                    token_end,
+                    0,
+                ),
                 .node = null,
             },
             .message = message,
@@ -161,10 +161,7 @@ pub const ErrorReporter = struct {
             .source_info = .{
                 .file_path = null,
                 // TODO get a reference to the token
-                .token = Token{
-                    .tag = .t_synthetic,
-                    .location = .{ .start = 0, .end = 0 },
-                },
+                .token = Token.init(.t_synthetic, 0, 0, 0),
                 .node = null,
             },
             .message = message,
