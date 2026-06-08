@@ -199,7 +199,10 @@ pub const TypePool = struct {
                 return type_name.items;
             },
             .anyerror => try type_name.appendSlice(allocator, "Anyerror"),
-            .error_type => try type_name.appendSlice(allocator, string_table.get(self.types.items[type_id].error_type)),
+            .error_type => {
+                const error_name_id = self.error_pool.getErrorNameId(t.error_type);
+                try type_name.appendSlice(allocator, string_table.get(error_name_id));
+            },
             .error_set => {
                 try type_name.appendSlice(allocator, "error{");
                 const members = self.getErrorSetMembers(t);

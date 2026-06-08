@@ -1,12 +1,26 @@
-
-
-fn printThree(a:any, b:any, c:any): void {
-    print(a);
-    print(b);
-    print(c);
+error SomeError {
+    NotSet
 }
 
-printThree("a","b","c")
+var test:SomeError!string = SomeError.NotSet;
+print(test); // expect: NotSet
+
+
+error OtherError {
+    Unknown,
+}
+
+test = OtherError.Unknown; // expect compile error: Error at 'OtherError': can not assign Unknown to string|error{NotSet}
+print(test);
+// regression - arguments don't evaluate to the same register
+//fn printThree(a:any, b:any, c:any): void {
+//    print(a);
+//    print(b);
+//    print(c);
+//}
+//
+//printThree("a","b","c")
+//////////////////////////////////////////////////////
 
 // regression
 //fn noop(): void {}

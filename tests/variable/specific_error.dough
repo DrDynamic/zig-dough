@@ -1,15 +1,14 @@
-// skip until errorhandly is implemented properly
 error SomeError {
     NotSet
 }
 
-var test:SomeError!String = SomeError.NotSet;
-print(test); // expect: NotSet
+var test:SomeError!string = SomeError.NotSet;
+print(test); 
 
 
 error OtherError {
     Unknown,
 }
 
-test = OtherError.Unknown; // expect compile error: Error at 'Unknown': can not assign Unknown to SomeError or String
+test = OtherError.Unknown; // expect compile error: Error at 'OtherError': can not assign Unknown to string|error{NotSet}
 print(test);
