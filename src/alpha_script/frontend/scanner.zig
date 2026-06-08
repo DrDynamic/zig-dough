@@ -232,7 +232,12 @@ pub const TokenStream = struct {
                         'n' => {
                             if (token_length > 2) {
                                 break :a_case switch (self.source[token_start + 2]) {
-                                    'y' => self.matchIdentifier("error", 3, 5, token_start, token_end, .t_anyerror),
+                                    'y' => {
+                                        if (token_length > 3) {
+                                            break :a_case self.matchIdentifier("error", 3, 5, token_start, token_end, .t_anyerror);
+                                        }
+                                        break :a_case .t_any;
+                                    },
                                     'd' => self.matchIdentifier("", 3, 0, token_start, token_end, .t_logical_and),
                                     else => .t_identifier,
                                 };

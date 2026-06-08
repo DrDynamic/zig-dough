@@ -1,5 +1,12 @@
 
 
+fn printThree(a:any, b:any, c:any): void {
+    print(a);
+    print(b);
+    print(c);
+}
+
+printThree("a","b","c")
 
 // regression
 //fn noop(): void {}
@@ -8,9 +15,9 @@
 //////////////////////////////////////////////////////
 
 // regression - group is parsed as call
-noop();
-fn noop(): void {}
-(true)
+// noop();
+// fn noop(): void {};
+// (true)
 //////////////////////////////////////////////////////
 
 

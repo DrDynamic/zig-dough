@@ -410,7 +410,7 @@ pub const VirtualMachine = struct {
                     var index = new_base;
                     while (index < new_top) : (index += 1) {
                         if (index <= new_base + args.len - 1) {
-                            stack[index] = args[new_base - index];
+                            stack[index] = args[index - new_base];
                         } else {
                             stack[index] = Value.makeUninitialized();
                         }

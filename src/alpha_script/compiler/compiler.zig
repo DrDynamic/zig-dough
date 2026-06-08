@@ -492,25 +492,33 @@ pub const Compiler = struct {
             .call => {
                 const extra = self.ast.getExtra(node.data.extra_id, CallExtra);
 
+                const snapshot = self.context.snapshotRegisters();
+
                 var reg_return: RegisterId = undefined;
                 const reg_callee = try self.compileExpression(extra.callee);
+                self.context.ensureAllocated(reg_callee);
 
                 if (extra.args) |args| {
                     var args_start: ?usize = null;
                     for (args) |arg_node_id| {
                         const reg_arg = try self.compileExpression(arg_node_id);
+                        self.context.ensureAllocated(reg_arg);
                         const arg_index = self.context.chunk.addArgument(reg_arg) catch unreachable;
                         if (args_start == null) {
                             args_start = arg_index;
                         }
                     }
+                    // TODO: check retuen type (no register needed when void)
                     reg_return = self.context.getTmpRegister();
                     try self.emitInstruction(Instruction.fromABC(.op_call, reg_return, reg_callee, 0));
                     try self.emitInstruction(Instruction.fromAB(.op_call_args, @intCast(args.len), @intCast(args_start.?)));
                 } else {
+                    // TODO: check retuen type (no register needed when void)
                     reg_return = self.context.getTmpRegister();
                     try self.emitInstruction(Instruction.fromABC(.op_call, reg_return, reg_callee, 0));
                 }
+
+                self.context.restoreRegisters(snapshot);
 
                 return reg_return;
             },

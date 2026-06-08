@@ -1,5 +1,5 @@
 # next
-- mandatory catching return types
+- mandatory catching return values
 - mandatory catching errors
 - enforce tdz (dont read uninitialized vars!)
 - close upvalues 
@@ -78,3 +78,4 @@
 - load upvalues only once per closure
 - optimize var registers
   - to be used freely before initialization (dont load constants in other registers and move them afterwards to initialize the var)
+- cache upvalues in closures (upvalues are loaded, everytime it is used)

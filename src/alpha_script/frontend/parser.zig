@@ -915,10 +915,14 @@ pub const Parser = struct {
                 _ = try self.advance();
                 break :case TypePool.ANYERROR;
             },
+            .t_any => case: {
+                _ = try self.advance();
+                break :case TypePool.ANY;
+            },
             .t_identifier => case: {
                 const name_id = try self.parseIdentifier();
                 break :case self.ast.type_pool.getType(name_id) orelse {
-                    self.reportError(Error.UndefinedType, self.scanner.previous(), "Undefined type");
+                    self.reportError(Error.UndefinedType, self.scanner.previous(), "undefined type");
                     return Error.UndefinedType;
                 };
             },
@@ -930,7 +934,7 @@ pub const Parser = struct {
                     while (true) : (count = 1) {
                         _ = try self.match(.t_identifier); // optional parameter name
                         _ = self.consume(.t_colon) catch {
-                            self.reportError(Error.UnexpectedToken, self.scanner.current(), "Expect ':' before type");
+                            self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect ':' before type");
                             return Error.UnexpectedToken;
                         };
 

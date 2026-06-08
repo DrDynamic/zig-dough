@@ -50,6 +50,7 @@ pub const TokenType = enum {
     t_var,
     t_while,
     // types
+    t_any,
     t_anyerror,
     t_bool,
     t_float,
