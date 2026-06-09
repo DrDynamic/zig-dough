@@ -20,7 +20,7 @@ A feature is done, when:
   - default values
   - named arguments
   - elipsis
-
+- panic on int and float overflow / underflow 
 - typesystem
 - simple garbage collection
 - simple math (+-*/)
@@ -54,6 +54,8 @@ A feature is done, when:
 - shapes
 - std lib
 - compound assignment operators (+= -= *= /=) 
+- wrapping opterators (+% -% *%)
+- saturating operators (+| -| *|)
 - bitwise operators (& | ^  ~)
 - constants (MAX_INT / MIN_INT / MAX_FLOAT / MIN_FLOAT / ...). Maybe as static field of the datatype class
 - automatic upcasting e.g. u32 to u64 on overflow 
