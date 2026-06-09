@@ -1,0 +1,8 @@
+// whole numbers are infered as int
+
+var nr = 42;
+
+// TODO: test with reflection (@getType) unstead
+var assured_int:int = nr; // no error -> is an int
+
+print(nr) // expect: 42

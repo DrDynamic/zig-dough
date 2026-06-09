@@ -55,3 +55,6 @@ A feature is done, when:
 - std lib
 - compound assignment operators (+= -= *= /=) 
 - bitwise operators (& | ^  ~)
+- constants (MAX_INT / MIN_INT / MAX_FLOAT / MIN_FLOAT / ...). Maybe as static field of the datatype class
+- automatic upcasting e.g. u32 to u64 on overflow 
+  - ints are per default i32 on over / underfolw they are represented as an object with i64 payload 

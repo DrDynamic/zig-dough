@@ -109,7 +109,8 @@ class TestRunner {
 
     await for (final entry in testDir.list(recursive: true)) {
       if (entry is! File) continue;
-      if (!entry.path.endsWith('.dough')) continue;
+      if (!entry.path.endsWith('.dough') && !entry.path.endsWith('.paz'))
+        continue;
 
       logVerbose("Dough file found: ${entry.path}");
 

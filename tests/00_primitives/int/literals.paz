@@ -1,0 +1,16 @@
+print(123);     // expect: 123
+print(987654);  // expect: 987654
+print(0);       // expect: 0
+
+// there are no negative zeros
+print(-0);      // expect: 0
+
+// min int
+print(-2147483648) // expect: -2147483648 
+// max int
+print(2147483647) // expect: 2147483647
+
+// underflow
+print(-2147483649) // expect: ???
+// overflow
+print(2147483648) // expect: ???
