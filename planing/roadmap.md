@@ -7,6 +7,7 @@ A feature is done, when:
 - it is supported by the language server
 
 # Alpha.1 - Cleanup and Functions (MVP)
+- change repository name
 - consistant keywords and syntax (some language features are not match the vision e.G. `function` keyword or concatination via `+`)
 - datatypes consistant with vision
 - X any type
@@ -21,7 +22,6 @@ A feature is done, when:
 - simple garbage collection
 - simple math (+-*/)
 - concatination (++)
-- any type
 - enforce const (with option to disable)
 - error handling
   - bubble errors with try

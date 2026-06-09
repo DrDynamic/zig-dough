@@ -1,18 +1,3 @@
-error SomeError {
-    NotSet
-}
-
-var test:SomeError!string = SomeError.NotSet;
-print(test); // expect: NotSet
-
-
-error OtherError {
-    Unknown,
-}
-
-test = OtherError.Unknown; // expect compile error: Error at 'OtherError': can not assign Unknown to string|error{NotSet}
-print(test);
-
 // regression - arguments don't evaluate to the same register
 //fn printThree(a:any, b:any, c:any): void {
 //    print(a);
@@ -144,14 +129,14 @@ print(test);
 // 
 // sayHello("World")
 
-// var greeter = greeterFactory('Max')
-// greeter()
-// 
-// function greeterFactory(name:String) Void {
-//     return function() Void {
-//         print("Hello " ++ name)
-//     }
-// }
+ var greeter = greeterFactory("Max")
+ greeter()
+ 
+ fn greeterFactory(name:string): void {
+     return fn(): void {
+         print("Hello " + name)
+     }
+ }
 
 
 // correct syntax:

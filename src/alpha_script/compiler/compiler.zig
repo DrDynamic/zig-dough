@@ -767,8 +767,10 @@ pub const Compiler = struct {
     }
 
     fn exitScope(self: *Compiler) Error!void {
+        // TODO error handling (underflow of scopes?)
         self.context.scope_depth -= 1;
-        // TODO error handlich (underflow of scopes?)
+
+        var first_reg: ?RegisterId = null;
         var any_captured = false;
         while (self.context.locals.items.len > 0 and self.context.locals.items[self.context.locals.items.len - 1].depth > self.context.scope_depth) {
             const local = self.context.locals.pop();
@@ -786,11 +788,15 @@ pub const Compiler = struct {
                     any_captured = true;
                 }
                 self.context.releaseRegister(local.?.reg_slot);
+                if (first_reg == null or first_reg.? > local.?.reg_slot) {
+                    first_reg = local.?.reg_slot;
+                }
             }
         }
 
-        // TODO: closing upvalues is broken
-        // try self.emitInstruction(Instruction.fromABC(.close_upvalue, 0, self.context.next_free_reg, 0));
+        if (first_reg) |reg_id| {
+            try self.emitInstruction(Instruction.fromABC(.close_upvalue, 0, reg_id, 0));
+        }
     }
 };
 
