@@ -313,6 +313,9 @@ pub const TypePool = struct {
         switch (target) {
             .unresolved => unreachable,
             .any => {
+                if (source_id == TypePool.VOID) {
+                    return false;
+                }
                 if (self.isNullable(source_id)) {
                     return false;
                 }

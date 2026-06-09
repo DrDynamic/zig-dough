@@ -114,6 +114,39 @@
 // printDefault("John")
 //////////////////////////////////////////////////////
 
+// can not assign void
+// fn noop() void {}
+// var a = noop();
+//////////////////////////////////////////////////////
+
+// returned value must match return type 
+// fn getString() string {
+//     return 42;
+// }
+// var a = noop();
+//////////////////////////////////////////////////////
+
+// can not return void when return type is set
+// fn getString() string {
+//     return;
+// }
+//////////////////////////////////////////////////////
+
+// return value must be catched
+//fn getString() string {
+//    return "a";
+//}
+//getString()
+//////////////////////////////////////////////////////
+
+// errors must be catched
+//fn getString() !void {
+//    return;
+//}
+//getString()
+//////////////////////////////////////////////////////
+
+
 
 // type Number = Int|Float
 // 
@@ -129,8 +162,8 @@
 // 
 // sayHello("World")
 
- var greeter = greeterFactory("Max")
- greeter()
+// var greeter = greeterFactory("Max")
+// greeter()
  
  fn greeterFactory(name:string): void {
      return fn(): void {

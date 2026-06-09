@@ -99,7 +99,7 @@ pub const PrettyErrorOutput = struct {
             if (index < location.marker_start) {
                 self.terminal.print(" ", .{});
             } else if (index == location.column) {
-                self.terminal.print("^", .{});
+                self.terminal.print("~", .{});
             } else {
                 self.terminal.print("~", .{});
             }

@@ -151,7 +151,7 @@ pub const SemanticAnalyser = struct {
         var node = &self.ast.nodes.items[node_id];
 
         const resolved_type: TypeId = switch (node.tag) {
-            .node_list => unreachable,
+            .n_type => unreachable, // only exists as a child of other nodes
             // literals
             .literal_null => TypePool.NULL,
             .literal_bool => TypePool.BOOL,
@@ -178,7 +178,9 @@ pub const SemanticAnalyser = struct {
                     const returned_type = try self.analyse(node.data.node_id);
 
                     if (!self.ast.type_pool.isAssignable(fn_context.return_type, returned_type)) {
-                        try self.reportTypeMissmatch(node.*, fn_context.return_type, returned_type, "can not return {[source_type]s} as {[target_type]s}");
+                        const return_value_node = self.ast.nodes.items[node.data.node_id];
+
+                        try self.reportTypeMissmatch(return_value_node, fn_context.return_type, returned_type, "can not return {[source_type]s} as {[target_type]s}");
 
                         const return_type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, fn_context.return_type, self.ast.string_table);
                         defer self.allocator.free(return_type_name);
@@ -187,7 +189,9 @@ pub const SemanticAnalyser = struct {
                         defer self.allocator.free(hint_message);
 
                         const fn_node = self.ast.nodes.items[fn_context.node_id];
-                        self.error_reporter.semanticAnalyserHint(self, fn_node, hint_message);
+                        const fn_extra = self.ast.getExtra(fn_node.data.extra_id, FunctionExtra);
+                        const fn_return_type_node = self.ast.nodes.items[fn_extra.return_type_node];
+                        self.error_reporter.semanticAnalyserHint(self, fn_return_type_node, hint_message);
                         return Error.TypeMismatch;
                     }
                 } else {
@@ -225,8 +229,6 @@ pub const SemanticAnalyser = struct {
                 }
 
                 const source_type = try self.analyse(extra.source);
-                const symbol_name = self.ast.string_table.get(maybe_symbol.?.name_id);
-                _ = symbol_name;
                 if (!self.ast.type_pool.isAssignable(maybe_symbol.?.type_id, source_type)) {
                     const source_node = self.ast.nodes.items[extra.source];
                     try self.reportNotAssignable(source_node, maybe_symbol.?.type_id, source_type);
@@ -422,7 +424,13 @@ pub const SemanticAnalyser = struct {
                 const callee = self.ast.nodes.items[extra.callee];
 
                 if (!self.ast.type_pool.isCallable(type_callee)) {
-                    self.error_reporter.semanticAnalyserError(self, Error.NotCallable, node.*, "called value is not callable");
+                    const callee_type_name = try self.ast.type_pool.getTypeNameAlloc(self.allocator, type_callee, self.ast.string_table);
+                    defer self.allocator.free(callee_type_name);
+
+                    const message = try std.fmt.allocPrint(self.allocator, "value of type {s} is not callable", .{callee_type_name});
+                    defer self.allocator.free(message);
+
+                    self.error_reporter.semanticAnalyserError(self, Error.NotCallable, callee, message);
                     return Error.NotCallable;
                 }
 
@@ -494,6 +502,15 @@ pub const SemanticAnalyser = struct {
         var inferred_type: TypeId = TypePool.UNRESOLVED;
         if (extra.init_value) |init_value_id| {
             inferred_type = try self.analyse(init_value_id);
+            if (inferred_type == TypePool.VOID) {
+                var init_value_node = self.ast.nodes.items[init_value_id];
+                if (init_value_node.tag == .call) {
+                    const call_extra = self.ast.getExtra(init_value_node.data.extra_id, CallExtra);
+                    init_value_node = self.ast.nodes.items[call_extra.callee];
+                }
+                self.error_reporter.semanticAnalyserError(self, Error.TypeMismatch, init_value_node, "can not assign void");
+                return Error.TypeMismatch;
+            }
             self.symbol_table.initialize(extra.name_id) catch unreachable; // will always be found (declared directly above)
         }
 
@@ -833,4 +850,3 @@ const CallExtra = as.frontend.ast.CallExtra;
 const DeclarationExtra = as.frontend.ast.DeclarationExtra;
 const FunctionExtra = as.frontend.ast.FunctionExtra;
 const IfExtra = as.frontend.ast.IfExtra;
-const NodeListIterator = as.frontend.ast.NodeListIterator;

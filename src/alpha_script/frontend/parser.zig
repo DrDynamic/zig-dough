@@ -98,6 +98,7 @@ pub const Parser = struct {
         const extra_id = try self.ast.addExtra(DeclarationExtra{
             .name_id = set_name_id,
             .explicit_type = set_id,
+            .explicit_type_node = null,
             .init_value = null,
         });
         return try self.ast.addNode(.{
@@ -142,6 +143,7 @@ pub const Parser = struct {
         const extra_id = try self.ast.addExtra(DeclarationExtra{
             .name_id = name_id,
             .explicit_type = type_id,
+            .explicit_type_node = null,
             .init_value = null,
         });
         return try self.ast.addNode(.{
@@ -163,8 +165,18 @@ pub const Parser = struct {
         const identifier_token = self.scanner.previous();
 
         var type_id: TypeId = TypePool.UNRESOLVED;
+        var type_node_id: ?NodeId = null;
         if (try self.match(.t_colon)) {
+            const type_token_start = self.scanner.current().location.start;
+
             type_id = try self.parseTypeReference();
+
+            type_node_id = try self.ast.addNode(.{
+                .tag = .n_type,
+                .token_position = type_token_start,
+                .resolved_type_id = type_id,
+                .data = undefined,
+            });
         }
 
         var assignment_node_id: ?NodeId = null;
@@ -177,6 +189,7 @@ pub const Parser = struct {
         const extra_id = try self.ast.addExtra(DeclarationExtra{
             .name_id = name_id,
             .explicit_type = type_id,
+            .explicit_type_node = type_node_id,
             .init_value = assignment_node_id,
         });
 
@@ -311,6 +324,7 @@ pub const Parser = struct {
         const extra_id = try self.ast.addExtra(DeclarationExtra{
             .name_id = capture_name,
             .explicit_type = TypePool.UNRESOLVED,
+            .explicit_type_node = null,
             .init_value = null,
         });
 
@@ -737,6 +751,7 @@ pub const Parser = struct {
             .name_id = null,
             .parameters = null,
             .return_type = undefined,
+            .return_type_node = undefined,
             .body = undefined,
         };
 
@@ -758,7 +773,15 @@ pub const Parser = struct {
             return Error.UnexpectedToken;
         };
 
+        const token_return_type_start = self.scanner.current().location.start;
         function_extra.return_type = try self.parseTypeErrorUnion();
+
+        function_extra.return_type_node = try self.ast.addNode(.{
+            .tag = .n_type,
+            .token_position = token_return_type_start,
+            .resolved_type_id = function_extra.return_type,
+            .data = undefined,
+        });
 
         const left_brace = self.consume(.t_left_brace) catch {
             self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect '{' before function body");
@@ -1018,7 +1041,7 @@ pub const Parser = struct {
     }
 
     /// parses a comma seperated list of expressions until end_token is found
-    /// returns the start of a node_list with all expressions
+    /// returns an array with node_ids of all expressions
     fn expressionList(self: *Parser, end_token: TokenType) Error!?[]NodeId {
         if (try self.match(end_token)) {
             return null;
@@ -1042,23 +1065,6 @@ pub const Parser = struct {
         const result = try self.allocator.alloc(NodeId, count);
         @memcpy(result, expression_ids[0..count]);
         return result;
-    }
-
-    // node list
-    pub fn nodeListFromArray(self: *Parser, node_ids: []NodeId) Error!?NodeExtraId {
-        if (node_ids.len == 0) return null;
-
-        var list_node_extra: ?NodeExtraId = null;
-        var index: usize = node_ids.len;
-        while (index > 0) {
-            index -= 1;
-            list_node_extra = try self.ast.addExtra(NodeListExtra{
-                .node_id = node_ids[index],
-                .next = list_node_extra,
-            });
-        }
-
-        return list_node_extra.?;
     }
 
     // string table
@@ -1178,4 +1184,3 @@ const CallExtra = as.frontend.ast.CallExtra;
 const DeclarationExtra = as.frontend.ast.DeclarationExtra;
 const FunctionExtra = as.frontend.ast.FunctionExtra;
 const IfExtra = as.frontend.ast.IfExtra;
-const NodeListExtra = as.frontend.ast.NodeListExtra;

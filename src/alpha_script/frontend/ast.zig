@@ -2,6 +2,8 @@ pub const NodeId = u32;
 pub const NodeExtraId = u32;
 
 pub const NodeType = enum(u8) {
+    // types
+    n_type,
     // literals
     literal_null, // none
     literal_bool, // none
@@ -33,7 +35,6 @@ pub const NodeType = enum(u8) {
     expression_assignment, // node_id (the expression that is assigned)
     expression_identifier, // string_id
     call, // CallExtra
-    node_list, // NodeListExtra
 
     // unary operations
     negate,
@@ -67,24 +68,26 @@ pub const BinaryOpExtra = struct {
 };
 
 pub const BlockExtra = struct {
-    statements: ?[]NodeId, // NodeListExtra
+    statements: ?[]NodeId,
 };
 
 pub const CallExtra = struct {
     callee: NodeId,
-    args: ?[]NodeId, // NodeListExtra
+    args: ?[]NodeId,
 };
 
 pub const DeclarationExtra = struct {
     name_id: StringId,
     explicit_type: TypeId,
+    explicit_type_node: ?NodeId,
     init_value: ?NodeId,
 };
 
 pub const FunctionExtra = struct {
     name_id: ?StringId,
-    parameters: ?[]NodeExtraId, // NodeListExtra
+    parameters: ?[]NodeId, // declaration_parameter
     return_type: TypeId,
+    return_type_node: NodeId,
     body: NodeId, // expression_block
 };
 
@@ -98,38 +101,9 @@ pub const IfExtra = struct {
     else_branch: ?NodeId,
 };
 
-pub const NodeListExtra = struct {
-    node_id: NodeId,
-    next: ?NodeExtraId,
-};
-
-pub const NodeListIterator = struct {
-    ast: *const AST,
-    current: ?NodeExtraId,
-
-    pub fn init(ast: *const AST, first_extra_id: NodeExtraId) NodeListIterator {
-        return .{
-            .ast = ast,
-            .current = first_extra_id,
-        };
-    }
-
-    pub fn hasNext(self: *NodeListIterator) bool {
-        return self.current != null;
-    }
-
-    pub fn next(self: *NodeListIterator) ?NodeId {
-        if (self.current == null) return null;
-
-        const current_extra = self.ast.getExtra(self.current.?, NodeListExtra);
-        self.current = current_extra.next;
-
-        return current_extra.node_id;
-    }
-};
-
 pub const Node = struct {
     tag: NodeType,
+    // TODO: replace token_positon with source_start and source_end
     token_position: usize,
     resolved_type_id: TypeId,
 

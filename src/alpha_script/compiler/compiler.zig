@@ -283,8 +283,8 @@ pub const Compiler = struct {
         const node = self.ast.nodes.items[node_id];
 
         return switch (node.tag) {
-            .node_list => unreachable,
-
+            // types
+            .n_type => unreachable, // only exists as a child of other nodes
             // statements
             .declaration_error_set,
             .declaration_type,
@@ -833,7 +833,6 @@ const NodeId = as.frontend.ast.NodeId;
 const RegisterId = as.runtime.RegisterId;
 const StringId = as.common.StringId;
 
-const NodeListIterator = as.frontend.ast.NodeListIterator;
 const AssignmentExtra = as.frontend.ast.AssignmentExtra;
 const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
 const BlockExtra = as.frontend.ast.BlockExtra;

@@ -141,4 +141,3 @@ const AST = as.frontend.AST;
 const DeclarationExtra = as.frontend.ast.DeclarationExtra;
 const CallExtra = as.frontend.ast.CallExtra;
 const BinaryOpExtra = as.frontend.ast.BinaryOpExtra;
-const NodeListIterator = as.frontend.ast.NodeListIterator;

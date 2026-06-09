@@ -42,6 +42,12 @@ pub const ASTPrinter = struct {
 
         // 2. Spezifische Daten je nach Typ ausgeben
         switch (node.tag) {
+            .n_type => {
+                const type_name = try self.ast.type_pool.getTypeNameAlloc(self.ast.allocator, node.resolved_type_id, self.ast.string_table);
+                defer self.ast.allocator.free(type_name);
+
+                self.terminal.print(": {s}\n", .{type_name});
+            },
             .literal_null => self.terminal.print(": null\n", .{}),
             .literal_int => self.terminal.print(": {d}\n", .{node.data.int_value}),
             .literal_float => self.terminal.print(": {d:.4}\n", .{node.data.float_value}),
@@ -155,9 +161,6 @@ pub const ASTPrinter = struct {
             .call => {
                 self.terminal.print("\n", .{});
             },
-            .node_list => {
-                self.terminal.print("\n", .{});
-            },
             //
             .statement_return => {
                 self.terminal.print("\n", .{});
@@ -176,6 +179,7 @@ pub const ASTPrinter = struct {
 
     fn printChildren(self: ASTPrinter, node: ast.Node, prefix: []const u8) !void {
         switch (node.tag) {
+            .n_type,
             .literal_null,
             .literal_int,
             .literal_float,
@@ -279,11 +283,6 @@ pub const ASTPrinter = struct {
                     }
                 }
             },
-            .node_list => {
-                // TODO test is this still works
-                const data = self.ast.getExtra(node.data.extra_id, ast.NodeListExtra);
-                try self.printNode(data.node_id, prefix, true);
-            },
         }
     }
 };
@@ -292,7 +291,6 @@ const std = @import("std");
 const as = @import("as");
 const ast = as.frontend.ast;
 const AST = as.frontend.AST;
-const NodeListIterator = as.frontend.ast.NodeListIterator;
 const TypePool = as.frontend.TypePool;
 const Terminal = as.common.Terminal;
 
