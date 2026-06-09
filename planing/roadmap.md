@@ -6,20 +6,16 @@ A feature is done, when:
 - it has integration tests, to test the happy path and possible edge cases (that are thought about)  
 - it is supported by the language server
 
-# Alpha.1
+# Alpha.1 - Cleanup and Functions (MVP)
 - consistant keywords and syntax (some language features are not match the vision e.G. `function` keyword or concatination via `+`)
 - datatypes consistant with vision
-- any type
+- X any type
 - variables
 - constants
-- functions
-  - closures
+- functions - MVP
+  -  closures
   - hoisting
   - calls
-  - call by reference
-  - default values
-  - named arguments
-  - elipsis
 - panic on int and float overflow / underflow 
 - typesystem
 - simple garbage collection
@@ -27,36 +23,46 @@ A feature is done, when:
 - concatination (++)
 - any type
 - enforce const (with option to disable)
+- error handling
+  - bubble errors with try
+  - resolve errors with catch
+  - enforce error recogision / handling
 
 
-# Alpha.2
+# Alpha.2 - Iteration
 - simple imports (only paz files)
 - native iterators
 - loops
 - arrays
 - objects
 
-# Alpha.3
+# Alpha.3 - oop (MVP)
 - klasses
 - inheritance
+
+
+# Alpha.4 - Natives
 - attributes
 - decorators
 - Native support
-- more datatypes
-    - byte (alias for u8?)
-    - i16 / u16
-    - int (alias for i32 or i64?)
-    - uint (alias for u32 or u64?)
 
-
-# later
-- traits
-- shapes
-- std lib
+# Alpha.5 - More Datatypes
+- byte (alias for u8?)
+- make int an alias for i32
+- i64, u64, u32
+- null unwrapping with orelse
 - compound assignment operators (+= -= *= /=) 
 - wrapping opterators (+% -% *%)
 - saturating operators (+| -| *|)
 - bitwise operators (& | ^  ~)
 - constants (MAX_INT / MIN_INT / MAX_FLOAT / MIN_FLOAT / ...). Maybe as static field of the datatype class
-- automatic upcasting e.g. u32 to u64 on overflow 
-  - ints are per default i32 on over / underfolw they are represented as an object with i64 payload 
+
+# later
+- traits
+- shapes
+- std lib
+- function upgrades 
+  - call by reference
+  - default values
+  - named arguments
+  - elipsis
