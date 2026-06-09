@@ -103,8 +103,8 @@ pub const IfExtra = struct {
 
 pub const Node = struct {
     tag: NodeType,
-    // TODO: replace token_positon with source_start and source_end
-    token_position: usize,
+    source_start: usize,
+    source_end: usize,
     resolved_type_id: TypeId,
 
     data: union {

@@ -103,14 +103,15 @@ pub const Parser = struct {
         });
         return try self.ast.addNode(.{
             .tag = .declaration_error_set,
-            .token_position = start_token.location.start,
+            .source_start = start_token.location.start,
+            .source_end = self.scanner.previous().location.end,
             .resolved_type_id = set_id,
             .data = .{ .extra_id = extra_id },
         });
     }
 
     fn declarationType(self: *Parser) !NodeId {
-        const type_token = self.scanner.previous();
+        const type_token_start = self.scanner.previous().location.start;
         const identifier_token = self.scanner.current();
 
         const name_id = self.parseIdentifier() catch {
@@ -138,6 +139,8 @@ pub const Parser = struct {
             return Error.TypeRedeclaration;
         };
 
+        const type_token_end = self.scanner.previous().location.end;
+
         _ = try self.match(.t_semicolon);
 
         const extra_id = try self.ast.addExtra(DeclarationExtra{
@@ -148,13 +151,16 @@ pub const Parser = struct {
         });
         return try self.ast.addNode(.{
             .tag = .declaration_type,
-            .token_position = type_token.location.start,
+            .source_start = type_token_start,
+            .source_end = type_token_end,
             .resolved_type_id = type_id,
             .data = .{ .extra_id = extra_id },
         });
     }
 
     fn declarationVar(self: *Parser) !NodeId {
+        const var_declaration_start = self.scanner.previous().location.start;
+
         const name_id: StringId = self.parseIdentifier() catch {
             self.reportError(Error.UnexpectedToken, self.scanner.current(), "Expect variable name");
             _ = try self.advance();
@@ -162,7 +168,7 @@ pub const Parser = struct {
             _ = try self.match(.t_equal);
             return error.ParserError;
         };
-        const identifier_token = self.scanner.previous();
+        //        const identifier_token = self.scanner.previous();
 
         var type_id: TypeId = TypePool.UNRESOLVED;
         var type_node_id: ?NodeId = null;
@@ -173,7 +179,8 @@ pub const Parser = struct {
 
             type_node_id = try self.ast.addNode(.{
                 .tag = .n_type,
-                .token_position = type_token_start,
+                .source_start = type_token_start,
+                .source_end = self.scanner.previous().location.end,
                 .resolved_type_id = type_id,
                 .data = undefined,
             });
@@ -184,6 +191,7 @@ pub const Parser = struct {
             assignment_node_id = try self.expression();
         }
 
+        const var_declaration_end = self.scanner.previous().end;
         _ = try self.match(.t_semicolon);
 
         const extra_id = try self.ast.addExtra(DeclarationExtra{
@@ -195,7 +203,8 @@ pub const Parser = struct {
 
         return try self.ast.addNode(.{
             .tag = .declaration_var,
-            .token_position = identifier_token.location.start,
+            .source_start = var_declaration_start,
+            .source_end = var_declaration_end,
             .resolved_type_id = TypePool.UNRESOLVED,
             .data = .{ .extra_id = extra_id },
         });
@@ -235,7 +244,8 @@ pub const Parser = struct {
 
         return self.ast.addNode(.{
             .tag = .expression_block,
-            .token_position = left_brace.location.start,
+            .source_start = left_brace.location.start,
+            .source_end = self.scanner.previous().end,
             .resolved_type_id = TypePool.UNRESOLVED,
             .data = .{ .extra_id = extra_id },
         });
@@ -244,10 +254,12 @@ pub const Parser = struct {
     fn returnStatement(self: *Parser) !NodeId {
         const token = self.scanner.previous();
         const expr = try self.expression();
+        const return_statement_end = self.scanner.previous().location.end;
         _ = try self.match(.t_semicolon);
         return try self.ast.addNode(.{
             .tag = .statement_return,
-            .token_position = token.location.start,
+            .source_start = token.location.start,
+            .source_end = return_statement_end,
             .resolved_type_id = TypePool.UNRESOLVED,
             .data = .{ .node_id = expr },
         });
@@ -303,7 +315,8 @@ pub const Parser = struct {
 
         return try self.ast.addNode(.{
             .tag = .expression_if,
-            .token_position = token_start.location.start,
+            .source_start = token_start.location.start,
+            .source_end = self.scanner.previous().location.end,
             .resolved_type_id = TypePool.UNRESOLVED,
             .data = .{ .extra_id = extra_id },
         });
@@ -330,7 +343,8 @@ pub const Parser = struct {
 
         const node_id = try self.ast.addNode(.{
             .tag = .declaration_const,
-            .token_position = self.scanner.previous().location.start,
+            .source_start = self.scanner.previous().location.start,
+            .source_end = self.scanner.previous().location.end,
             .resolved_type_id = TypePool.UNRESOLVED,
             .data = .{ .extra_id = extra_id },
         });
@@ -342,6 +356,7 @@ pub const Parser = struct {
     }
 
     fn assignment(self: *Parser) Error!NodeId {
+        const assignment_start = self.scanner.current().location.start;
         const assignment_target_id = try self.or_();
 
         if (try self.match(.t_equal)) {
@@ -357,7 +372,8 @@ pub const Parser = struct {
 
             return try self.ast.addNode(.{
                 .tag = .expression_assignment,
-                .token_position = token_equal.location.start,
+                .source_start = assignment_start,
+                .source_end = self.scanner.previous().location.end,
                 .resolved_type_id = TypePool.UNRESOLVED,
                 .data = .{ .extra_id = extra_id },
             });
@@ -367,6 +383,7 @@ pub const Parser = struct {
     }
 
     fn or_(self: *Parser) Error!NodeId {
+        const or_start = self.scanner.current().location.start;
         var lhs = try self.and_();
 
         while (try self.match(.t_logical_or)) {
@@ -377,7 +394,8 @@ pub const Parser = struct {
             });
             lhs = try self.ast.addNode(.{
                 .tag = .logical_or,
-                .token_position = token_or.location.start,
+                .source_start = or_start,
+                .source_end = self.scanner.previous().location.end,
                 .resolved_type_id = TypePool.UNRESOLVED,
                 .data = .{ .extra_id = extra_id },
             });
@@ -387,6 +405,7 @@ pub const Parser = struct {
     }
 
     fn and_(self: *Parser) Error!NodeId {
+        const and_start = self.scanner.current().location.start;
         var lhs = try self.equality();
 
         while (try self.match(.t_logical_and)) {
@@ -397,7 +416,8 @@ pub const Parser = struct {
             });
             lhs = try self.ast.addNode(.{
                 .tag = .logical_and,
-                .token_position = token_and.location.start,
+                .source_start = and_start,
+                .source_end = self.scanner.previous().location.end,
                 .resolved_type_id = TypePool.UNRESOLVED,
                 .data = .{ .extra_id = extra_id },
             });
@@ -407,6 +427,7 @@ pub const Parser = struct {
     }
 
     fn equality(self: *Parser) Error!NodeId {
+        const equality_start = self.scanner.current().location.start;
         var lhs = try self.comparsion();
         search_equality: while (true) {
             const token = self.scanner.current();
@@ -425,7 +446,8 @@ pub const Parser = struct {
 
             lhs = try self.ast.addNode(.{
                 .tag = tag,
-                .token_position = token.location.start,
+                .source_start = equality_start,
+                .source_end = self.scanner.previous().location.end,
                 .resolved_type_id = TypePool.UNRESOLVED,
                 .data = .{ .extra_id = extra_id },
             });
@@ -434,6 +456,7 @@ pub const Parser = struct {
     }
 
     fn comparsion(self: *Parser) Error!NodeId {
+        const comparsion_start = self.scanner.current().location.start;
         var lhs = try self.term();
 
         search_comparsion: while (true) {
@@ -455,7 +478,8 @@ pub const Parser = struct {
 
             lhs = try self.ast.addNode(.{
                 .tag = tag,
-                .token_position = token.location.start,
+                .source_start = comparsion_start,
+                .source_end = self.scanner.previous().location.end,
                 .resolved_type_id = TypePool.UNRESOLVED,
                 .data = .{ .extra_id = extra_id },
             });
@@ -465,6 +489,7 @@ pub const Parser = struct {
     }
 
     fn term(self: *Parser) Error!NodeId {
+        const term_start = self.scanner.current().location.start;
         var lhs = try self.factor();
         search_term: while (true) {
             const token = self.scanner.current();
@@ -483,7 +508,8 @@ pub const Parser = struct {
 
             lhs = try self.ast.addNode(.{
                 .tag = tag,
-                .token_position = token.location.start,
+                .source_start = term_start,
+                .source_end = self.scanner.previous().location.end,
                 .resolved_type_id = TypePool.UNRESOLVED,
                 .data = .{ .extra_id = extra_id },
             });
@@ -492,6 +518,7 @@ pub const Parser = struct {
     }
 
     fn factor(self: *Parser) Error!NodeId {
+        const factor_start = self.scanner.current().location.start;
         var lhs = try self.unary();
         search_factor: while (true) {
             const token = self.scanner.current();
@@ -510,7 +537,8 @@ pub const Parser = struct {
 
             lhs = try self.ast.addNode(.{
                 .tag = tag,
-                .token_position = token.location.start,
+                .source_start = factor_start,
+                .source_end = self.scanner.previous().location.end,
                 .resolved_type_id = TypePool.UNRESOLVED,
                 .data = .{ .extra_id = extra_id },
             });
@@ -521,19 +549,23 @@ pub const Parser = struct {
     fn unary(self: *Parser) Error!NodeId {
         if (try self.match(.t_bang)) {
             const token = self.scanner.previous();
+            const node_id = try self.unary();
             return try self.ast.addNode(.{
                 .tag = .logical_not,
-                .token_position = token.location.start,
+                .source_start = token.location.start,
+                .source_end = self.scanner.previous().location.end,
                 .resolved_type_id = TypePool.UNRESOLVED,
-                .data = .{ .node_id = try self.unary() },
+                .data = .{ .node_id = node_id },
             });
         } else if (try self.match(.t_minus)) {
             const token = self.scanner.previous();
+            const node_id = try self.unary();
             return try self.ast.addNode(.{
                 .tag = .negate,
-                .token_position = token.location.start,
+                .source_start = token.location.start,
+                .source_end = self.scanner.previous().location.end,
                 .resolved_type_id = TypePool.UNRESOLVED,
-                .data = .{ .node_id = try self.unary() },
+                .data = .{ .node_id = node_id },
             });
         }
 
@@ -541,11 +573,11 @@ pub const Parser = struct {
     }
 
     fn call(self: *Parser) Error!NodeId {
+        const call_start = self.scanner.current().location.start;
         var callee = try self.primary();
 
         while (true) {
             if (self.scanner.current().leading_newlines == 0 and try self.match(.t_left_paren)) {
-                const token = self.scanner.previous();
                 // finish Call
                 const list_result = try self.expressionList(.t_right_paren);
 
@@ -555,7 +587,8 @@ pub const Parser = struct {
                 });
                 callee = try self.ast.addNode(.{
                     .tag = .call,
-                    .token_position = token.location.start,
+                    .source_start = call_start,
+                    .source_end = self.scanner.previous().location.end,
                     .resolved_type_id = TypePool.UNRESOLVED,
                     .data = .{ .extra_id = extra_id },
                 });
@@ -593,7 +626,8 @@ pub const Parser = struct {
 
                 break :case self.ast.addNode(.{
                     .tag = .literal_error,
-                    .token_position = self.scanner.previous().location.start,
+                    .source_start = token.location.start,
+                    .source_end = self.scanner.previous().location.end,
                     .resolved_type_id = error_type_id,
                     .data = .{ .error_value = error_id },
                 });
@@ -607,7 +641,8 @@ pub const Parser = struct {
 
                 break :case try self.ast.addNode(.{
                     .tag = .literal_null,
-                    .token_position = token.location.start,
+                    .source_start = token.location.start,
+                    .source_end = token.location.end,
                     .resolved_type_id = TypePool.NULL,
                     .data = undefined,
                 });
@@ -617,7 +652,8 @@ pub const Parser = struct {
 
                 break :case try self.ast.addNode(.{
                     .tag = .literal_bool,
-                    .token_position = token.location.start,
+                    .source_start = token.location.start,
+                    .source_end = token.location.end,
                     .resolved_type_id = TypePool.BOOL,
                     .data = .{ .bool_value = true },
                 });
@@ -627,7 +663,8 @@ pub const Parser = struct {
 
                 break :case try self.ast.addNode(.{
                     .tag = .literal_bool,
-                    .token_position = token.location.start,
+                    .source_start = token.location.start,
+                    .source_end = token.location.end,
                     .resolved_type_id = TypePool.BOOL,
                     .data = .{ .bool_value = false },
                 });
@@ -643,7 +680,8 @@ pub const Parser = struct {
                     };
                     break :case try self.ast.addNode(.{
                         .tag = .literal_float,
-                        .token_position = token.location.start,
+                        .source_start = token.location.start,
+                        .source_end = token.location.end,
                         .resolved_type_id = TypePool.FLOAT,
                         .data = .{ .float_value = val },
                     });
@@ -654,7 +692,8 @@ pub const Parser = struct {
                     };
                     break :case self.ast.addNode(.{
                         .tag = .literal_int,
-                        .token_position = token.location.start,
+                        .source_start = token.location.start,
+                        .source_end = token.location.end,
                         .resolved_type_id = TypePool.INT,
                         .data = .{ .int_value = val },
                     });
@@ -669,24 +708,29 @@ pub const Parser = struct {
 
                 break :case try self.ast.addNode(.{
                     .tag = .object_string,
-                    .token_position = token.location.start,
+                    .source_start = token.location.start,
+                    .source_end = token.location.end,
                     .resolved_type_id = TypePool.STRING,
                     .data = .{ .string_id = string_id },
                 });
             },
             .t_left_paren => |_| case: {
                 const left_paren = try self.advance();
-                const group = try self.ast.addNode(.{
-                    .tag = .expression_grouping,
-                    .token_position = left_paren.location.start, //self.scanner.previous().location.start,
-                    .resolved_type_id = TypePool.UNRESOLVED,
-                    .data = .{ .node_id = try self.expression() },
-                });
+
+                const node_id = try self.expression();
 
                 _ = self.consume(.t_right_paren) catch {
                     self.reportError(Error.UnexpectedToken, self.scanner.current(), "expect ')' after group");
                     return Error.UnexpectedToken;
                 };
+
+                const group = try self.ast.addNode(.{
+                    .tag = .expression_grouping,
+                    .source_start = left_paren.location.start, //self.scanner.previous().location.start,
+                    .source_end = self.scanner.previous().end,
+                    .resolved_type_id = TypePool.UNRESOLVED,
+                    .data = .{ .node_id = node_id },
+                });
 
                 break :case group;
             },
@@ -722,7 +766,8 @@ pub const Parser = struct {
 
                         break :identifier_case try self.ast.addNode(.{
                             .tag = .literal_error,
-                            .token_position = token.location.start,
+                            .source_start = token.location.start,
+                            .source_end = self.scanner.previous().location.end,
                             .resolved_type_id = error_type_id,
                             .data = .{ .error_value = error_id },
                         });
@@ -731,7 +776,8 @@ pub const Parser = struct {
 
                 break :identifier_case try self.ast.addNode(.{
                     .tag = .expression_identifier,
-                    .token_position = token.location.start,
+                    .source_start = token.location.start,
+                    .source_end = token.location.end,
                     .resolved_type_id = TypePool.UNRESOLVED,
                     .data = .{ .string_id = string_id },
                 });
@@ -778,7 +824,8 @@ pub const Parser = struct {
 
         function_extra.return_type_node = try self.ast.addNode(.{
             .tag = .n_type,
-            .token_position = token_return_type_start,
+            .source_start = token_return_type_start,
+            .source_end = self.scanner.previous().location.end,
             .resolved_type_id = function_extra.return_type,
             .data = undefined,
         });
@@ -798,7 +845,8 @@ pub const Parser = struct {
         const extra_id = try self.ast.addExtra(function_extra);
         return try self.ast.addNode(.{
             .tag = .expression_function,
-            .token_position = token_start.location.start,
+            .source_start = token_start.location.start,
+            .source_end = self.scanner.previous().location.end,
             .resolved_type_id = TypePool.UNRESOLVED,
             .data = .{ .extra_id = extra_id },
         });
@@ -1019,7 +1067,8 @@ pub const Parser = struct {
 
             parameter_ids[count] = try self.ast.addNode(.{
                 .tag = .declaration_parameter,
-                .token_position = identifier_token.location.start,
+                .source_start = identifier_token.location.start,
+                .source_end = self.scanner.previous().location.end,
                 .resolved_type_id = type_id,
                 .data = .{ .string_id = name_id },
             });
