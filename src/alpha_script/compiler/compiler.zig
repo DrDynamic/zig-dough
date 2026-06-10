@@ -236,6 +236,8 @@ pub const Compiler = struct {
         // compile function body
         try self.compileStatement(fn_extra.body);
 
+        // TODO: resolve bug: arguments are not recognized when closing upvalues
+
         try self.exitScope();
         try self.emitInstruction(Instruction.fromABC(.call_return, 0, 0, 0));
 

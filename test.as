@@ -166,9 +166,9 @@ var greeter = greeterFactory("Max")
 greeter()
  
  fn greeterFactory(name:string): ():void {
-    var output = "<" + name + ">" 
+    var suf = "!"
     return fn(): void {
-        print("Hello " + output)
+        print("Hello " + name + suf)
     }
  }
 

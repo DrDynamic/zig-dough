@@ -105,14 +105,16 @@ pub const StackPrinter = struct {
     stack: []Value,
     frames: []CallFrame,
     frame_count: *usize,
+    open_upvalues: *?*ObjUpValue,
 
-    pub fn init(terminal: *Terminal, stack: []Value, frames: []CallFrame, frame_count: *usize) StackPrinter {
+    pub fn init(terminal: *Terminal, stack: []Value, frames: []CallFrame, frame_count: *usize, open_upvalues: *?*ObjUpValue) StackPrinter {
         return .{
             .terminal = terminal,
             .disassambler = Disassambler.init(terminal),
             .stack = stack,
             .frames = frames,
             .frame_count = frame_count,
+            .open_upvalues = open_upvalues,
         };
     }
 
@@ -132,7 +134,11 @@ pub const StackPrinter = struct {
 
                 self.terminal.print(" │ ", .{});
 
-                self.printUpvalue(register, used_frame, upvalue_style);
+                if (instruction_info.instruction.abc.opcode == .close_upvalue) {
+                    self.printOpenUpvalues(register, instruction_info, used_frame);
+                } else {
+                    self.printUpvalue(register, used_frame, upvalue_style);
+                }
             }
 
             self.terminal.print("\n", .{});
@@ -253,10 +259,32 @@ pub const StackPrinter = struct {
         if (frame.closure) |closure| {
             if (index < closure.upvalues.len) {
                 const value = closure.upvalues[index].?.location.*;
-                self.terminal.printWithOptions("[{f}]", .{as.common.fmt(as.runtime.values.UnionValue).padRightChar(value, 30, '_')}, style);
+                self.terminal.printWithOptions("[{f}]", .{as.common.fmt(Value).padRightChar(value, 30, '_')}, style);
             } else {
                 self.terminal.print("{s: >30}", .{""});
             }
+        }
+    }
+
+    fn printOpenUpvalues(self: *StackPrinter, index: usize, instruction_info: InstrictionInfo, used_frame: *const CallFrame) void {
+        var open_upvalue = self.open_upvalues.*;
+        var open_upvalue_index: usize = 0;
+        while (open_upvalue) |upvalue| : (open_upvalue_index += 1) {
+            if (open_upvalue_index == index) {
+                const style = if (instruction_info.instruction.abc.opcode == .close_upvalue) resolve_style: {
+                    const reg = used_frame.base_pointer + instruction_info.instruction.abc.b;
+                    const value = &self.stack[reg];
+                    break :resolve_style if (@intFromPtr(value) == @intFromPtr(upvalue.location))
+                        register_style_mutated
+                    else
+                        register_style_default;
+                } else register_style_default;
+
+                self.terminal.printWithOptions("[{f}]", .{as.common.fmt(Value).padRightChar(upvalue.location.*, 30, '_')}, style);
+            } else if (open_upvalue_index > index) {
+                break;
+            }
+            open_upvalue = upvalue.next_open;
         }
     }
 };
@@ -270,5 +298,6 @@ const Instruction = as.compiler.Instruction;
 const InstructionDescription = as.frontend.debug.InstructionDescription;
 const RegisterId = as.runtime.RegisterId;
 const Terminal = as.common.Terminal;
+const ObjUpValue = as.runtime.values.ObjUpValue;
 const Value = as.runtime.values.Value;
 const VirtualMachine = as.runtime.VirtualMachine;

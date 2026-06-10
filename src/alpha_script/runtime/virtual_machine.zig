@@ -107,7 +107,7 @@ pub const VirtualMachine = struct {
 
         var stack_printer: ?StackPrinter = null;
         if (debug) {
-            stack_printer = StackPrinter.init(terminal, stack, &self.frames, &self.frame_count);
+            stack_printer = StackPrinter.init(terminal, stack, &self.frames, &self.frame_count, &self.open_upvalues);
         }
 
         while (true) {
@@ -371,9 +371,19 @@ pub const VirtualMachine = struct {
                     for (closure.upvalues, 0..) |*upvalue, index| {
                         const location = obj_function.upvalue_locations[index];
                         if (location.is_local) {
-                            upvalue.* = try self.captureUpvalue(&stack[@intCast(location.index)]);
+                            upvalue.* = try self.captureUpvalue(&stack[@intCast(base + location.index)]);
                         } else {
                             upvalue.* = current_frame.closure.?.upvalues[location.index];
+                        }
+                    }
+
+                    const c = stack[reg_dest];
+
+                    for (c.toObject().as(ObjClosure).upvalues, 0..) |upvalue, i| {
+                        if (upvalue) |assured| {
+                            std.debug.print("{d:0>2} | {f}\n", .{ i, assured.location });
+                        } else {
+                            std.debug.print("{d:0>2} | NULL\n", .{i});
                         }
                     }
                 },
@@ -442,27 +452,27 @@ pub const VirtualMachine = struct {
 
     inline fn captureUpvalue(self: *VirtualMachine, local: *Value) !*ObjUpValue {
         var prev_upvalue: ?*ObjUpValue = null;
-        var maybe_upvalue = self.open_upvalues;
+        var maybe_open = self.open_upvalues;
 
         // search upvalue
-        while (maybe_upvalue) |up_value| {
-            if (@intFromPtr(up_value.location) <= @intFromPtr(local)) {
+        while (maybe_open) |open| {
+            if (@intFromPtr(open.location) <= @intFromPtr(local)) {
                 break;
             }
 
-            prev_upvalue = up_value;
-            maybe_upvalue = up_value.next_open;
+            prev_upvalue = open;
+            maybe_open = open.next_open;
         }
 
-        if (maybe_upvalue) |upvalue| {
-            if (upvalue.location == local) {
-                return upvalue;
+        if (maybe_open) |open| {
+            if (open.location == local) {
+                return open;
             }
         }
 
         // Not found - Inert new upvalue in list
         const created_upvalue = ObjUpValue.init(self.garbage_collector, local);
-        created_upvalue.next_open = maybe_upvalue;
+        created_upvalue.next_open = maybe_open;
 
         if (prev_upvalue) |prev| {
             prev.next_open = created_upvalue;
