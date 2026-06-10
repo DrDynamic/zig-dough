@@ -191,7 +191,7 @@ pub const Parser = struct {
             assignment_node_id = try self.expression();
         }
 
-        const var_declaration_end = self.scanner.previous().end;
+        const var_declaration_end = self.scanner.previous().location.end;
         _ = try self.match(.t_semicolon);
 
         const extra_id = try self.ast.addExtra(DeclarationExtra{
@@ -245,7 +245,7 @@ pub const Parser = struct {
         return self.ast.addNode(.{
             .tag = .expression_block,
             .source_start = left_brace.location.start,
-            .source_end = self.scanner.previous().end,
+            .source_end = self.scanner.previous().location.end,
             .resolved_type_id = TypePool.UNRESOLVED,
             .data = .{ .extra_id = extra_id },
         });
@@ -360,8 +360,6 @@ pub const Parser = struct {
         const assignment_target_id = try self.or_();
 
         if (try self.match(.t_equal)) {
-            const token_equal = self.scanner.previous();
-
             // TODO: allow or deny chaning assignments?
             const source_id = try self.assignment();
 
@@ -387,7 +385,6 @@ pub const Parser = struct {
         var lhs = try self.and_();
 
         while (try self.match(.t_logical_or)) {
-            const token_or = self.scanner.previous();
             const extra_id = try self.ast.addExtra(BinaryOpExtra{
                 .lhs = lhs,
                 .rhs = try self.and_(),
@@ -409,7 +406,6 @@ pub const Parser = struct {
         var lhs = try self.equality();
 
         while (try self.match(.t_logical_and)) {
-            const token_and = self.scanner.previous();
             const extra_id = try self.ast.addExtra(BinaryOpExtra{
                 .lhs = lhs,
                 .rhs = try self.equality(),
@@ -727,7 +723,7 @@ pub const Parser = struct {
                 const group = try self.ast.addNode(.{
                     .tag = .expression_grouping,
                     .source_start = left_paren.location.start, //self.scanner.previous().location.start,
-                    .source_end = self.scanner.previous().end,
+                    .source_end = self.scanner.previous().location.end,
                     .resolved_type_id = TypePool.UNRESOLVED,
                     .data = .{ .node_id = node_id },
                 });
@@ -1199,7 +1195,7 @@ pub const Parser = struct {
 
     pub inline fn reportHintToTypeDeclaration(self: *const Parser, type_name_id: StringId, message: []const u8) void {
         if (self.ast.getTypeDeclarationNode(type_name_id)) |node| {
-            const token = self.ast.scanner.token_stream.scanPosition(node.token_position) catch unreachable;
+            const token = self.ast.scanner.token_stream.scanPosition(node.source_start) catch unreachable;
             self.reportHint(token, message);
         }
     }

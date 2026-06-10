@@ -16,7 +16,10 @@ pub const ReportedError = union {
 
 pub const SourceInfo = struct {
     file_path: ?[]const u8,
-    token: Token,
+    location: struct {
+        start: usize,
+        end: usize,
+    },
     node: ?Node,
 };
 
@@ -54,13 +57,10 @@ pub const ErrorReporter = struct {
             .error_code = self.calcErrorCode(reporting_module, @intFromError(err)),
             .source_info = .{
                 .file_path = token_stream.getFilePath(),
-                .token = Token.init(
-                    .t_comptime_corrupt,
-
-                    token_start,
-                    token_end,
-                    0,
-                ),
+                .location = .{
+                    .start = token_start,
+                    .end = token_end,
+                },
                 .node = null,
             },
             .message = message,
@@ -76,7 +76,10 @@ pub const ErrorReporter = struct {
             .error_code = self.calcErrorCode(reporting_module, @intFromError(err)),
             .source_info = .{
                 .file_path = parser.scanner.token_stream.getFilePath(),
-                .token = token,
+                .location = .{
+                    .start = token.location.start,
+                    .end = token.location.end,
+                },
                 .node = null,
             },
             .message = message,
@@ -88,7 +91,10 @@ pub const ErrorReporter = struct {
         if (token) |assured_token| {
             source_info = .{
                 .file_path = parser.ast.scanner.token_stream.getFilePath(),
-                .token = assured_token,
+                .location = .{
+                    .start = assured_token.location.start,
+                    .end = assured_token.location.end,
+                },
                 .node = null,
             };
         }
@@ -109,7 +115,10 @@ pub const ErrorReporter = struct {
             .error_code = self.calcErrorCode(reporting_module, @intFromError(err)),
             .source_info = .{
                 .file_path = semantic_analyser.ast.scanner.token_stream.getFilePath(),
-                .token = semantic_analyser.ast.scanner.token_stream.scanPosition(node.token_position) catch unreachable,
+                .location = .{
+                    .start = node.source_start,
+                    .end = node.source_end,
+                },
                 .node = node,
             },
             .message = message,
@@ -121,7 +130,10 @@ pub const ErrorReporter = struct {
         if (node) |assured_node| {
             source_info = .{
                 .file_path = semantic_analyser.ast.scanner.token_stream.getFilePath(),
-                .token = semantic_analyser.ast.scanner.token_stream.scanPosition(assured_node.token_position) catch return,
+                .location = .{
+                    .start = assured_node.source_start,
+                    .end = assured_node.source_end,
+                },
                 .node = assured_node,
             };
         }
@@ -136,15 +148,16 @@ pub const ErrorReporter = struct {
     pub fn compilerError(self: *const ErrorReporter, compiler: *const Compiler, err: Compiler.Error, node: Node, message: []const u8) void {
         const reporting_module: ReportingModule = .{ .Compiler = compiler };
 
-        var scanner: Scanner = compiler.ast.scanner.*;
-
         self.error_output.reportError(.{
             .reporting_module = reporting_module,
             .reported_error = .{ .compiler_error = err },
             .error_code = self.calcErrorCode(reporting_module, @intFromError(err)),
             .source_info = .{
                 .file_path = compiler.ast.scanner.token_stream.getFilePath(),
-                .token = scanner.token_stream.scanPosition(node.token_position) catch unreachable,
+                .location = .{
+                    .start = node.source_start,
+                    .end = node.source_end,
+                },
                 .node = node,
             },
             .message = message,
@@ -160,8 +173,8 @@ pub const ErrorReporter = struct {
             .error_code = self.calcErrorCode(reporting_module, @intFromError(err)),
             .source_info = .{
                 .file_path = null,
-                // TODO get a reference to the token
-                .token = Token.init(.t_synthetic, 0, 0, 0),
+                .location = .{ .start = 0, .end = 0 },
+                // TODO get a reference to the node
                 .node = null,
             },
             .message = message,

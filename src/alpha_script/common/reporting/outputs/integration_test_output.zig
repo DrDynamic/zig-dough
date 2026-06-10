@@ -19,12 +19,11 @@ pub const IntegrationTestErrorOutput = struct {
     fn printError(ptr: *anyopaque, report: ErrorReport) void {
         const self: *IntegrationTestErrorOutput = @ptrCast(@alignCast(ptr));
         const source = source_helper.sourceFromReportingModule(report.reporting_module);
-        const location = source_helper.calcTokenLocation(source, report.source_info.token);
-        const token = report.source_info.token;
+        const location = source_helper.calcSourceLocation(source, report.source_info.location.start, report.source_info.location.end);
 
         self.terminal.print("[line {d}] Error at '{s}': {s}\n", .{
             location.line,
-            source[token.location.start..token.location.end],
+            source[report.source_info.location.start..report.source_info.location.end],
             report.message,
         });
     }

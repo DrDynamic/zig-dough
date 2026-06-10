@@ -37,7 +37,7 @@ pub const PrettyErrorOutput = struct {
         const self: *PrettyErrorOutput = @ptrCast(@alignCast(ptr));
 
         const source = source_helper.sourceFromReportingModule(report.reporting_module);
-        const location = self.getSourceLocation(source, report.reporting_module, report.source_info);
+        const location = self.getSourceLocation(source, report.source_info);
 
         self.printErrorMessage(report.error_code, report.source_info, location, report.message);
         self.printMarkedSource(source, location);
@@ -48,7 +48,7 @@ pub const PrettyErrorOutput = struct {
 
         if (report.source_info) |source_info| {
             const source = source_helper.sourceFromReportingModule(report.reporting_module);
-            const location = self.getSourceLocation(source, report.reporting_module, source_info);
+            const location = self.getSourceLocation(source, source_info);
 
             self.printHintMessage(source_info, location, report.message);
             self.printMarkedSource(source, location);
@@ -57,19 +57,9 @@ pub const PrettyErrorOutput = struct {
         }
     }
 
-    fn getSourceLocation(self: *const PrettyErrorOutput, source: []const u8, reporting_module: ReportingModule, source_info: SourceInfo) SourceLocation {
+    fn getSourceLocation(self: *const PrettyErrorOutput, source: []const u8, source_info: SourceInfo) SourceLocation {
         _ = self;
-
-        var location: SourceLocation = undefined;
-        if (source_info.node) |node| {
-            const ast = source_helper.astFromReportingModule(reporting_module);
-            location = source_helper.calcNodeLocation(source, node, ast.?) catch
-                source_helper.calcTokenLocation(source, source_info.token);
-        } else {
-            location = source_helper.calcTokenLocation(source, source_info.token);
-        }
-
-        return location;
+        return source_helper.calcSourceLocation(source, source_info.location.start, source_info.location.end);
     }
 
     fn printErrorMessage(self: *const PrettyErrorOutput, error_code: u32, source_info: SourceInfo, location: SourceLocation, message: []const u8) void {
@@ -95,7 +85,7 @@ pub const PrettyErrorOutput = struct {
 
         // print marker (^~~~)
         self.terminal.setStyle(marker_options);
-        for (1..location.marker_end) |index| {
+        for (location.line_start..location.marker_end) |index| {
             if (index < location.marker_start) {
                 self.terminal.print(" ", .{});
             } else if (index == location.column) {
