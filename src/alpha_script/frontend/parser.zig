@@ -831,6 +831,7 @@ pub const Parser = struct {
             return Error.UnexpectedToken;
         };
 
+        // TODO: don't use block statement here. The block statement causes a new scope without the arguments. So argument upvalues can not be closed
         function_extra.body = try self.blockStatement();
 
         _ = self.consume(.t_right_brace) catch {

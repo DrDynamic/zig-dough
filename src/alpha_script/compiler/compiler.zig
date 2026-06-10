@@ -211,7 +211,7 @@ pub const Compiler = struct {
         const fn_node = self.ast.nodes.items[node_id];
         const fn_extra = self.ast.getExtra(fn_node.data.extra_id, FunctionExtra);
 
-        std.debug.print("## compileFunction: {s}\n", .{fn_extra.name_id ? self.ast.string_table.get(fn_extra.name_id) : "<anonymous>"});
+        std.debug.print("## compileFunction: {s}\n", .{if (fn_extra.name_id) |name_id| self.ast.string_table.get(name_id) else "<anonymous>"});
 
         var function = ObjFunction.init(self.garbage_collector);
         try self.garbage_collector.temp_objects.append(self.allocator, function.asObject());
