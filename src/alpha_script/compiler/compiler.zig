@@ -211,6 +211,8 @@ pub const Compiler = struct {
         const fn_node = self.ast.nodes.items[node_id];
         const fn_extra = self.ast.getExtra(fn_node.data.extra_id, FunctionExtra);
 
+        std.debug.print("## compileFunction: {s}\n", .{fn_extra.name_id ? self.ast.string_table.get(fn_extra.name_id) : "<anonymous>"});
+
         var function = ObjFunction.init(self.garbage_collector);
         try self.garbage_collector.temp_objects.append(self.allocator, function.asObject());
 
@@ -767,7 +769,22 @@ pub const Compiler = struct {
         // TODO error handling (overflow of scopes?)
     }
 
+    fn printLocals(self: *Compiler) void {
+        std.debug.print("## Locals (scope depth: {d}) {{\n", .{self.context.scope_depth});
+        for (self.context.locals.items) |local| {
+            std.debug.print("##   name: {s}\n", .{self.ast.string_table.get(local.name_id)});
+            std.debug.print("##   depth: {d}\n", .{local.depth});
+            std.debug.print("##   reg_slot: {d}\n", .{local.reg_slot});
+            std.debug.print("##   is_initialized: {}\n", .{local.is_initialized});
+            std.debug.print("##   owns_register: {}\n", .{local.owns_register});
+            std.debug.print("##   is_captured: {}\n", .{local.is_captured});
+            std.debug.print("##   \n", .{});
+        }
+        std.debug.print("## }}\n", .{});
+    }
+
     fn exitScope(self: *Compiler) Error!void {
+        std.debug.print("## exitScope (scope depth: {d})\n", .{self.context.scope_depth});
         // TODO error handling (underflow of scopes?)
         self.context.scope_depth -= 1;
 
@@ -796,6 +813,7 @@ pub const Compiler = struct {
         }
 
         if (first_reg) |reg_id| {
+            std.debug.print("## close upvalues from R{d} \n", .{reg_id});
             try self.emitInstruction(Instruction.fromABC(.close_upvalue, 0, reg_id, 0));
         }
     }
