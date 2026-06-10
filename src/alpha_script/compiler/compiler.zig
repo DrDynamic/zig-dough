@@ -235,9 +235,9 @@ pub const Compiler = struct {
 
         // compile function body
         try self.compileStatement(fn_extra.body);
-        try self.emitInstruction(Instruction.fromABC(.call_return, 0, 0, 0));
 
         try self.exitScope();
+        try self.emitInstruction(Instruction.fromABC(.call_return, 0, 0, 0));
 
         function.max_registers = self.context.getMaxRegisters();
         function.upvalue_locations = self.context.upvalues.items;
@@ -269,6 +269,7 @@ pub const Compiler = struct {
             // statements
             .statement_return => {
                 const reg = try self.compileExpression(node.data.node_id);
+                try self.exitScope();
                 try self.emitInstruction(Instruction.fromABC(.call_return, 0, reg, 1));
             },
             else => { // expression statements
@@ -720,15 +721,13 @@ pub const Compiler = struct {
     }
 
     /// searches and/or creates an UpValue recursivly in all contexts
-    inline fn resolveUpValueInContext(self: *Compiler, context: *CompilerContext, name_id: StringId) Error!u8 {
+    fn resolveUpValueInContext(self: *Compiler, context: *CompilerContext, name_id: StringId) Error!u8 {
         if (context.parent_context) |parent_context| {
             // check if variable is local
             if (self.resolveLocalInContext(parent_context, name_id, false)) |reg_local| {
                 parent_context.locals.items[reg_local].is_captured = true;
                 return self.addUpValue(context, reg_local, true);
-            } else |err| {
-                return err;
-            }
+            } else |_| {} // ignore Error.UndefinedIdentifier to check recursivly in parent scopes
 
             // recursively check search the variable in outer scopes
             if (self.resolveUpValueInContext(parent_context, name_id)) |upvalue_index| {

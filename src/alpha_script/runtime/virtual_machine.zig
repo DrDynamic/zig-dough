@@ -88,118 +88,6 @@ pub const VirtualMachine = struct {
         try self.run(print_stack);
     }
 
-    fn printCallframe(self: *const VirtualMachine, terminal: *as.common.Terminal, register: usize, used_frame_count: usize, color: ?as.common.Terminal.Color) void {
-        const frame_style: as.common.Terminal.PrintOptions = .{
-            .color = color,
-            .styles = &.{.faint},
-        };
-
-        const active_frame_style: as.common.Terminal.PrintOptions = .{
-            .color = color,
-        };
-
-        var style: as.common.Terminal.PrintOptions = undefined;
-        for (0.., self.frames[0..used_frame_count]) |index, frame| {
-            const reg_frame_start = frame.base_pointer;
-            const reg_frame_end = frame.base_pointer + (frame.function.max_registers - 1);
-
-            style = if (index == used_frame_count - 1)
-                active_frame_style
-            else
-                frame_style;
-
-            if (register == frame.base_pointer) {
-                const local_address = register - frame.base_pointer;
-
-                // start of callframe ┐
-                terminal.printWithOptions(" {d:0>2}┐", .{local_address}, style);
-            } else if (register > reg_frame_start and register < reg_frame_end) {
-                const local_address = register - frame.base_pointer;
-
-                // inside callframe   │
-                terminal.printWithOptions(" {d:0>2}│", .{local_address}, style);
-            } else if (register == reg_frame_end) {
-                const local_address = register - frame.base_pointer;
-
-                // end of callframe   ┘
-                terminal.printWithOptions(" {d:0>2}┘", .{local_address}, style);
-            } else {
-                // outside of callframe
-                terminal.printWithOptions("    ", .{}, style);
-            }
-        }
-    }
-
-    fn printStack(self: *const VirtualMachine, disassambler: *as.frontend.debug.Disassambler, used_tack_top: usize, used_frame_count: usize, used_frame: *const CallFrame) void {
-        const Terminal = as.common.Terminal;
-
-        const register_style: Terminal.PrintOptions = .{
-            .styles = &.{.faint},
-        };
-        const register_mutated_style: Terminal.PrintOptions = .{
-            .color = .{ .ansi = .red },
-        };
-        const register_read_style: Terminal.PrintOptions = .{
-            .color = .{ .ansi = .blue },
-        };
-
-        const stack = self.stack;
-
-        const chunk = used_frame.function.chunk;
-        const instruction = chunk.code.items[used_frame.ip - 1];
-        const current_frame = self.frames[self.frame_count - 1];
-
-        var maybe_prequel: ?as.frontend.debug.InstructionDescription = null;
-        if (instruction.ab.opcode == .op_call_args) {
-            maybe_prequel = disassambler.disassambleInstruction(&chunk, chunk.code.items[used_frame.ip - 2], used_frame.ip - 2);
-        }
-        var description = disassambler.disassambleInstruction(&chunk, instruction, used_frame.ip - 1);
-        if (maybe_prequel) |prequel| {
-            description = prequel;
-        }
-
-        for (stack[0..used_tack_top], 0..) |value, register| {
-            const local_address = if (register >= used_frame.base_pointer)
-                register - used_frame.base_pointer
-            else
-                std.math.maxInt(usize);
-
-            const mutate_a = description.parameter_type_a == .mutate_register_id and instruction.abc.a == local_address;
-            const mutate_b = description.parameter_type_b == .mutate_register_id and instruction.abc.b == local_address;
-            const mutate_c = description.parameter_type_c == .mutate_register_id and instruction.abc.c == local_address;
-
-            const read_a = description.parameter_type_a == .register_id and instruction.abc.a == local_address;
-            const read_b = description.parameter_type_b == .register_id and instruction.abc.b == local_address;
-            const read_c = description.parameter_type_c == .register_id and instruction.abc.c == local_address;
-
-            const call_callee = instruction.ab.opcode == as.compiler.OpCode.op_call and instruction.abc.b == local_address;
-            const call_args = instruction.ab.opcode == as.compiler.OpCode.op_call and local_address > instruction.abc.b and local_address <= instruction.abc.b + instruction.abc.c;
-
-            const call_return = instruction.ab.opcode == as.compiler.OpCode.call_return and register > current_frame.base_pointer and used_frame.reg_return == register - current_frame.base_pointer;
-
-            const style = if (call_callee)
-                register_read_style
-            else if (call_args)
-                as.common.Terminal.PrintOptions{ .color = .{ .ansi = .brightCyan } }
-            else if (call_return)
-                register_mutated_style
-            else if (mutate_a or mutate_b or mutate_c)
-                register_mutated_style
-            else if (read_a or read_b or read_c)
-                register_read_style
-            else
-                register_style;
-
-            disassambler.terminal.printWithOptions("{d:0>4}: ", .{register}, style);
-            disassambler.terminal.printWithOptions("[{f}]", .{as.common.fmt(as.runtime.values.UnionValue).padRightChar(value, 35, '_')}, style);
-
-            self.printCallframe(disassambler.terminal, register, used_frame_count, style.color);
-
-            disassambler.terminal.print("\n", .{});
-        }
-        disassambler.terminal.print("\n", .{});
-    }
-
     fn run(self: *VirtualMachine, comptime debug: bool) !void {
         //        const debug: bool = true;
 
@@ -536,6 +424,7 @@ pub const VirtualMachine = struct {
         var frame: *CallFrame = &self.frames[self.frame_count];
         self.frame_count += 1;
 
+        frame.closure = null;
         frame.function = function;
         frame.ip = 0;
         frame.base_pointer = first_arg_id;

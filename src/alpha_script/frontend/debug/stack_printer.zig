@@ -1,11 +1,102 @@
-const register_style: Terminal.PrintOptions = .{
+const register_style_default: Terminal.PrintOptions = .{
     .styles = &.{.faint},
 };
-const register_mutated_style: Terminal.PrintOptions = .{
+const register_style_mutated: Terminal.PrintOptions = .{
     .color = .{ .ansi = .red },
 };
-const register_read_style: Terminal.PrintOptions = .{
+const register_style_read: Terminal.PrintOptions = .{
     .color = .{ .ansi = .blue },
+};
+const register_style_arg: Terminal.PrintOptions = .{
+    .color = .{ .ansi = .brightCyan },
+};
+
+const InstrictionInfo = struct {
+    instruction: Instruction,
+    description: InstructionDescription,
+    instruction_extra: ?Instruction,
+    description_extra: ?InstructionDescription,
+
+    pub fn init(disassambler: *Disassambler, used_frame: *const CallFrame) InstrictionInfo {
+        const chunk = used_frame.function.chunk;
+        const code = used_frame.function.chunk.code.items;
+
+        var ip: usize = used_frame.ip - 1;
+        var ip_extra: ?usize = null;
+
+        var info: InstrictionInfo = .{
+            .instruction = code[ip],
+            .description = undefined,
+            .instruction_extra = null,
+            .description_extra = null,
+        };
+
+        if (info.instruction.ab.opcode == .op_call_args) {
+            ip = used_frame.ip - 2;
+            ip_extra = used_frame.ip - 1;
+
+            info.instruction = code[ip];
+            info.instruction_extra = code[ip_extra.?];
+        }
+
+        info.description = disassambler.disassambleInstruction(&chunk, info.instruction, ip);
+        if (info.instruction_extra) |instruction_extra| {
+            info.description_extra = disassambler.disassambleInstruction(&chunk, instruction_extra, ip_extra.?);
+        }
+
+        return info;
+    }
+
+    pub fn mutatesRegister(self: *const InstrictionInfo, local_address: usize) bool {
+        const mutate_a = self.description.parameter_type_a == .mutate_register_id and self.instruction.abc.a == local_address;
+        const mutate_b = self.description.parameter_type_b == .mutate_register_id and self.instruction.abc.b == local_address;
+        const mutate_c = self.description.parameter_type_c == .mutate_register_id and self.instruction.abc.c == local_address;
+        return mutate_a or mutate_b or mutate_c;
+    }
+
+    pub fn readsRegister(self: *const InstrictionInfo, local_address: usize) bool {
+        const read_a = self.description.parameter_type_a == .register_id and self.instruction.abc.a == local_address;
+        const read_b = self.description.parameter_type_b == .register_id and self.instruction.abc.b == local_address;
+        const read_c = self.description.parameter_type_c == .register_id and self.instruction.abc.c == local_address;
+        return read_a or read_b or read_c;
+    }
+
+    pub fn isCallee(self: *const InstrictionInfo, local_address: usize) bool {
+        if (self.instruction.abc.opcode == .op_call) {
+            return self.instruction.abc.b == local_address;
+        }
+        return false;
+    }
+
+    pub fn isCallArg(self: *const InstrictionInfo, local_address: usize, argument_list: []const RegisterId) bool {
+        if (self.instruction.abc.opcode == .op_call) {
+            const arg_index = if (self.instruction_extra) |extra| extra.ab.b else 0;
+            const arg_count = if (self.instruction_extra) |extra| extra.ab.a else 0;
+
+            return is_arg: for (argument_list[arg_index .. arg_index + arg_count]) |reg_arg| {
+                if (local_address == reg_arg) {
+                    break :is_arg true;
+                }
+            } else false;
+        }
+        return false;
+    }
+
+    pub fn isCallReturn(self: *const InstrictionInfo, register: usize, current_frame: *const CallFrame) bool {
+        if (self.instruction.abc.opcode == .op_call) {
+            if (register > current_frame.base_pointer and register - current_frame.base_pointer == self.instruction.abc.a) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    pub fn operatesOnUpvalues(self: *const InstrictionInfo) bool {
+        return switch (self.instruction.abc.opcode) {
+            .close_upvalue, .store_upvalue, .load_upvalue => true,
+            else => false,
+        };
+    }
 };
 
 pub const StackPrinter = struct {
@@ -23,6 +114,97 @@ pub const StackPrinter = struct {
             .frames = frames,
             .frame_count = frame_count,
         };
+    }
+
+    pub fn printStack(self: *StackPrinter, used_stack_top: usize, used_frame_count: usize, used_frame: *const CallFrame) void {
+        const current_frame = &self.frames[self.frame_count.* - 1];
+
+        const instruction_info = InstrictionInfo.init(&self.disassambler, used_frame);
+
+        for (self.stack[0..used_stack_top], 0..) |value, register| {
+            const register_style = self.resolveRegisterStyle(register, used_frame, current_frame, instruction_info);
+
+            self.printRegister(register, value, register_style);
+            self.printCallframe(self.terminal, register, used_frame_count, register_style.color);
+
+            if (instruction_info.operatesOnUpvalues()) {
+                const upvalue_style = self.resolveUpValueStyle(instruction_info, used_frame, register);
+
+                self.terminal.print(" │ ", .{});
+
+                self.printUpvalue(register, used_frame, upvalue_style);
+            }
+
+            self.terminal.print("\n", .{});
+        }
+        self.terminal.print("\n", .{});
+    }
+
+    fn resolveRegisterStyle(self: *StackPrinter, register: usize, used_frame: *const CallFrame, current_frame: *const CallFrame, instruction_info: InstrictionInfo) Terminal.PrintOptions {
+        _ = self;
+        const local_address: usize = if (register >= used_frame.base_pointer)
+            register - used_frame.base_pointer
+        else
+            std.math.maxInt(usize);
+
+        const is_register_mutated = instruction_info.mutatesRegister(local_address);
+        const is_register_read = instruction_info.readsRegister(local_address);
+
+        const call_callee: bool = instruction_info.isCallee(local_address);
+        const call_arg: bool = instruction_info.isCallArg(local_address, used_frame.function.chunk.arguments.items);
+        const call_return: bool = instruction_info.isCallReturn(register, current_frame);
+
+        return if (call_callee)
+            register_style_read
+        else if (call_arg)
+            register_style_arg
+        else if (call_return)
+            register_style_mutated
+        else if (is_register_mutated)
+            register_style_mutated
+        else if (is_register_read)
+            register_style_read
+        else
+            register_style_default;
+    }
+
+    fn resolveUpValueStyle(self: *StackPrinter, instruction_info: InstrictionInfo, used_frame: *const CallFrame, index: usize) Terminal.PrintOptions {
+        const upvalues = used_frame.closure.?.upvalues;
+        return switch (instruction_info.instruction.abc.opcode) {
+            .close_upvalue => case: {
+                // get the upvalue index of the given register
+                const reg = instruction_info.instruction.abc.b;
+                const value = &self.stack[reg];
+                const close_index = search: for (upvalues, 0..) |upvalue, i| {
+                    if (upvalue.?.location == value) {
+                        break :search i;
+                    }
+                } else 255;
+
+                break :case if (index >= close_index)
+                    register_style_mutated
+                else
+                    register_style_default;
+            },
+            .load_upvalue => case: {
+                break :case if (index == instruction_info.instruction.ab.b)
+                    register_style_read
+                else
+                    register_style_default;
+            },
+            .store_upvalue => case: {
+                break :case if (index == instruction_info.instruction.ab.b)
+                    register_style_mutated
+                else
+                    register_style_default;
+            },
+            else => register_style_default,
+        };
+    }
+
+    fn printRegister(self: *StackPrinter, register: usize, value: Value, style: Terminal.PrintOptions) void {
+        self.terminal.printWithOptions("{d:0>4}: ", .{register}, style);
+        self.terminal.printWithOptions("[{f}]", .{as.common.fmt(Value).padRightChar(value, 30, '_')}, style);
     }
 
     fn printCallframe(self: *StackPrinter, terminal: *Terminal, register: usize, used_frame_count: usize, color: ?Terminal.Color) void {
@@ -67,90 +249,15 @@ pub const StackPrinter = struct {
         }
     }
 
-    pub fn printStack(self: *StackPrinter, used_stack_top: usize, used_frame_count: usize, used_frame: *const CallFrame) void {
-        const stack = self.stack;
-
-        const chunk = used_frame.function.chunk;
-        var instruction = chunk.code.items[used_frame.ip - 1];
-        var instruction_extra: ?Instruction = null;
-        const current_frame = self.frames[self.frame_count.* - 1];
-
-        var description: InstructionDescription = undefined;
-        var description_extra: ?InstructionDescription = null;
-
-        var ip: usize = used_frame.ip - 1;
-        var ip_extra: ?usize = null;
-
-        if (instruction.ab.opcode == .op_call_args) {
-            ip = used_frame.ip - 2;
-            ip_extra = used_frame.ip - 1;
-
-            instruction = chunk.code.items[ip];
-            instruction_extra = chunk.code.items[ip_extra.?];
-        }
-
-        description = self.disassambler.disassambleInstruction(&chunk, instruction, ip);
-        if (instruction_extra) |extra| {
-            description_extra = self.disassambler.disassambleInstruction(&chunk, extra, ip_extra.?);
-        }
-
-        for (stack[0..used_stack_top], 0..) |value, register| {
-            const local_address = if (register >= used_frame.base_pointer)
-                register - used_frame.base_pointer
-            else
-                std.math.maxInt(usize);
-
-            const mutate_a = description.parameter_type_a == .mutate_register_id and instruction.abc.a == local_address;
-            const mutate_b = description.parameter_type_b == .mutate_register_id and instruction.abc.b == local_address;
-            const mutate_c = description.parameter_type_c == .mutate_register_id and instruction.abc.c == local_address;
-            const is_register_mutated = mutate_a or mutate_b or mutate_c;
-
-            const read_a = description.parameter_type_a == .register_id and instruction.abc.a == local_address;
-            const read_b = description.parameter_type_b == .register_id and instruction.abc.b == local_address;
-            const read_c = description.parameter_type_c == .register_id and instruction.abc.c == local_address;
-            const is_register_read = read_a or read_b or read_c;
-
-            var call_callee: bool = false;
-            var call_arg: bool = false;
-            var call_return: bool = false;
-            if (instruction.abc.opcode == .op_call) {
-                call_callee = instruction.abc.b == local_address;
-
-                const arg_index = if (instruction_extra) |extra| extra.ab.b else 0;
-                const arg_count = if (instruction_extra) |extra| extra.ab.a else 0;
-
-                call_arg = is_arg: for (chunk.arguments.items[arg_index .. arg_index + arg_count]) |reg_arg| {
-                    if (local_address == reg_arg) {
-                        break :is_arg true;
-                    }
-                } else false;
-
-                if (register > current_frame.base_pointer and register - current_frame.base_pointer == instruction.abc.a) {
-                    call_return = true;
-                }
+    fn printUpvalue(self: *StackPrinter, index: usize, frame: *const CallFrame, style: Terminal.PrintOptions) void {
+        if (frame.closure) |closure| {
+            if (index < closure.upvalues.len) {
+                const value = closure.upvalues[index].?.location.*;
+                self.terminal.printWithOptions("[{f}]", .{as.common.fmt(as.runtime.values.UnionValue).padRightChar(value, 30, '_')}, style);
+            } else {
+                self.terminal.print("{s: >30}", .{""});
             }
-
-            const style = if (call_callee)
-                register_read_style
-            else if (call_arg)
-                as.common.Terminal.PrintOptions{ .color = .{ .ansi = .brightCyan } }
-            else if (call_return)
-                register_mutated_style
-            else if (is_register_mutated)
-                register_mutated_style
-            else if (is_register_read)
-                register_read_style
-            else
-                register_style;
-
-            self.terminal.printWithOptions("{d:0>4}: ", .{register}, style);
-            self.terminal.printWithOptions("[{f}]", .{as.common.fmt(as.runtime.values.UnionValue).padRightChar(value, 35, '_')}, style);
-
-            self.printCallframe(self.terminal, register, used_frame_count, style.color);
-
-            self.terminal.print("\n", .{});
         }
-        self.terminal.print("\n", .{});
     }
 };
 

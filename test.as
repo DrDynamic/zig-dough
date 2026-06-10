@@ -162,13 +162,14 @@
 // 
 // sayHello("World")
 
-// var greeter = greeterFactory("Max")
-// greeter()
+var greeter = greeterFactory("Max")
+greeter()
  
- fn greeterFactory(name:string): void {
-     return fn(): void {
-         print("Hello " + name)
-     }
+ fn greeterFactory(name:string): ():void {
+    var output = "<" + name + ">" 
+    return fn(): void {
+        print("Hello " + output)
+    }
  }
 
 
