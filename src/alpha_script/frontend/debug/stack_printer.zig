@@ -82,10 +82,26 @@ const InstrictionInfo = struct {
         return false;
     }
 
-    pub fn isCallReturn(self: *const InstrictionInfo, register: usize, current_frame: *const CallFrame) bool {
-        if (self.instruction.abc.opcode == .op_call) {
-            if (register > current_frame.base_pointer and register - current_frame.base_pointer == self.instruction.abc.a) {
-                return true;
+    pub fn isCallReturn(self: *const InstrictionInfo, register: usize, current_frame: *const CallFrame, used_frame: *const CallFrame) bool {
+        if (self.instruction.abc.opcode == .call_return and self.instruction.abc.c != 0) {
+            if (register > current_frame.base_pointer) {
+                const return_reg: usize = used_frame.reg_return;
+                const local_address = register - current_frame.base_pointer;
+
+                return return_reg == local_address;
+            }
+        }
+        return false;
+    }
+
+    pub fn createsUpValue(self: *const InstrictionInfo, local_address: usize, used_frame: *const CallFrame) bool {
+        if (self.instruction.ab.opcode == .create_closure) {
+            const function_address = self.instruction.ab.b;
+            const function_value = used_frame.function.chunk.constants.items[function_address];
+            const function_obj = function_value.toObject().as(ObjFunction);
+
+            for (function_obj.upvalue_locations) |location| {
+                if (location.index == local_address) return true;
             }
         }
         return false;
@@ -93,7 +109,10 @@ const InstrictionInfo = struct {
 
     pub fn operatesOnUpvalues(self: *const InstrictionInfo) bool {
         return switch (self.instruction.abc.opcode) {
-            .close_upvalue, .store_upvalue, .load_upvalue => true,
+            .close_upvalue,
+            .store_upvalue,
+            .load_upvalue,
+            => true,
             else => false,
         };
     }
@@ -137,8 +156,15 @@ pub const StackPrinter = struct {
                 if (instruction_info.instruction.abc.opcode == .close_upvalue) {
                     self.printOpenUpvalues(register, instruction_info, used_frame);
                 } else {
-                    self.printUpvalue(register, used_frame, upvalue_style);
+                    self.printUpvalue(register, used_frame.closure, upvalue_style);
                 }
+            } else if (instruction_info.instruction.abc.opcode == .create_closure) {
+                const closure_value = self.stack[used_frame.base_pointer + instruction_info.instruction.ab.a];
+                const closure_obj = closure_value.toObject().as(ObjClosure);
+
+                self.terminal.print(" │ ", .{});
+
+                self.printUpvalue(register, closure_obj, register_style_mutated);
             }
 
             self.terminal.print("\n", .{});
@@ -158,7 +184,8 @@ pub const StackPrinter = struct {
 
         const call_callee: bool = instruction_info.isCallee(local_address);
         const call_arg: bool = instruction_info.isCallArg(local_address, used_frame.function.chunk.arguments.items);
-        const call_return: bool = instruction_info.isCallReturn(register, current_frame);
+        const call_return: bool = instruction_info.isCallReturn(register, current_frame, used_frame);
+        const creates_upvalue = instruction_info.createsUpValue(local_address, used_frame);
 
         return if (call_callee)
             register_style_read
@@ -169,6 +196,8 @@ pub const StackPrinter = struct {
         else if (is_register_mutated)
             register_style_mutated
         else if (is_register_read)
+            register_style_read
+        else if (creates_upvalue)
             register_style_read
         else
             register_style_default;
@@ -255,8 +284,8 @@ pub const StackPrinter = struct {
         }
     }
 
-    fn printUpvalue(self: *StackPrinter, index: usize, frame: *const CallFrame, style: Terminal.PrintOptions) void {
-        if (frame.closure) |closure| {
+    fn printUpvalue(self: *StackPrinter, index: usize, maybe_closure: ?*const ObjClosure, style: Terminal.PrintOptions) void {
+        if (maybe_closure) |closure| {
             if (index < closure.upvalues.len) {
                 const value = closure.upvalues[index].?.location.*;
                 self.terminal.printWithOptions("[{f}]", .{as.common.fmt(Value).padRightChar(value, 30, '_')}, style);
@@ -298,6 +327,8 @@ const Instruction = as.compiler.Instruction;
 const InstructionDescription = as.frontend.debug.InstructionDescription;
 const RegisterId = as.runtime.RegisterId;
 const Terminal = as.common.Terminal;
+const ObjClosure = as.runtime.values.ObjClosure;
+const ObjFunction = as.runtime.values.ObjFunction;
 const ObjUpValue = as.runtime.values.ObjUpValue;
 const Value = as.runtime.values.Value;
 const VirtualMachine = as.runtime.VirtualMachine;

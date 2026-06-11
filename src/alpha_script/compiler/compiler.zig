@@ -165,6 +165,7 @@ pub const Compiler = struct {
             try self.compileStatement(node_id);
         }
 
+        // don't use emit because we dont need to close upvalues. The progamm ends here
         try self.emitInstruction(Instruction.fromABC(.call_return, 0, 0, 0));
 
         function.max_registers = self.context.getMaxRegisters();
@@ -211,8 +212,6 @@ pub const Compiler = struct {
         const fn_node = self.ast.nodes.items[node_id];
         const fn_extra = self.ast.getExtra(fn_node.data.extra_id, FunctionExtra);
 
-        std.debug.print("## compileFunction: {s}\n", .{if (fn_extra.name_id) |name_id| self.ast.string_table.get(name_id) else "<anonymous>"});
-
         var function = ObjFunction.init(self.garbage_collector);
         try self.garbage_collector.temp_objects.append(self.allocator, function.asObject());
 
@@ -240,8 +239,11 @@ pub const Compiler = struct {
 
         // TODO: resolve bug: arguments are not recognized when closing upvalues
 
-        try self.exitScope();
-        try self.emitInstruction(Instruction.fromABC(.call_return, 0, 0, 0));
+        // we dont need to exit the scope. Alls scopes are cleared when returning
+        //try self.exitScope();
+
+        // TODO: get rid of this return. Maybe create it in semantic analyser when needed
+        try self.emitReturn(0, false);
 
         function.max_registers = self.context.getMaxRegisters();
         function.upvalue_locations = self.context.upvalues.items;
@@ -273,8 +275,7 @@ pub const Compiler = struct {
             // statements
             .statement_return => {
                 const reg = try self.compileExpression(node.data.node_id);
-                try self.exitScope();
-                try self.emitInstruction(Instruction.fromABC(.call_return, 0, reg, 1));
+                try self.emitReturn(reg, true);
             },
             else => { // expression statements
                 const snapshot = self.context.snapshotRegisters();
@@ -593,6 +594,13 @@ pub const Compiler = struct {
         try self.context.chunk.emit(instruction);
     }
 
+    fn emitReturn(self: *Compiler, reg_value: RegisterId, has_return: bool) !void {
+        // close all upvalues in the function scope
+        try self.emitInstruction(Instruction.fromABC(.close_upvalue, 0, 0, 0));
+        // return the value
+        try self.emitInstruction(Instruction.fromABC(.call_return, 0, reg_value, if (has_return) 1 else 0));
+    }
+
     fn emitUnaryOp(self: *Compiler, opcode: OpCode, node: *const Node) !RegisterId {
         const snapshot = self.context.snapshotRegisters();
 
@@ -784,7 +792,6 @@ pub const Compiler = struct {
     }
 
     fn exitScope(self: *Compiler) Error!void {
-        std.debug.print("## exitScope (scope depth: {d})\n", .{self.context.scope_depth});
         // TODO error handling (underflow of scopes?)
         self.context.scope_depth -= 1;
 
@@ -813,7 +820,6 @@ pub const Compiler = struct {
         }
 
         if (first_reg) |reg_id| {
-            std.debug.print("## close upvalues from R{d} \n", .{reg_id});
             try self.emitInstruction(Instruction.fromABC(.close_upvalue, 0, reg_id, 0));
         }
     }

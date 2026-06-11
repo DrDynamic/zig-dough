@@ -376,16 +376,6 @@ pub const VirtualMachine = struct {
                             upvalue.* = current_frame.closure.?.upvalues[location.index];
                         }
                     }
-
-                    const c = stack[reg_dest];
-
-                    for (c.toObject().as(ObjClosure).upvalues, 0..) |upvalue, i| {
-                        if (upvalue) |assured| {
-                            std.debug.print("{d:0>2} | {f}\n", .{ i, assured.location });
-                        } else {
-                            std.debug.print("{d:0>2} | NULL\n", .{i});
-                        }
-                    }
                 },
                 .close_upvalue => {
                     const reg_b = base + instruction.abc.b;
