@@ -7,13 +7,13 @@ A feature is done, when:
 - it is supported by the language server
 
 # Alpha.1 - Cleanup and Functions (MVP)
-[] change repository name
-[] consistant keywords and syntax (some language features are not match the vision e.G. `function` keyword or concatination via `+`)
-[] datatypes consistant with vision
-[x]  any type
-[] variables
-[] constants
-[] functions - MVP
+- change repository name
+- consistant keywords and syntax (some language features are not match the vision e.G. `function` keyword or concatination via `+`)
+- datatypes consistant with vision
+-  any type
+- variables
+- constants
+- functions - MVP
   -  closures
   - hoisting
   - calls
