@@ -10,7 +10,7 @@ A feature is done, when:
 - change repository name
 - consistant keywords and syntax (some language features are not match the vision e.G. `function` keyword or concatination via `+`)
 - datatypes consistant with vision
--  any type
+- X any type
 - variables
 - constants
 - functions - MVP
