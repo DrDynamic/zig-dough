@@ -1,0 +1,2 @@
+var value:u32 = 4294967295;
+value = value + 1; // expect compile error: u32 overflow 

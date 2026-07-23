@@ -1,0 +1,2 @@
+
+print(-2147483648) // expect compile error: i32 underflow

@@ -1,0 +1,4 @@
+// min u32
+print(0) // expect: -2147483648 
+// max u32
+print(4294967295) // expect: 4294967295

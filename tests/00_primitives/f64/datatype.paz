@@ -1,0 +1,3 @@
+var value:f64 = 13.37;
+
+print(value) // expect: 13.37

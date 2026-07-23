@@ -1,0 +1,2 @@
+var value:u32 = 0;
+value = value - 1; // expect compile error: i32 underflow

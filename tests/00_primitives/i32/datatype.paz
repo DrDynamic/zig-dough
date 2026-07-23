@@ -1,0 +1,3 @@
+var value:i32 = 42;
+
+print(value) // expect: 42

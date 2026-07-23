@@ -1,0 +1,4 @@
+
+var value:bool = true;
+
+print(value); // expect: true
