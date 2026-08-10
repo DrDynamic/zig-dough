@@ -19,7 +19,7 @@ A signed 32 bit integer.
   - Maximum: `2.147.483.647`
 
 ## Unsigned Integer
-A unsigned 32 bit integer
+A unsigned 32 bit integer.
 
 - Typename: `u32`
 - Values:
@@ -30,3 +30,16 @@ A unsigned 32 bit integer
 A 64 bit floating point number.
 
 - Typename: `f64`
+
+## String
+A series of characters with Unicode Support.
+
+- Typename: `string`
+- Declaration: 
+  - double quoted
+
+## Null
+Represents absence of a Value.
+
+- Typename: `null`
+- Value: `null`
