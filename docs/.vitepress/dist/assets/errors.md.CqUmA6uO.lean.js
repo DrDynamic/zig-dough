@@ -1,0 +1,1 @@
+import{_ as n,o as a,c as e,a5 as r}from"./chunks/framework.C5BPAM3s.js";const u=JSON.parse('{"title":"Errors","description":"","frontmatter":{},"headers":[],"relativePath":"errors.md","filePath":"errors.md"}'),i={name:"errors.md"};function p(l,s,t,o,c,h){return a(),e("div",null,[...s[0]||(s[0]=[r("",30)])])}const g=n(i,[["render",p]]);export{u as __pageData,g as default};

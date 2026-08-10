@@ -1,1 +1,1 @@
-true == false and 42; // expect compile error: Error at 'and': incompatible types
+true == false and 42; // expect compile error: Error at 'true == false and 42': incompatible types

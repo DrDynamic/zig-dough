@@ -1,1 +1,1 @@
-"s" + null; // expect compile error: Error at '+': incompatible types
+"s" + null; // expect compile error: Error at '"s" + null': incompatible types

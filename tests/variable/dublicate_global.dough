@@ -1,2 +1,2 @@
 var a = "Lorem";
-var a = "Ipsum"; // expect compile error: Error at 'a': identifier 'a' has already been declared
+var a = "Ipsum"; // expect compile error: Error at 'var a = "Ipsum"': identifier 'a' has already been declared

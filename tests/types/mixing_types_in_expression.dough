@@ -1,1 +1,1 @@
-print("" + 4); // expect compile error: Error at '+': incompatible types
+print("" + 4); // expect compile error: Error at '"" + 4': incompatible types

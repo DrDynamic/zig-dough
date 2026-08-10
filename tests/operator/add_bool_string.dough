@@ -1,1 +1,1 @@
-true + "s"; // expect compile error: Error at '+': incompatible types
+true + "s"; // expect compile error: Error at 'true + "s"': incompatible types

@@ -1,1 +1,1 @@
-true + null; // expect compile error: Error at '+': incompatible types
+true + null; // expect compile error: Error at 'true + null': incompatible types

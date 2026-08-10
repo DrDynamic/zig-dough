@@ -1,2 +1,2 @@
 var a = "a";
-(a) = "value"; // expect compile error: Error at '=': invalid assignment target
+(a) = "value"; // expect compile error: Error at '(a) = "value"': invalid assignment target

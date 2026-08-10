@@ -1,4 +1,3 @@
 {
     var a = "Lorem";
-    var a = "Iprum"; // expect compile error: Error at 'a': identifier 'a' has already been declared
-}
+    var a = "Iprum"; // expect compile error: Error at 'var a = "Iprum"': identifier 'a' has already been declared

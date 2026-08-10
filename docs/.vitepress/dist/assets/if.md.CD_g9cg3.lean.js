@@ -1,0 +1,1 @@
+import{_ as s,o as n,c as e,a5 as i}from"./chunks/framework.C5BPAM3s.js";const u=JSON.parse('{"title":"If Expression","description":"","frontmatter":{},"headers":[],"relativePath":"if.md","filePath":"if.md"}'),l={name:"if.md"};function p(t,a,o,r,c,h){return n(),e("div",null,[...a[0]||(a[0]=[i("",18)])])}const b=s(l,[["render",p]]);export{u as __pageData,b as default};

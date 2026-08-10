@@ -1,3 +1,3 @@
 // Assignment in if condition.
 var a = false;
-if (a = true) print(a); // expect compile error: Error at '=': assignments in if conditions are not allowed
+if (a = true) print(a); // expect compile error: Error at 'a = true': assignments in if conditions are not allowed

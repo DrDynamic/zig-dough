@@ -1,7 +1,7 @@
 var a = "";
 var b = 0;
 
-var c; // expect compile error: Error at 'c': declaration must have a type
+var c; // expect compile error: Error at 'var c': declaration must have a type
 c = a;
 c = b; 
 
